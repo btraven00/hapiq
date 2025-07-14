@@ -1,0 +1,226 @@
+# golangci-lint configuration for hapiq
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - bin
+    - vendor
+    - testdata
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_generated\\.go$"
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true
+
+linters-settings:
+  govet:
+    check-shadowing: true
+    enable-all: true
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/btraven00/hapiq
+  golint:
+    min-confidence: 0.8
+  gofmt:
+    simplify: true
+  gocognit:
+    min-complexity: 20
+  goconst:
+    min-len: 3
+    min-occurrences: 2
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+  godox:
+    keywords:
+      - NOTE
+      - OPTIMIZE
+      - HACK
+  gofumpt:
+    extra-rules: true
+  gosec:
+    excludes:
+      - G204  # Subprocess launched with variable
+      - G304  # File path provided as taint input
+  gosimple:
+    go: "1.21"
+    checks: ["all"]
+  gostaticcheck:
+    go: "1.21"
+    checks: ["all"]
+  lll:
+    line-length: 120
+  maligned:
+    suggest-new: true
+  misspell:
+    locale: US
+    ignore-words:
+      - hapiq
+      - zenodo
+      - figshare
+      - dryad
+  nakedret:
+    max-func-lines: 30
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+  testpackage:
+    skip-regexp: '(export|internal)_test\.go'
+  unparam:
+    check-exported: false
+  unused:
+    go: "1.21"
+  whitespace:
+    multi-if: false
+    multi-func: false
+  wsl:
+    strict-append: true
+    allow-assign-and-call: true
+    allow-multiline-assign: true
+    allow-cuddle-declarations: false
+    allow-trailing-comment: false
+    force-case-trailing-whitespace: 0
+    force-err-cuddling: false
+    allow-separated-leading-comment: false
+
+linters:
+  disable-all: true
+  enable:
+    # Enabled by default
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+
+    # Additional recommended linters
+    - bodyclose
+    - contextcheck
+    - cyclop
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - forbidigo
+    - forcetypeassert
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - gofumpt
+    - goimports
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - stylecheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
+    - wsl
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - lll
+        - gocognit
+        - gomnd
+        - wsl
+        - goconst
+
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+    # Exclude godox issues for TODO comments in acceptable places
+    - linters:
+        - godox
+      path: "(cmd|internal)/.*\\.go"
+      text: "TODO"
+
+    # Exclude some revive rules that are too strict for this project
+    - linters:
+        - revive
+      text: "package-comments"
+
+    # Allow long functions in main.go and root.go (CLI setup)
+    - path: "(main|cmd/root)\\.go"
+      linters:
+        - gocyclo
+        - gocognit
+        - funlen
+
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+severity:
+  default-severity: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gocritic
+      severity: warning
+    - linters:
+        - godox
+      severity: info
