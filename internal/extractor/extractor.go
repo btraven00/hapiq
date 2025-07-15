@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -884,12 +885,52 @@ func (e *PDFExtractor) isValidURL(rawURL string) bool {
 		return false
 	}
 
-	// Must start with valid scheme
+	// Must start with valid scheme or be a valid identifier
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") && !strings.HasPrefix(rawURL, "ftp://") {
-		// For DOIs and other identifiers, allow them through
+		// For DOIs, allow them through
 		if strings.Contains(rawURL, "10.") && strings.Contains(rawURL, "/") {
 			return true
 		}
+
+		// For bioinformatics identifiers, allow common patterns through
+		// These will be validated later by domain validators
+		bioPatterns := []string{
+			"SRR", "ERR", "DRR", "SRX", "ERX", "SRS", "ERS", "SRP", "ERP",
+			"PRJNA", "PRJEB", "PRJDB", "PRJCA", "SAMN", "SAME", "SAMD", "SAMC",
+			"GSE", "GSM", "GPL", "GDS", "CRR", "CRX", "CRA", "CHEMBL",
+			"NC_", "NM_", "NP_", "NR_", "NT_", "NW_", "NZ_", "XM_", "XP_", "XR_",
+		}
+
+		for _, pattern := range bioPatterns {
+			if strings.HasPrefix(strings.ToUpper(rawURL), pattern) {
+				return true
+			}
+		}
+
+		// For PubMed IDs (just numbers), allow if they look like PMID
+		if len(rawURL) >= 7 && len(rawURL) <= 8 {
+			if _, err := strconv.Atoi(rawURL); err == nil {
+				return true
+			}
+		}
+
+		// For arXiv IDs (YYYY.NNNNN format)
+		if matched, _ := regexp.MatchString(`^\d{4}\.\d{4,5}(?:v\d+)?$`, rawURL); matched {
+			return true
+		}
+
+		// For PDB IDs (4 character alphanumeric starting with digit)
+		if len(rawURL) == 4 {
+			if matched, _ := regexp.MatchString(`^[1-9][a-zA-Z0-9]{3}$`, rawURL); matched {
+				return true
+			}
+		}
+
+		// For UniProt IDs
+		if matched, _ := regexp.MatchString(`^[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9]$|^[OPQ][0-9][A-Z0-9]{3}[0-9]$`, rawURL); matched {
+			return true
+		}
+
 		return false
 	}
 

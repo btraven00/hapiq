@@ -82,6 +82,82 @@ hapiq check GSM1234567
 - HTTP accessibility status
 - Generated alternate URLs for data access
 
+#### SRA Validator (Sequence Read Archive)
+
+**Patterns Supported:**
+- `SRR\d{6,}` - SRA Run identifiers (NCBI)
+- `ERR\d{6,}` - ENA Run identifiers (EBI)
+- `DRR\d{6,}` - DDBJ Run identifiers
+- `SRX\d{6,}` - SRA Experiment identifiers (NCBI)
+- `ERX\d{6,}` - ENA Experiment identifiers (EBI)
+- `DRX\d{6,}` - DDBJ Experiment identifiers
+- `SRS\d{6,}` - SRA Sample identifiers (NCBI)
+- `ERS\d{6,}` - ENA Sample identifiers (EBI)
+- `DRS\d{6,}` - DDBJ Sample identifiers
+- `SRP\d{6,}` - SRA Study identifiers (NCBI)
+- `ERP\d{6,}` - ENA Study identifiers (EBI)
+- `DRP\d{6,}` - DDBJ Study identifiers
+- `PRJNA\d+` - BioProject identifiers (NCBI)
+- `PRJEB\d+` - BioProject identifiers (EBI)
+- `PRJDB\d+` - BioProject identifiers (DDBJ)
+
+**URL Patterns:**
+- `https://www.ncbi.nlm.nih.gov/sra/*`
+- `https://www.ebi.ac.uk/ena/browser/view/*`
+- `https://trace.ncbi.nlm.nih.gov/Traces/sra/*`
+- `https://ddbj.nig.ac.jp/resource/sra-*`
+
+**Examples:**
+```bash
+# SRA Run validation
+hapiq check SRR123456
+
+# ENA Run validation
+hapiq check ERR123456
+
+# BioProject validation
+hapiq check PRJNA123456
+
+# SRA URL validation
+hapiq check "https://www.ncbi.nlm.nih.gov/sra/SRR123456"
+```
+
+**Metadata Extracted:**
+- SRA accession type (Run, Experiment, Sample, Study, Project)
+- Database provider (NCBI/SRA, EBI/ENA, DDBJ)
+- Regional database URLs
+- Hierarchical relationships between accessions
+- Data download capabilities
+- HTTP accessibility status
+
+#### GSA Validator (Genome Sequence Archive - China)
+
+**Patterns Supported:**
+- `CRR\d{6,}` - GSA Run identifiers
+- `CRX\d{6,}` - GSA Experiment identifiers
+- `CRA\d{6,}` - GSA Study identifiers
+- `PRJCA\d+` - GSA Project identifiers
+- `SAMC\d+` - GSA BioSample identifiers
+
+**URL Patterns:**
+- `https://ngdc.cncb.ac.cn/gsa/*`
+- `https://bigd.big.ac.cn/gsa/*`
+
+**Examples:**
+```bash
+# GSA Run validation
+hapiq check CRR123456
+
+# GSA Project validation
+hapiq check PRJCA123456
+```
+
+**Metadata Extracted:**
+- GSA accession type classification
+- Chinese database provider information
+- Regional access URLs
+- Data availability status
+
 ## Usage Examples
 
 ### Basic Validation
@@ -89,9 +165,25 @@ hapiq check GSM1234567
 ```bash
 # Check a GEO series ID
 hapiq check GSE185917
+
+# Check an SRA run ID
+hapiq check SRR123456
+
+# Check a BioProject ID
+hapiq check PRJNA123456
 ```
 
-Output:
+Example output for SRA validation:
+```
+✅ Status: Valid (HTTP 200)
+📂 Dataset Type: sequence_data
+🔬 Domain Analysis:
+   ✅ sra (bioinformatics): confidence=1.00, likelihood=1.00
+      Type: sequence_data (sra_run)
+      Tags: sra, sequencing, run, raw_data, downloadable_data
+```
+
+Example output for GEO validation:
 ```
 ✅ Status: Valid (HTTP 200)
 📂 Dataset Type: expression_data
@@ -106,16 +198,54 @@ Output:
 ```bash
 # Get detailed domain validation information
 hapiq check GSE185917 --verbose
+
+# Verbose SRA validation
+hapiq check SRR123456 --verbose
 ```
 
 ### JSON Output
 
 ```bash
 # Get machine-readable output with domain results
-hapiq check GSE185917 --output json
+hapiq check SRR123456 --output json
 ```
 
-Example JSON output:
+Example JSON output for SRA validation:
+```json
+{
+  "target": "SRR123456",
+  "valid": true,
+  "dataset_type": "sequence_data",
+  "likelihood_score": 1.0,
+  "domain_results": [
+    {
+      "valid": true,
+      "validator_name": "sra",
+      "domain": "bioinformatics",
+      "normalized_id": "SRR123456",
+      "primary_url": "https://www.ncbi.nlm.nih.gov/sra/SRR123456",
+      "alternate_urls": [
+        "https://www.ebi.ac.uk/ena/browser/view/SRR123456",
+        "https://trace.ncbi.nlm.nih.gov/Traces/sra/?run=SRR123456"
+      ],
+      "dataset_type": "sequence_data",
+      "subtype": "sra_run",
+      "confidence": 1.0,
+      "likelihood": 1.0,
+      "metadata": {
+        "accession_type": "sra_run",
+        "database": "sra",
+        "database_full_name": "Sequence Read Archive",
+        "hierarchical_level": "4 of 4",
+        "hierarchy": "bioproject > sra_study > sra_experiment > sra_run"
+      },
+      "tags": ["sra", "sequencing", "run", "raw_data", "downloadable_data"]
+    }
+  ]
+}
+```
+
+Example JSON output for GEO validation:
 ```json
 {
   "target": "GSE185917",

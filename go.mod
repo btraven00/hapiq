@@ -1,6 +1,8 @@
 module github.com/btraven00/hapiq
 
-go 1.21
+go 1.24.1
+
+toolchain go1.24.2
 
 require (
 	github.com/spf13/cobra v1.8.0
@@ -11,6 +13,7 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect

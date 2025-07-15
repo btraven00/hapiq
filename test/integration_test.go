@@ -52,6 +52,41 @@ func TestIntegration_ValidatorPackage(t *testing.T) {
 			expectType:    "unknown",
 			expectDataset: false,
 		},
+		{
+			name:          "Valid SRA Accession",
+			input:         "SRR123456",
+			expectValid:   true,
+			expectType:    "accession",
+			expectDataset: true,
+		},
+		{
+			name:          "Valid GEO Series",
+			input:         "GSE123456",
+			expectValid:   true,
+			expectType:    "accession",
+			expectDataset: true,
+		},
+		{
+			name:          "Valid BioProject",
+			input:         "PRJNA123456",
+			expectValid:   true,
+			expectType:    "accession",
+			expectDataset: true,
+		},
+		{
+			name:          "Valid ENA Accession",
+			input:         "ERR123456",
+			expectValid:   true,
+			expectType:    "accession",
+			expectDataset: true,
+		},
+		{
+			name:          "Invalid Accession",
+			input:         "XYZ123",
+			expectValid:   false,
+			expectType:    "",
+			expectDataset: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -62,13 +97,13 @@ func TestIntegration_ValidatorPackage(t *testing.T) {
 				t.Errorf("Expected valid=%v, got %v", tt.expectValid, result.Valid)
 			}
 
-			if result.Type != tt.expectType {
+			if tt.expectType != "" && result.Type != tt.expectType {
 				t.Errorf("Expected type=%s, got %s", tt.expectType, result.Type)
 			}
 
 			isDataset := validators.IsDatasetRepository(result.Type)
 			if isDataset != tt.expectDataset {
-				t.Errorf("Expected dataset repository=%v, got %v", tt.expectDataset, isDataset)
+				t.Errorf("Expected dataset=%v, got %v", tt.expectDataset, isDataset)
 			}
 		})
 	}

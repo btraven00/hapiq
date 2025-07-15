@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/btraven00/hapiq/pkg/validators/domains"
+	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio/accessions"
 )
 
 // init registers all bioinformatics domain validators

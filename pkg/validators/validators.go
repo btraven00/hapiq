@@ -1,10 +1,14 @@
 package validators
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
 // ValidationResult represents the result of a validation check
@@ -223,14 +227,40 @@ func ValidateIdentifier(input string) ValidationResult {
 		return doiResult
 	}
 
-	// If both fail, return the URL error (more informative)
+	// Try domain validators for accession numbers and other identifiers
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	domainResult, err := domains.Validate(ctx, input)
+	if err == nil && domainResult != nil && domainResult.Valid {
+		return ValidationResult{
+			Valid:   true,
+			Type:    "accession",
+			Message: fmt.Sprintf("Valid %s accession: %s", domainResult.Domain, domainResult.NormalizedID),
+			Details: map[string]interface{}{
+				"domain":         domainResult.Domain,
+				"validator_name": domainResult.ValidatorName,
+				"dataset_type":   domainResult.DatasetType,
+				"normalized_id":  domainResult.NormalizedID,
+				"primary_url":    domainResult.PrimaryURL,
+				"alternate_urls": domainResult.AlternateURLs,
+				"confidence":     domainResult.Confidence,
+				"likelihood":     domainResult.Likelihood,
+				"metadata":       domainResult.Metadata,
+				"tags":           domainResult.Tags,
+			},
+		}
+	}
+
+	// If all validation methods fail, return error with details
 	return ValidationResult{
 		Valid:   false,
 		Type:    "unknown",
-		Message: fmt.Sprintf("Invalid URL or DOI: %s", urlResult.Message),
+		Message: fmt.Sprintf("Invalid URL, DOI, or accession: %s", input),
 		Details: map[string]interface{}{
-			"url_error": urlResult.Message,
-			"doi_error": doiResult.Message,
+			"url_error":    urlResult.Message,
+			"doi_error":    doiResult.Message,
+			"domain_error": err,
 		},
 	}
 }
@@ -250,6 +280,7 @@ func IsDatasetRepository(urlType string) bool {
 		"zenodo_doi":       true,
 		"figshare_doi":     true,
 		"dryad_doi":        true,
+		"accession":        true, // Accession numbers typically point to datasets
 	}
 	return datasetTypes[urlType]
 }

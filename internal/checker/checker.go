@@ -91,14 +91,30 @@ func (c *Checker) Check(target string) (*Result, error) {
 		result.DomainResults = domainResults
 		// Use the best domain result for primary classification
 		bestResult := c.selectBestDomainResult(domainResults)
-		if bestResult != nil && bestResult.Valid {
-			result.Valid = true
+		if bestResult != nil {
+			// Always use domain result if available, even if invalid
+			result.Valid = bestResult.Valid
 			result.DatasetType = bestResult.DatasetType
 			result.LikelihoodScore = bestResult.Likelihood
 			// Add domain metadata to main result
 			for key, value := range bestResult.Metadata {
 				result.Metadata["domain_"+key] = value
 			}
+
+			// If domain validation failed due to HTTP issues, set appropriate status
+			if !bestResult.Valid && strings.Contains(bestResult.Error, "HTTP") {
+				// Extract HTTP status if available in error message
+				if strings.Contains(bestResult.Error, "404") {
+					result.HTTPStatus = 404
+				} else if strings.Contains(bestResult.Error, "403") {
+					result.HTTPStatus = 403
+				} else if strings.Contains(bestResult.Error, "500") {
+					result.HTTPStatus = 500
+				}
+				result.Error = bestResult.Error
+				return result, nil
+			}
+
 			if bestResult.PrimaryURL != "" {
 				// Use domain-specific URL for HTTP validation
 				target = bestResult.PrimaryURL
@@ -209,15 +225,15 @@ func (c *Checker) selectBestDomainResult(results []*domains.DomainValidationResu
 	}
 
 	var best *domains.DomainValidationResult
-	bestScore := 0.0
+	bestScore := -1.0
 
 	for _, result := range results {
-		if !result.Valid {
-			continue
-		}
-
 		// Score based on confidence and likelihood
+		// Give valid results higher base score, but still consider invalid results
 		score := result.Confidence*0.6 + result.Likelihood*0.4
+		if result.Valid {
+			score += 1.0 // Bonus for valid results
+		}
 
 		if score > bestScore {
 			bestScore = score
