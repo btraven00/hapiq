@@ -42,6 +42,15 @@ go run http_validation_demo.go
 The examples demonstrate functionality that's integrated into the main Hapiq CLI:
 
 ```bash
+# Convert PDF to Markdown text with advanced tokenization
+./hapiq convert paper.pdf
+
+# Convert PDF with output to file and page annotations
+./hapiq convert --output paper.md --pages paper.pdf
+
+# Convert preserving original layout
+./hapiq convert --preserve-layout --headers paper.pdf
+
 # Extract links from PDF with HTTP validation
 ./hapiq extract --validate-links paper.pdf
 
@@ -51,6 +60,20 @@ The examples demonstrate functionality that's integrated into the main Hapiq CLI
 # Batch processing with validation
 ./hapiq extract --batch --validate-links --format csv *.pdf
 ```
+
+## PDF Text Conversion Features
+
+The `convert` command includes sophisticated word segmentation for handling concatenated text commonly found in PDF extraction:
+
+**Input**: `SupplementaryinformationTheonlineversioncontainssupplementarymaterial`
+**Output**: `Supplementary information The online version contains supplementary material`
+
+Key improvements:
+- **Dictionary-based segmentation**: Uses dynamic programming with academic/scientific vocabulary
+- **Case preservation**: Maintains original capitalization patterns
+- **URL handling**: Properly separates URLs and DOIs from surrounding text
+- **Pattern recognition**: Handles CamelCase, numbers, and punctuation boundaries
+- **Academic terminology**: Recognizes scientific terms and compound words
 
 ## Requirements
 
