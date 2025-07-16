@@ -585,10 +585,7 @@ func (v *BaseAccessionValidator) CalculateAccessionLikelihood(result *domains.Do
 
 // addAvailabilityTags adds data availability tags based on HTTP accessibility
 func (v *BaseAccessionValidator) addAvailabilityTags(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) {
-	if !result.Valid {
-		return
-	}
-
+	// Don't check result.Valid here - we want to add availability tags even for invalid results
 	accType := AccessionType(result.Metadata["accession_type"])
 
 	if httpResult != nil && httpResult.Accessible {

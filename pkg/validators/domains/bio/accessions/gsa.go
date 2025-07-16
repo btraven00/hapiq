@@ -127,6 +127,10 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		result.Error = fmt.Sprintf("accession not accessible (HTTP %d)", httpResult.StatusCode)
 		result.Confidence = 0.0
 		result.Likelihood = 0.0
+
+		// Add availability tags for inaccessible data
+		v.addAvailabilityTags(result, httpResult)
+
 		result.ValidationTime = time.Since(start)
 		return result, nil
 	}
