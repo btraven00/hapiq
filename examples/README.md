@@ -51,6 +51,15 @@ The examples demonstrate functionality that's integrated into the main Hapiq CLI
 # Convert preserving original layout
 ./hapiq convert --preserve-layout --headers paper.pdf
 
+# Check individual DOI/URL
+./hapiq check https://zenodo.org/record/123456
+
+# Check with download attempt
+./hapiq check --download 10.5281/zenodo.123456
+
+# Batch processing from file (with automatic cleanup)
+./hapiq check -i links.txt --verbose
+
 # Extract links from PDF with HTTP validation
 ./hapiq extract --validate-links paper.pdf
 
@@ -74,6 +83,35 @@ Key improvements:
 - **URL handling**: Properly separates URLs and DOIs from surrounding text
 - **Pattern recognition**: Handles CamelCase, numbers, and punctuation boundaries
 - **Academic terminology**: Recognizes scientific terms and compound words
+
+## Batch DOI/URL Processing
+
+The `check` command supports batch processing with the `-i` flag for validating multiple DOIs/URLs from a file:
+
+**Input file format** (one entry per line):
+```
+10.5281/zenodo.123456
+https://doi.org/10.1038/s41467-021-23778-6 (Nature Communications, 2021)
+10.5061/dryad.abc123, Smith et al. (2023)
+https://figshare.com/articles/dataset/Example/12345678 [Data file]
+# Comments and empty lines are ignored
+```
+
+**Automatic cleanup** removes:
+- Text in parentheses: `(accessed 2023)` → removed
+- Text in brackets: `[supplementary data]` → removed  
+- Text after commas/semicolons: `, Smith et al.` → removed
+- Trailing punctuation: `...` → removed
+- Extra whitespace
+
+**Usage**:
+```bash
+# Process all links in file
+hapiq check -i links.txt
+
+# With download attempts and verbose output
+hapiq check -i links.txt --download --verbose
+```
 
 ## Requirements
 
