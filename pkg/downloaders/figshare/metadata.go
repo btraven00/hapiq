@@ -14,24 +14,24 @@ import (
 
 // FigshareArticle represents a Figshare article from the API
 type FigshareArticle struct {
-	ID            int                    `json:"id"`
-	Title         string                 `json:"title"`
-	Description   string                 `json:"description"`
-	DOI           string                 `json:"doi"`
-	License       FigshareLicense        `json:"license"`
-	Authors       []FigshareAuthor       `json:"authors"`
-	Categories    []FigshareCategory     `json:"categories"`
-	Tags          []string               `json:"tags"`
-	Keywords      []string               `json:"keywords"`
-	References    []string               `json:"references"`
-	Files         []FigshareFile         `json:"files"`
-	CreatedDate   string                 `json:"created_date"`
-	ModifiedDate  string                 `json:"modified_date"`
-	PublishedDate string                 `json:"published_date"`
-	Version       int                    `json:"version"`
-	ResourceTitle string                 `json:"resource_title"`
-	ResourceDOI   string                 `json:"resource_doi"`
-	Custom        map[string]interface{} `json:"custom_fields,omitempty"`
+	ID            int                `json:"id"`
+	Title         string             `json:"title"`
+	Description   string             `json:"description"`
+	DOI           string             `json:"doi"`
+	License       FigshareLicense    `json:"license"`
+	Authors       []FigshareAuthor   `json:"authors"`
+	Categories    []FigshareCategory `json:"categories"`
+	Tags          []string           `json:"tags"`
+	Keywords      []string           `json:"keywords"`
+	References    []string           `json:"references"`
+	Files         []FigshareFile     `json:"files"`
+	CreatedDate   string             `json:"created_date"`
+	ModifiedDate  string             `json:"modified_date"`
+	PublishedDate string             `json:"published_date"`
+	Version       int                `json:"version"`
+	ResourceTitle string             `json:"resource_title"`
+	ResourceDOI   string             `json:"resource_doi"`
+	Custom        []interface{}      `json:"custom_fields,omitempty"`
 }
 
 // FigshareCollection represents a Figshare collection from the API
@@ -80,7 +80,7 @@ type FigshareCategory struct {
 
 // FigshareLicense represents license information
 type FigshareLicense struct {
-	Value string `json:"value"`
+	Value int    `json:"value"`
 	Name  string `json:"name"`
 	URL   string `json:"url"`
 }
@@ -385,15 +385,15 @@ func (d *FigshareDownloader) parseFigshareDate(dateStr string) (time.Time, error
 
 // shouldDownloadFile determines if a file should be downloaded based on options
 func (d *FigshareDownloader) shouldDownloadFile(file FigshareFile, options *downloaders.DownloadOptions) bool {
-	if options == nil {
-		return true
-	}
-
 	filename := strings.ToLower(file.Name)
 
 	// Skip link-only files if they can't be downloaded directly
 	if file.IsLinkOnly {
 		return false
+	}
+
+	if options == nil {
+		return true
 	}
 
 	// Check for raw data exclusion

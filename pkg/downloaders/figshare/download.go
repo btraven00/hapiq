@@ -36,6 +36,21 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to save metadata: %v", err))
 	}
 
+	// Initialize progress tracker
+	totalFiles := 0
+	totalSize := int64(0)
+	for _, file := range article.Files {
+		if options == nil || d.shouldDownloadFile(file, options) {
+			totalFiles++
+			totalSize += file.Size
+		}
+	}
+
+	var progressTracker *common.ProgressTracker
+	if d.verbose && totalFiles > 0 {
+		progressTracker = common.NewProgressTracker(totalFiles, totalSize, nil, d.verbose)
+	}
+
 	// Download each file
 	for _, file := range article.Files {
 		// Skip if file should be filtered out
@@ -53,6 +68,9 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing file: %s\n", file.Name)
 				}
+				if progressTracker != nil {
+					progressTracker.SkipFile(file.Name, "file already exists")
+				}
 				continue
 			}
 		}
@@ -61,9 +79,17 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 			fmt.Printf("⬇️  Downloading: %s (%s)\n", file.Name, common.FormatBytes(file.Size))
 		}
 
-		fileInfo, err := d.downloadFile(ctx, file.DownloadURL, targetPath)
+		// Start file tracking
+		if progressTracker != nil {
+			progressTracker.StartFile(file.Name, file.Size)
+		}
+
+		fileInfo, err := d.downloadFileWithProgress(ctx, file.DownloadURL, targetPath, file.Name, file.Size, progressTracker)
 		if err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", file.Name, err))
+			if progressTracker != nil {
+				progressTracker.FailFile(file.Name, err)
+			}
 			continue
 		}
 
@@ -275,6 +301,17 @@ func (d *FigshareDownloader) getArticleFiles(ctx context.Context, articleID int)
 	}
 
 	return files, nil
+}
+
+// downloadFileWithProgress downloads a file with progress tracking
+func (d *FigshareDownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
+	// Use the existing downloadFile method if no progress tracking needed
+	if tracker == nil {
+		return d.downloadFile(ctx, url, targetPath)
+	}
+
+	// Download with progress tracking
+	return d.downloadFileWithProgressTracking(ctx, url, targetPath, filename, size, tracker)
 }
 
 // estimateDownloadSize calculates the total size of files to be downloaded

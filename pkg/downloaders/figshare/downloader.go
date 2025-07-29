@@ -139,20 +139,26 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 	}
 
 	// Try to get article metadata first
+
 	metadata, err := d.getArticleMetadata(ctx, cleanID)
 	if err == nil {
+
 		return metadata, nil
 	}
 
 	// If article fails, try collection
+
 	metadata, err = d.getCollectionMetadata(ctx, cleanID)
 	if err == nil {
+
 		return metadata, nil
 	}
 
 	// If both fail, try project
+
 	metadata, err = d.getProjectMetadata(ctx, cleanID)
 	if err == nil {
+
 		return metadata, nil
 	}
 
@@ -281,6 +287,24 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 		result.BytesTotal += file.Size
 	}
 
+	// Determine success based on actual download results
+	// Success means: no critical errors AND at least some files downloaded OR only warnings
+	hasCriticalErrors := len(result.Errors) > 0
+	hasDownloadedFiles := len(result.Files) > 0
+
+	if hasCriticalErrors {
+		result.Success = false
+	} else if hasDownloadedFiles {
+		result.Success = true
+	} else if len(result.Warnings) > 0 {
+		// If we have warnings but no errors and no files, it might be an empty dataset
+		// This is considered a partial success
+		result.Success = true
+	} else {
+		// No files, no warnings, no errors - this shouldn't happen but treat as failure
+		result.Success = false
+	}
+
 	// Create witness file
 	witness := &downloaders.WitnessFile{
 		HapiqVersion: "dev", // This should come from version info
@@ -327,7 +351,6 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 		result.WitnessFile = filepath.Join(targetDir, "hapiq.json")
 	}
 
-	result.Success = true
 	return result, nil
 }
 
@@ -335,6 +358,14 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 func (d *FigshareDownloader) cleanFigshareID(id string) string {
 	// Remove whitespace
 	cleaned := strings.TrimSpace(id)
+
+	// Check if this is a sharing URL and resolve it
+	if d.isSharingURL(cleaned) {
+		if resolvedID, err := d.resolveSharingURL(cleaned); err == nil {
+			return resolvedID
+		}
+		// If resolution fails, continue with normal processing
+	}
 
 	// Remove common prefixes
 	prefixes := []string{
@@ -375,6 +406,173 @@ func (d *FigshareDownloader) cleanFigshareID(id string) string {
 	}
 
 	return cleaned
+}
+
+// isSharingURL checks if the URL is a figshare sharing URL
+func (d *FigshareDownloader) isSharingURL(url string) bool {
+	return strings.Contains(strings.ToLower(url), "figshare.com/s/")
+}
+
+// resolveSharingURL resolves a figshare sharing URL to get the actual article ID
+func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error) {
+	if d.verbose {
+		fmt.Printf("🔗 Resolving sharing URL: %s\n", sharingURL)
+	}
+
+	// Ensure we have a complete URL
+	url := sharingURL
+	if !strings.HasPrefix(strings.ToLower(url), "http") {
+		url = "https://" + url
+	}
+
+	// Make HTTP request to the sharing URL
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers to mimic a browser request
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; hapiq-figshare-downloader)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch sharing URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d when fetching sharing URL", resp.StatusCode)
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	bodyStr := string(body)
+
+	// Try multiple methods to extract the article ID
+	if d.verbose {
+		fmt.Printf("🔍 Searching for article ID in page content (%d bytes)\n", len(bodyStr))
+	}
+
+	// Method 1: Look for figshare API endpoints that contain article IDs
+	apiPattern := regexp.MustCompile(`/v2/articles/(\d+)`)
+	if matches := apiPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from API endpoint: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 1.5: Look for download URLs in page content - most reliable method
+	downloadUrlPattern := regexp.MustCompile(`figshare\.com/ndownloader/articles/(\d+)`)
+	if matches := downloadUrlPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from download URL: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 2: Look for download link with "Download all" - this is the most reliable
+	downloadAllPattern := regexp.MustCompile(`(?i)href="[^"]*ndownloader/articles/(\d+)[^"]*"[^>]*>.*download.*all`)
+	if matches := downloadAllPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from 'Download all' link: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 3: Look for any ndownloader link (fallback)
+	downloadPattern := regexp.MustCompile(`/ndownloader/articles/(\d+)`)
+	if matches := downloadPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from download link: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 4: Look for DOI pattern in the page
+	doiPattern := regexp.MustCompile(`10\.6084/m9\.figshare\.(\d+)`)
+	if matches := doiPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from DOI: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 5: Look for direct article URL references
+	articlePattern := regexp.MustCompile(`/articles/[^/]+/(\d+)`)
+	if matches := articlePattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from URL: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 6: Look for Apollo state with private link article reference
+	apolloPrivateLinkPattern := regexp.MustCompile(`"PrivateLink:\d+":\s*\{[^}]*"article":\s*\{[^}]*"id":\s*(\d+)`)
+	if matches := apolloPrivateLinkPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from Apollo PrivateLink: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 7: Look for citation or metadata with DOI-like patterns
+	citationPattern := regexp.MustCompile(`(?i)cite.*?figshare\.(\d+)`)
+	if matches := citationPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from citation: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 8: Look for Apollo state or other JSON structures containing article ID
+	apolloPattern := regexp.MustCompile(`"article":\s*\{\s*"id":\s*(\d+)`)
+	if matches := apolloPattern.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		if d.verbose {
+			fmt.Printf("✅ Resolved article ID from Apollo state: %s\n", matches[1])
+		}
+		return matches[1], nil
+	}
+
+	// Method 9: Try to find the largest numeric ID as it's likely the article ID
+	largestIDPattern := regexp.MustCompile(`\b(\d{6,8})\b`)
+	allMatches := largestIDPattern.FindAllStringSubmatch(bodyStr, -1)
+	if len(allMatches) > 0 {
+		var largestID int64
+		var bestMatch string
+
+		for _, match := range allMatches {
+			if id, err := strconv.ParseInt(match[1], 10, 64); err == nil {
+				// Filter out IDs that are too small or too large to be article IDs
+				if id >= 1000000 && id <= 99999999 && id > largestID {
+					largestID = id
+					bestMatch = match[1]
+				}
+			}
+		}
+
+		if bestMatch != "" {
+			if d.verbose {
+				fmt.Printf("✅ Resolved article ID from largest ID pattern: %s\n", bestMatch)
+			}
+			return bestMatch, nil
+		}
+	}
+
+	// Debug: Show what IDs we found if verbose
+	if d.verbose {
+		allIDPattern := regexp.MustCompile(`\d{6,8}`)
+		allMatches := allIDPattern.FindAllString(bodyStr, 10)
+		fmt.Printf("🔍 Found potential IDs: %v\n", allMatches)
+		fmt.Printf("❌ Could not resolve sharing URL to article ID\n")
+	}
+
+	return "", fmt.Errorf("could not extract article ID from sharing URL")
 }
 
 // buildFigshareURL constructs the Figshare URL for an ID
@@ -468,6 +666,60 @@ func (d *FigshareDownloader) downloadFile(ctx context.Context, url, targetPath s
 	}, nil
 }
 
+// downloadFileWithProgressTracking downloads a file with real-time progress tracking
+func (d *FigshareDownloader) downloadFileWithProgressTracking(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Create target file
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	// Create progress reader
+	progressReader := common.NewProgressReader(resp.Body, size, filename, tracker, d.verbose)
+	defer progressReader.Close()
+
+	// Copy with progress tracking
+	downloadTime := time.Now()
+	copiedSize, err := io.Copy(file, progressReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to copy data: %w", err)
+	}
+
+	// Calculate checksum
+	checksum, err := common.CalculateFileChecksum(targetPath)
+	if err != nil {
+		// Don't fail the download for checksum calculation errors
+		checksum = ""
+	}
+
+	return &downloaders.FileInfo{
+		Path:         targetPath,
+		OriginalName: filepath.Base(targetPath),
+		Size:         copiedSize,
+		Checksum:     checksum,
+		ChecksumType: "sha256",
+		DownloadTime: downloadTime,
+		SourceURL:    url,
+		ContentType:  resp.Header.Get("Content-Type"),
+	}, nil
+}
+
 // apiRequest makes a request to the Figshare API
 func (d *FigshareDownloader) apiRequest(ctx context.Context, endpoint string, result interface{}) error {
 	url := fmt.Sprintf("%s/%s", d.apiURL, endpoint)
@@ -481,11 +733,13 @@ func (d *FigshareDownloader) apiRequest(ctx context.Context, endpoint string, re
 
 	resp, err := d.client.Do(req)
 	if err != nil {
+
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+
 		return fmt.Errorf("API request failed: HTTP %d", resp.StatusCode)
 	}
 

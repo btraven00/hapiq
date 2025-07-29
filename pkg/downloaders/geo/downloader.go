@@ -424,6 +424,11 @@ func (d *GEODownloader) confirmCollection(ctx context.Context, collection *downl
 
 // downloadFile downloads a single file with progress tracking
 func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string) (*downloaders.FileInfo, error) {
+	return d.downloadFileWithProgress(ctx, url, targetPath, filepath.Base(targetPath), -1, nil)
+}
+
+// downloadFileWithProgress downloads a file with optional progress tracking
+func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -439,6 +444,11 @@ func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Get content length if size wasn't provided
+	if size <= 0 && resp.ContentLength > 0 {
+		size = resp.ContentLength
+	}
+
 	// Create target file
 	file, err := os.Create(targetPath)
 	if err != nil {
@@ -446,9 +456,19 @@ func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string
 	}
 	defer file.Close()
 
-	// Copy with progress tracking
 	downloadTime := time.Now()
-	size, err := io.Copy(file, resp.Body)
+	var copiedSize int64
+
+	// Use progress reader if tracker is available and size is known
+	if tracker != nil && size > 0 {
+		progressReader := common.NewProgressReader(resp.Body, size, filename, tracker, d.verbose)
+		defer progressReader.Close()
+		copiedSize, err = io.Copy(file, progressReader)
+	} else {
+		// Fallback to simple copy
+		copiedSize, err = io.Copy(file, resp.Body)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy data: %w", err)
 	}
@@ -463,7 +483,7 @@ func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
-		Size:         size,
+		Size:         copiedSize,
 		Checksum:     checksum,
 		ChecksumType: "sha256",
 		DownloadTime: downloadTime,
