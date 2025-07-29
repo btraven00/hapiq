@@ -141,10 +141,13 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section string) []ExtractedLink {
 	var links []ExtractedLink
 
-	// Clean text
+	// Clean and improve text tokenization if requested
 	cleanedText := e.cleanText(text)
+	if e.options.UseConvertTokenization {
+		cleanedText = e.improveTokenization(cleanedText)
+	}
 
-	// Step 1: Extract potential identifiers using patterns
+	// Step 1: Extract potential identifiers using improved patterns and accession recognition
 	candidates := e.extractCandidates(cleanedText)
 
 	// Step 2: Validate candidates using domain validators
@@ -197,11 +200,20 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 
 	// Remove duplicates and sort by confidence
 	links = e.deduplicateLinks(links)
-	sort.Slice(links, func(i, j int) bool {
-		return links[i].Confidence > links[j].Confidence
+
+	// Filter by minimum confidence threshold
+	filtered := make([]ExtractedLink, 0)
+	for _, link := range links {
+		if link.Confidence >= e.options.MinConfidence {
+			filtered = append(filtered, link)
+		}
+	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Confidence > filtered[j].Confidence
 	})
 
-	return links
+	return filtered
 }
 
 // LinkCandidate represents a potential link found in text
@@ -216,6 +228,11 @@ type LinkCandidate struct {
 // extractCandidates finds potential identifiers and URLs in text
 func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 	var candidates []LinkCandidate
+
+	// Use accession recognition if enabled
+	if e.options.UseAccessionRecognition {
+		candidates = append(candidates, e.extractAccessions(text)...)
+	}
 
 	for _, pattern := range e.extractionPatterns {
 		matches := pattern.Regex.FindAllStringSubmatchIndex(text, -1)
@@ -243,6 +260,80 @@ func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 			// Validate URL is reasonable
 			if e.isValidURL(cleaned) {
 				candidate.NormalizedURL = cleaned
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+
+	return candidates
+}
+
+// improveTokenization applies convert-style text tokenization to improve boundary detection
+func (e *PDFExtractor) improveTokenization(text string) string {
+	// Apply word boundary patterns similar to convert command
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`([a-z])([A-Z])`),                              // lowercase followed by uppercase
+		regexp.MustCompile(`([a-zA-Z])(\d)`),                              // letter followed by digit
+		regexp.MustCompile(`(\d)([a-zA-Z])`),                              // digit followed by letter
+		regexp.MustCompile(`([.!?])([A-Z])`),                              // sentence end followed by capital
+		regexp.MustCompile(`(https?://[^\s]+?)([A-Z][a-z])`),              // URLs followed by capitalized words
+		regexp.MustCompile(`([a-z])(https?://)`),                          // text followed by URLs
+		regexp.MustCompile(`(doi\.org/[^\s]+?)([A-Z][a-z])`),              // DOIs followed by capitalized words
+		regexp.MustCompile(`([0-9]/[0-9\-]+)([A-Z])`),                     // DOI numbers followed by text
+		regexp.MustCompile(`([a-z])(doi\.org)`),                           // text followed by DOIs
+		regexp.MustCompile(`([0-9])([A-Z])`),                              // numbers followed by uppercase
+		regexp.MustCompile(`(figshare\.com/[^/\s]+/[^/\s]+)([A-Z][a-z])`), // figshare URLs followed by text
+		regexp.MustCompile(`(zenodo\.org/[^/\s]+/[^/\s]+)([A-Z][a-z])`),   // zenodo URLs followed by text
+		regexp.MustCompile(`(\.\d+)([A-Z][a-z])`),                         // numbers with decimal followed by text
+	}
+
+	result := text
+	for _, pattern := range patterns {
+		result = pattern.ReplaceAllString(result, "$1 $2")
+	}
+
+	// Clean up multiple spaces
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	return strings.TrimSpace(result)
+}
+
+// extractAccessions finds biological accessions using regex patterns similar to check command
+func (e *PDFExtractor) extractAccessions(text string) []LinkCandidate {
+	var candidates []LinkCandidate
+
+	// Define accession patterns with higher confidence
+	accessionPatterns := []struct {
+		name       string
+		regex      *regexp.Regexp
+		linkType   LinkType
+		confidence float64
+	}{
+		{"GEO Series", regexp.MustCompile(`\b(GSE\d{1,8})\b`), LinkTypeGeoID, 0.95},
+		{"GEO Sample", regexp.MustCompile(`\b(GSM\d{1,9})\b`), LinkTypeGeoID, 0.95},
+		{"GEO Platform", regexp.MustCompile(`\b(GPL\d{1,6})\b`), LinkTypeGeoID, 0.95},
+		{"GEO Dataset", regexp.MustCompile(`\b(GDS\d{1,6})\b`), LinkTypeGeoID, 0.95},
+		{"SRA Run", regexp.MustCompile(`\b(SRR\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"SRA Experiment", regexp.MustCompile(`\b(SRX\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"SRA Sample", regexp.MustCompile(`\b(SRS\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"SRA Study", regexp.MustCompile(`\b(SRP\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"SRA Project", regexp.MustCompile(`\b(PRJNA\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"ArrayExpress", regexp.MustCompile(`\b(E-\w{4}-\d+)\b`), LinkTypeURL, 0.95},
+		{"BioProject", regexp.MustCompile(`\b(PRJNA\d{6,9})\b`), LinkTypeURL, 0.95},
+		{"BioSample", regexp.MustCompile(`\b(SAMN\d{8,9})\b`), LinkTypeURL, 0.95},
+	}
+
+	for _, pattern := range accessionPatterns {
+		matches := pattern.regex.FindAllStringSubmatch(text, -1)
+		for _, match := range matches {
+			if len(match) > 1 {
+				accession := match[1]
+				candidate := LinkCandidate{
+					Text:          accession,
+					NormalizedURL: accession,
+					Type:          pattern.linkType,
+					Confidence:    pattern.confidence,
+					Position:      0, // Position would need to be calculated from match index
+				}
 				candidates = append(candidates, candidate)
 			}
 		}
@@ -440,6 +531,10 @@ func (e *PDFExtractor) getNormalizedKey(url string, linkType LinkType) string {
 		return e.normalizeDOI(url)
 	case LinkTypeGeoID:
 		return e.normalizeGeoID(url)
+	case LinkTypeFigshare:
+		return e.normalizeFigshare(url)
+	case LinkTypeZenodo:
+		return e.normalizeZenodo(url)
 	default:
 		// For other types, use domain + path normalization
 		return e.normalizeGenericURL(url)
@@ -504,6 +599,66 @@ func (e *PDFExtractor) normalizeDOI(url string) string {
 	}
 
 	return "doi:" + normalized
+}
+
+// normalizeFigshare extracts the core figshare identifier
+func (e *PDFExtractor) normalizeFigshare(url string) string {
+	normalized := strings.ToLower(url)
+
+	// Remove protocol and www
+	normalized = strings.TrimPrefix(normalized, "https://")
+	normalized = strings.TrimPrefix(normalized, "http://")
+	normalized = strings.TrimPrefix(normalized, "www.")
+
+	// For figshare URLs, extract the core path without version numbers or extra text
+	if strings.HasPrefix(normalized, "figshare.com/") {
+		path := strings.TrimPrefix(normalized, "figshare.com/")
+
+		// Handle different figshare URL patterns
+		if strings.HasPrefix(path, "s/") {
+			// Shared dataset URLs: figshare.com/s/HASH
+			if idx := strings.Index(path, "."); idx != -1 {
+				// Remove version numbers and trailing text (e.g., .2.3MouselungdatasetThis...)
+				path = path[:idx]
+			}
+		} else if strings.HasPrefix(path, "articles/") {
+			// Article URLs: figshare.com/articles/dataset/name/ID
+			parts := strings.Split(path, "/")
+			if len(parts) >= 4 {
+				// Keep only the core structure: articles/type/title/id
+				path = strings.Join(parts[:4], "/")
+			}
+		}
+
+		return "figshare:" + path
+	}
+
+	return "figshare:" + normalized
+}
+
+// normalizeZenodo extracts the core zenodo identifier
+func (e *PDFExtractor) normalizeZenodo(url string) string {
+	normalized := strings.ToLower(url)
+
+	// Remove protocol and www
+	normalized = strings.TrimPrefix(normalized, "https://")
+	normalized = strings.TrimPrefix(normalized, "http://")
+	normalized = strings.TrimPrefix(normalized, "www.")
+
+	// For zenodo URLs, extract just the record ID
+	if strings.HasPrefix(normalized, "zenodo.org/") {
+		path := strings.TrimPrefix(normalized, "zenodo.org/")
+		if strings.HasPrefix(path, "record/") {
+			recordPath := strings.TrimPrefix(path, "record/")
+			// Extract just the numeric ID
+			if idx := strings.IndexAny(recordPath, "/?#"); idx != -1 {
+				recordPath = recordPath[:idx]
+			}
+			return "zenodo:record/" + recordPath
+		}
+	}
+
+	return "zenodo:" + normalized
 }
 
 // adjustConfidenceForCorruption reduces confidence for URLs with obvious corruption patterns

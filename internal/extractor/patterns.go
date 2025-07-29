@@ -62,7 +62,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		// Repository URLs (high confidence for known data repositories)
 		{
 			Name:        "Zenodo URLs",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?zenodo\.org/[^\s\]}>)]{1,200})`),
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?zenodo\.org/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeZenodo,
 			Confidence:  0.95,
 			Description: "Zenodo repository URLs",
@@ -78,7 +78,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		},
 		{
 			Name:        "Figshare URLs",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[^\s\]}>)]{1,200})`),
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeFigshare,
 			Confidence:  0.95,
 			Description: "Figshare repository URLs",
@@ -88,7 +88,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		// GitHub repository patterns (potential datasets)
 		{
 			Name:        "GitHub Repository",
-			Regex:       regexp.MustCompile(`(https?://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)(?:/[^\s\]}>)]{0,100})?(?:\s|$|[^a-zA-Z0-9._/-])`),
+			Regex:       regexp.MustCompile(`(https?://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9/_.-]*)?)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeURL,
 			Confidence:  0.7,
 			Description: "GitHub repository URLs (potential datasets)",
@@ -98,7 +98,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		// Data-specific file extensions in URLs
 		{
 			Name:        "Dataset Files",
-			Regex:       regexp.MustCompile(`(https?://[^\s\]}>)]{1,300}\.(?:csv|tsv|xlsx?|json|xml|h5|hdf5|parquet|feather|arrow|zip|tar\.gz|tar\.bz2))(?:\s|$|[^a-zA-Z0-9._/-])`),
+			Regex:       regexp.MustCompile(`(https?://[a-zA-Z0-9._/-]+\.(?:csv|tsv|xlsx?|json|xml|h5|hdf5|parquet|feather|arrow|zip|tar\.gz|tar\.bz2))(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeURL,
 			Confidence:  0.85,
 			Description: "URLs pointing to dataset files",
@@ -108,7 +108,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		// Common biological databases
 		{
 			Name:        "NCBI URLs",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?(?:ncbi\.nlm\.nih\.gov|ebi\.ac\.uk|embl\.de|ddbj\.nig\.ac\.jp)[^\s\]}>)]{1,200})`),
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?(?:ncbi\.nlm\.nih\.gov|ebi\.ac\.uk|embl\.de|ddbj\.nig\.ac\.jp)/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeURL,
 			Confidence:  0.9,
 			Description: "Biological database URLs",
@@ -118,7 +118,7 @@ func getExtractionPatterns() []ExtractionPattern {
 		// Data repository platforms
 		{
 			Name:        "Data Repositories",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?(?:kaggle\.com|data\.mendeley\.com|osf\.io|dataverse\.org|dryad\.org|pangaea\.de)[^\s\]}>)]{1,200})`),
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?(?:kaggle\.com|data\.mendeley\.com|osf\.io|dataverse\.org|dryad\.org|pangaea\.de)/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeURL,
 			Confidence:  0.88,
 			Description: "Data repository platform URLs",

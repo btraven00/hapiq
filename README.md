@@ -64,9 +64,9 @@ Check using DOI:
 hapiq check 10.5281/zenodo.1234567
 ```
 
-Check with verbose output:
+Check with quiet output (suppress verbose messages):
 ```bash
-hapiq check https://figshare.com/articles/dataset/example/123456 --verbose
+hapiq check https://figshare.com/articles/dataset/example/123456 --quiet
 ```
 
 Output as JSON:

@@ -58,7 +58,7 @@ The examples demonstrate functionality that's integrated into the main Hapiq CLI
 ./hapiq check --download 10.5281/zenodo.123456
 
 # Batch processing from file (with automatic cleanup)
-./hapiq check -i links.txt --verbose
+./hapiq check -i links.txt
 
 # Extract links from PDF with HTTP validation
 ./hapiq extract --validate-links paper.pdf
@@ -109,8 +109,8 @@ https://figshare.com/articles/dataset/Example/12345678 [Data file]
 # Process all links in file
 hapiq check -i links.txt
 
-# With download attempts and verbose output
-hapiq check -i links.txt --download --verbose
+# With download attempts and quiet output
+hapiq check -i links.txt --download --quiet
 ```
 
 ## Requirements

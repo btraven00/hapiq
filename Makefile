@@ -86,7 +86,7 @@ check: fmt vet lint test ## Run all code quality checks
 # Quick development run
 run: build ## Build and run with example
 	@echo "Running hapiq with example..."
-	./bin/hapiq check https://zenodo.org/record/123456 --verbose
+	./bin/hapiq check https://zenodo.org/record/123456
 
 # Development setup
 setup: deps ## Setup development environment

@@ -56,7 +56,7 @@ func init() {
 func runConvertPDF(cmd *cobra.Command, args []string) error {
 	filename := args[0]
 
-	if verbose {
+	if !quiet {
 		fmt.Fprintf(os.Stderr, "Converting %s to text...\n", filename)
 	}
 
@@ -75,7 +75,7 @@ func runConvertPDF(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(outputFile, []byte(text), 0644); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
-		if verbose {
+		if !quiet {
 			fmt.Fprintf(os.Stderr, "Converted text written to %s\n", outputFile)
 		}
 	} else {

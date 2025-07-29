@@ -211,8 +211,8 @@ func main() {
 	fmt.Println("  # Process multiple PDFs with 8 workers")
 	fmt.Println("  ./hapiq extract --batch --workers 8 --validate-links *.pdf")
 	fmt.Println("  ")
-	fmt.Println("  # Show progress during processing")
-	fmt.Println("  ./hapiq extract --batch --progress --verbose papers/*.pdf")
+	fmt.Println("  # Show progress during processing (verbose is default)")
+	fmt.Println("  ./hapiq extract --batch --progress papers/*.pdf")
 }
 
 // Demo helper functions (simplified versions of internal methods)

@@ -88,22 +88,28 @@ type LinkPattern struct {
 
 // ExtractionOptions configures the link extraction process
 type ExtractionOptions struct {
-	ValidateLinks   bool     `json:"validate_links"`
-	IncludeContext  bool     `json:"include_context"`
-	ContextLength   int      `json:"context_length"`
-	FilterDomains   []string `json:"filter_domains,omitempty"`
-	MinConfidence   float64  `json:"min_confidence"`
-	MaxLinksPerPage int      `json:"max_links_per_page"`
+	ValidateLinks           bool     `json:"validate_links"`
+	IncludeContext          bool     `json:"include_context"`
+	ContextLength           int      `json:"context_length"`
+	FilterDomains           []string `json:"filter_domains,omitempty"`
+	MinConfidence           float64  `json:"min_confidence"`
+	MaxLinksPerPage         int      `json:"max_links_per_page"`
+	UseAccessionRecognition bool     `json:"use_accession_recognition"`
+	UseConvertTokenization  bool     `json:"use_convert_tokenization"`
+	ExtractPositions        bool     `json:"extract_positions"`
 }
 
 // DefaultExtractionOptions returns default extraction options
 func DefaultExtractionOptions() ExtractionOptions {
 	return ExtractionOptions{
-		ValidateLinks:   false,
-		IncludeContext:  true,
-		ContextLength:   100,
-		FilterDomains:   nil,
-		MinConfidence:   0.5,
-		MaxLinksPerPage: 50,
+		ValidateLinks:           false,
+		IncludeContext:          true,
+		ContextLength:           100,
+		FilterDomains:           nil,
+		MinConfidence:           0.5,
+		MaxLinksPerPage:         50,
+		UseAccessionRecognition: true,
+		UseConvertTokenization:  true,
+		ExtractPositions:        false,
 	}
 }

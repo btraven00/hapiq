@@ -15,7 +15,6 @@ import (
 	"github.com/btraven00/hapiq/internal/extractor"
 	"github.com/spf13/cobra"
 
-	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
 )
 
@@ -58,7 +57,7 @@ func init() {
 	extractCmd.Flags().BoolVar(&includeContext, "include-context", true, "include surrounding text context for links")
 	extractCmd.Flags().IntVar(&contextLength, "context-length", 100, "length of context to extract around links")
 	extractCmd.Flags().StringSliceVar(&filterDomains, "filter-domains", nil, "comma-separated list of domains to filter (e.g., figshare.com,zenodo.org)")
-	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", 0.5, "minimum confidence threshold for including links")
+	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", 0.85, "minimum confidence threshold for including links")
 	extractCmd.Flags().StringVar(&outputFormat, "format", "human", "output format (human, json, csv)")
 	extractCmd.Flags().BoolVar(&batchMode, "batch", false, "process multiple files and output summary")
 	extractCmd.Flags().IntVar(&maxLinksPerPage, "max-links-per-page", 50, "maximum number of links to extract per page")
@@ -69,15 +68,17 @@ func init() {
 func runExtractLinks(cmd *cobra.Command, args []string) error {
 	// Create extraction options
 	options := extractor.ExtractionOptions{
-		ValidateLinks:   validateLinks,
-		IncludeContext:  includeContext,
-		ContextLength:   contextLength,
-		FilterDomains:   filterDomains,
-		MinConfidence:   minConfidence,
-		MaxLinksPerPage: maxLinksPerPage,
+		ValidateLinks:           validateLinks,
+		IncludeContext:          includeContext,
+		ContextLength:           contextLength,
+		FilterDomains:           filterDomains,
+		MinConfidence:           minConfidence,
+		MaxLinksPerPage:         maxLinksPerPage,
+		UseAccessionRecognition: true,
+		UseConvertTokenization:  true,
+		ExtractPositions:        false,
 	}
 
-	// Create extractor
 	pdfExtractor := extractor.NewPDFExtractor(options)
 
 	if batchMode {
@@ -95,7 +96,7 @@ func runExtractLinks(cmd *cobra.Command, args []string) error {
 }
 
 func processSingleFile(pdfExtractor *extractor.PDFExtractor, filename string) error {
-	if verbose {
+	if !quiet {
 		fmt.Fprintf(os.Stderr, "Processing %s...\n", filename)
 	}
 
@@ -124,8 +125,16 @@ func outputHuman(result *extractor.ExtractionResult) error {
 	fmt.Printf("📄 File: %s\n", result.Filename)
 	fmt.Printf("📊 Pages: %d | Text: %d chars | Processing time: %v\n",
 		result.Pages, result.TotalText, result.ProcessTime)
-	fmt.Printf("🔗 Found %d links (%d unique)\n",
-		result.Summary.TotalLinks, result.Summary.UniqueLinks)
+	// Count links above confidence threshold
+	highConfidenceLinks := 0
+	for _, link := range result.Links {
+		if link.Confidence >= minConfidence {
+			highConfidenceLinks++
+		}
+	}
+
+	fmt.Printf("🔗 Found %d links total (%d above %.0f%% confidence)\n",
+		result.Summary.TotalLinks, highConfidenceLinks, minConfidence*100)
 
 	if len(result.Errors) > 0 {
 		fmt.Printf("\n❌ Errors:\n")
@@ -134,17 +143,19 @@ func outputHuman(result *extractor.ExtractionResult) error {
 		}
 	}
 
-	if len(result.Warnings) > 0 && verbose {
+	if len(result.Warnings) > 0 && !quiet {
 		fmt.Printf("\n⚠️  Warnings:\n")
 		for _, warning := range result.Warnings {
 			fmt.Printf("   • %s\n", warning)
 		}
 	}
 
-	// Group links by type
+	// Filter links by confidence threshold and group by type
 	linksByType := make(map[extractor.LinkType][]extractor.ExtractedLink)
 	for _, link := range result.Links {
-		linksByType[link.Type] = append(linksByType[link.Type], link)
+		if link.Confidence >= minConfidence {
+			linksByType[link.Type] = append(linksByType[link.Type], link)
+		}
 	}
 
 	// Display links by type
@@ -180,58 +191,31 @@ func outputHuman(result *extractor.ExtractionResult) error {
 		fmt.Printf("\n%s %s Links (%d):\n", emoji, strings.ToUpper(string(linkType)), len(links))
 
 		for i, link := range links {
-			if i >= 10 && !verbose {
-				fmt.Printf("   ... and %d more (use --verbose to show all)\n", len(links)-10)
+			// Clean up the URL using check command's cleanup logic
+			cleanedURL := cleanupIdentifier(link.URL)
+			if cleanedURL == "" {
+				continue
+			}
+
+			if i >= 10 && quiet {
+				fmt.Printf("   ... and %d more (use without --quiet to show all)\n", len(links)-10)
 				break
 			}
 
 			confidence := fmt.Sprintf("%.1f%%", link.Confidence*100)
 			pageInfo := fmt.Sprintf("p.%d", link.Page)
 
+			// Add validation status if available
 			status := ""
 			if link.Validation != nil {
 				if link.Validation.IsAccessible {
 					status = " ✅"
-					if link.Validation.IsDataset {
-						status += fmt.Sprintf(" 📊(%.1f)", link.Validation.DatasetScore*100)
-					}
 				} else {
 					status = " ❌"
-					if link.Validation.Error != "" {
-						status += fmt.Sprintf(" (%s)", link.Validation.Error)
-					}
-					// Confidence was adjusted for failed validation
 				}
 			}
 
-			fmt.Printf("   • %s [%s, %s]%s\n", link.URL, confidence, pageInfo, status)
-
-			if verbose && link.Context != "" {
-				// Truncate context for display
-				context := link.Context
-				if len(context) > 120 {
-					context = context[:117] + "..."
-				}
-				fmt.Printf("     Context: %s\n", context)
-			}
-
-			if verbose && link.Section != "" && link.Section != "unknown" {
-				fmt.Printf("     Section: %s\n", link.Section)
-			}
-
-			if verbose && link.Validation != nil {
-				fmt.Printf("     HTTP: %s", link.Validation.RequestMethod)
-				if link.Validation.ContentType != "" {
-					fmt.Printf(" | %s", link.Validation.ContentType)
-				}
-				if link.Validation.ContentLength > 0 {
-					fmt.Printf(" | %s", common.FormatBytes(link.Validation.ContentLength))
-				}
-				if link.Validation.ResponseTime > 0 {
-					fmt.Printf(" | %v", link.Validation.ResponseTime)
-				}
-				fmt.Printf("\n")
-			}
+			fmt.Printf("   • %s [%s, %s]%s\n", cleanedURL, confidence, pageInfo, status)
 		}
 	}
 
@@ -360,7 +344,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 				progressMu.Unlock()
 			}
 
-			if verbose && update.Status == extractor.TaskStatusFailed {
+			if !quiet && update.Status == extractor.TaskStatusFailed {
 				fmt.Fprintf(os.Stderr, "\n❌ Failed to process %s: %s\n", update.Filename, update.Message)
 			}
 		}
@@ -372,7 +356,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 		case result := <-pool.Results():
 			if result.Error != nil {
 				failedFiles = append(failedFiles, result.Task.Filename)
-				if !verbose {
+				if quiet {
 					fmt.Fprintf(os.Stderr, "❌ Failed: %s\n", filepath.Base(result.Task.Filename))
 				}
 				continue
@@ -407,7 +391,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 	}
 	fmt.Printf(" in %v\n", totalProcessTime)
 
-	if len(failedFiles) > 0 && verbose {
+	if len(failedFiles) > 0 && !quiet {
 		fmt.Printf("Failed files: %v\n", failedFiles)
 	}
 

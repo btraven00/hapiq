@@ -45,7 +45,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Create checker configuration
 	config := checker.Config{
-		Verbose:        verbose,
+		Verbose:        !quiet,
 		Download:       downloadFlag,
 		TimeoutSeconds: timeoutFlag,
 		OutputFormat:   output,
@@ -63,7 +63,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 }
 
 func processSingleTarget(c *checker.Checker, target string) error {
-	if verbose {
+	if !quiet {
 		fmt.Printf("Checking: %s\n", target)
 		fmt.Printf("Download enabled: %t\n", downloadFlag)
 		fmt.Printf("Timeout: %ds\n", timeoutFlag)
@@ -72,7 +72,7 @@ func processSingleTarget(c *checker.Checker, target string) error {
 
 	// Clean and normalize the target
 	cleanTarget := cleanupIdentifier(target)
-	if verbose && cleanTarget != target {
+	if !quiet && cleanTarget != target {
 		fmt.Printf("Normalized: %s -> %s\n", target, cleanTarget)
 	}
 
@@ -91,7 +91,7 @@ func processSingleTarget(c *checker.Checker, target string) error {
 }
 
 func processBatchFile(c *checker.Checker, filename string) error {
-	if verbose {
+	if !quiet {
 		fmt.Printf("Processing batch file: %s\n", filename)
 		fmt.Printf("Download enabled: %t\n", downloadFlag)
 		fmt.Printf("Timeout: %ds\n", timeoutFlag)
@@ -123,14 +123,14 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		// Clean and normalize the identifier
 		cleanLine := cleanupIdentifier(line)
 		if cleanLine == "" {
-			if verbose {
+			if !quiet {
 				fmt.Printf("Line %d: Skipping empty after cleanup: %s\n", lineNumber, line)
 			}
 			continue
 		}
 
 		processedCount++
-		if verbose {
+		if !quiet {
 			fmt.Printf("\n[%d/%d] Processing: %s", processedCount, lineNumber, cleanLine)
 			if cleanLine != line {
 				fmt.Printf(" (normalized from: %s)", line)
@@ -158,7 +158,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		return fmt.Errorf("error reading file: %w", err)
 	}
 
-	if verbose {
+	if !quiet {
 		fmt.Printf("\nBatch processing completed: %d processed, %d errors\n", processedCount, errorCount)
 	}
 
@@ -174,11 +174,15 @@ func cleanupIdentifier(identifier string) string {
 	// Remove leading/trailing whitespace
 	cleaned := strings.TrimSpace(identifier)
 
-	// Define regex patterns for cleanup
+	// Enhanced URL boundary detection patterns
 	var cleanupPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[\(\)\[\]\{\}].*$`), // Remove everything from first bracket onwards
-		regexp.MustCompile(`[,;].*$`),           // Remove everything from first comma/semicolon onwards
-		regexp.MustCompile(`\s+`),               // Normalize whitespace
+		regexp.MustCompile(`[\(\)\[\]\{\}].*$`),   // Remove everything from first bracket onwards
+		regexp.MustCompile(`[,;].*$`),             // Remove everything from first comma/semicolon onwards
+		regexp.MustCompile(`\s+`),                 // Normalize whitespace
+		regexp.MustCompile(`\.[A-Z][a-z].*$`),     // Remove text starting with period followed by capitalized word
+		regexp.MustCompile(`[0-9]+[A-Z][a-z].*$`), // Remove text starting with number followed by capitalized word
+		regexp.MustCompile(`[a-z]+[A-Z][a-z].*$`), // Remove concatenated text starting with lowercase-uppercase pattern
+		regexp.MustCompile(`\.\d+.*$`),            // Remove figshare version numbers (e.g., .2.3MouselungdatasetThis...)
 	}
 
 	// Apply cleanup patterns

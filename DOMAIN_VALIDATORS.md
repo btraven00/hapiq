@@ -196,11 +196,11 @@ Example output for GEO validation:
 ### Verbose Mode
 
 ```bash
-# Get detailed domain validation information
-hapiq check GSE185917 --verbose
+# Get detailed domain validation information (verbose is default)
+hapiq check GSE185917
 
-# Verbose SRA validation
-hapiq check SRR123456 --verbose
+# Quiet SRA validation (suppress verbose messages)
+hapiq check SRR123456 --quiet
 ```
 
 ### JSON Output

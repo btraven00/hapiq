@@ -10,7 +10,7 @@ import (
 
 var (
 	cfgFile string
-	verbose bool
+	quiet   bool
 	output  string
 )
 
@@ -42,7 +42,7 @@ func init() {
 	// will be global for your application.
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hapiq.yaml)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "quiet output (suppress verbose messages)")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "human", "output format (human, json)")
 
 	// Cobra also supports local flags, which will only run
@@ -69,7 +69,7 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
 
 	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil && verbose {
+	if err := viper.ReadInConfig(); err == nil && !quiet {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
 }

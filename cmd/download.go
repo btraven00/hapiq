@@ -15,7 +15,7 @@ import (
 
 var (
 	outputDir            string
-	includeRaw           bool
+	excludeRaw           bool
 	excludeSupplementary bool
 	maxConcurrent        int
 	resumeDownload       bool
@@ -39,8 +39,8 @@ Supported sources:
 Examples:
   hapiq download geo GSE123456 --out ./datasets
   hapiq download figshare 12345678 --out ./datasets
-  hapiq download geo GSE123456 --out ./data --include-raw --parallel 4
-  hapiq download figshare 12345678 --out ./data --exclude-supplementary --yes`,
+  hapiq download geo GSE123456 --out ./data --parallel 4
+  hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet`,
 	Args: cobra.ExactArgs(2),
 	RunE: runDownload,
 }
@@ -68,10 +68,10 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
 	defer cancel()
 
-	if verbose {
+	if !quiet {
 		fmt.Printf("Downloading from %s: %s\n", sourceType, id)
 		fmt.Printf("Output directory: %s\n", outputDir)
-		fmt.Printf("Include raw data: %t\n", includeRaw)
+		fmt.Printf("Include raw data: %t\n", !excludeRaw)
 		fmt.Printf("Exclude supplementary: %t\n", excludeSupplementary)
 		fmt.Printf("Max concurrent: %d\n", maxConcurrent)
 		fmt.Printf("Non-interactive: %t\n", nonInteractive)
@@ -100,12 +100,12 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if verbose {
+	if !quiet {
 		fmt.Printf("✅ ID validation successful\n")
 	}
 
 	// Get metadata first
-	if verbose {
+	if !quiet {
 		fmt.Printf("🔍 Retrieving metadata...\n")
 	}
 
@@ -151,7 +151,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	// Create download request
 	downloadOptions := &downloaders.DownloadOptions{
-		IncludeRaw:           includeRaw,
+		IncludeRaw:           !excludeRaw,
 		ExcludeSupplementary: excludeSupplementary,
 		MaxConcurrent:        maxConcurrent,
 		Resume:               resumeDownload,
@@ -168,7 +168,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Perform the download
-	if verbose {
+	if !quiet {
 		fmt.Printf("\n⬇️  Starting download...\n")
 	}
 
@@ -222,7 +222,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output detailed file list in verbose mode
-	if verbose && len(result.Files) > 0 {
+	if !quiet && len(result.Files) > 0 {
 		fmt.Printf("\n📁 Downloaded Files:\n")
 		for _, file := range result.Files {
 			fmt.Printf("   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
@@ -251,18 +251,32 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 // initializeDownloaders registers all available downloaders
 func initializeDownloaders() error {
+	// Get NCBI API key from environment variable if available
+	apiKey := os.Getenv("NCBI_API_KEY")
+
 	// Register GEO downloader
-	geoDownloader := geo.NewGEODownloader(
-		geo.WithVerbose(verbose),
-		geo.WithTimeout(time.Duration(downloadTimeout)*time.Second),
-	)
+	geoOptions := []geo.Option{
+		geo.WithVerbose(!quiet),
+		geo.WithTimeout(time.Duration(downloadTimeout) * time.Second),
+	}
+
+	if apiKey != "" {
+		if !quiet {
+			fmt.Printf("Using NCBI API key for increased rate limits\n")
+		}
+		geoOptions = append(geoOptions, geo.WithAPIKey(apiKey))
+	} else if !quiet {
+		fmt.Printf("No NCBI API key found. Set NCBI_API_KEY environment variable for higher rate limits\n")
+	}
+
+	geoDownloader := geo.NewGEODownloader(geoOptions...)
 	if err := downloaders.Register(geoDownloader); err != nil {
 		return fmt.Errorf("failed to register GEO downloader: %w", err)
 	}
 
 	// Register Figshare downloader
 	figshareDownloader := figshare.NewFigshareDownloader(
-		figshare.WithVerbose(verbose),
+		figshare.WithVerbose(!quiet),
 		figshare.WithTimeout(time.Duration(downloadTimeout)*time.Second),
 	)
 	if err := downloaders.Register(figshareDownloader); err != nil {
@@ -300,13 +314,13 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 
 	// Output directory flag (required)
-	downloadCmd.Flags().StringVarP(&outputDir, "out", "o", "", "output directory for downloaded files (required)")
+	downloadCmd.Flags().StringVar(&outputDir, "out", "", "output directory for downloaded files (required)")
 	downloadCmd.MarkFlagRequired("out")
 
 	// Download behavior flags
-	downloadCmd.Flags().BoolVar(&includeRaw, "include-raw", false, "include raw data files (e.g., FASTQ, BAM)")
+	downloadCmd.Flags().BoolVar(&excludeRaw, "exclude-raw", false, "exclude raw data files (e.g., FASTQ, BAM)")
 	downloadCmd.Flags().BoolVar(&excludeSupplementary, "exclude-supplementary", false, "exclude supplementary files")
-	downloadCmd.Flags().IntVar(&maxConcurrent, "parallel", 1, "maximum number of concurrent downloads")
+	downloadCmd.Flags().IntVar(&maxConcurrent, "parallel", 8, "maximum number of concurrent downloads")
 	downloadCmd.Flags().BoolVar(&resumeDownload, "resume", false, "resume interrupted downloads")
 	downloadCmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "skip files that already exist")
 	downloadCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "non-interactive mode (auto-confirm prompts)")
