@@ -21,13 +21,9 @@ hapiq/
 ├── test/                  # Test utilities and integration tests
 │   ├── testdata.go       # Test data and mock servers
 │   └── integration_test.go # End-to-end tests
-├── .github/workflows/     # CI/CD pipelines
-│   └── ci.yml            # GitHub Actions workflow
 ├── main.go               # Application entry point
 ├── go.mod                # Go module definition
 ├── Makefile              # Development automation
-├── .gitignore            # Git ignore patterns
-├── .golangci.yml         # Linting configuration
 └── README.md             # Project documentation
 ```
 
@@ -93,7 +89,7 @@ Comprehensive testing with multiple levels:
 
 ### 4. Complexity Analysis
 
-- **Time Complexity**: 
+- **Time Complexity**:
   - URL/DOI validation: O(1)
   - HTTP requests: O(1) per request
   - Repository classification: O(1) lookup

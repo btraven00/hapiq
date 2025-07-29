@@ -15,6 +15,7 @@ import (
 	"github.com/btraven00/hapiq/internal/extractor"
 	"github.com/spf13/cobra"
 
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
 )
 
@@ -224,7 +225,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 					fmt.Printf(" | %s", link.Validation.ContentType)
 				}
 				if link.Validation.ContentLength > 0 {
-					fmt.Printf(" | %s", formatBytes(link.Validation.ContentLength))
+					fmt.Printf(" | %s", common.FormatBytes(link.Validation.ContentLength))
 				}
 				if link.Validation.ResponseTime > 0 {
 					fmt.Printf(" | %v", link.Validation.ResponseTime)
@@ -546,18 +547,4 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 	}
 
 	return nil
-}
-
-// formatBytes formats byte counts in human readable form
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
