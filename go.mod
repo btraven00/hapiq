@@ -5,13 +5,12 @@ go 1.24.1
 toolchain go1.24.2
 
 require (
+	code.sajari.com/docconv/v2 v2.0.0-pre.4
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 )
 
 require (
-	code.sajari.com/docconv v1.3.8 // indirect
-	code.sajari.com/docconv/v2 v2.0.0-pre.4 // indirect
 	github.com/JalfResi/justext v0.0.0-20170829062021-c0282dea7198 // indirect
 	github.com/PuerkitoBio/goquery v1.5.1 // indirect
 	github.com/advancedlogic/GoOse v0.0.0-20191112112754-e742535969c1 // indirect
@@ -24,7 +23,6 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jaytaylor/html2text v0.0.0-20200412013138-3577fbdbcff7 // indirect
-	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/levigross/exp-html v0.0.0-20120902181939-8df60c69a8f5 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
