@@ -88,6 +88,15 @@ install-lint: ## Install golangci-lint
 lint-fix: ## Run golangci-lint with auto-fix enabled
 	@$(MAKE) lint ARGS="--fix"
 
+# Run linter with warnings only (doesn't fail on warnings)
+lint-warn: ## Run golangci-lint showing warnings without failing the build
+	@echo "Running golangci-lint with warnings only..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=5m --issues-exit-code=0 || true; \
+	else \
+		echo "golangci-lint not found. Install it with 'make install-lint'"; \
+	fi
+
 # Download dependencies
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."

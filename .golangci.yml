@@ -5,25 +5,17 @@ run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - bin
-    - vendor
-    - testdata
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_generated\\.go$"
   go: "1.21"
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true
 
 linters-settings:
   govet:
-    check-shadowing: true
     enable-all: true
   gocyclo:
     min-complexity: 15
@@ -117,7 +109,7 @@ linters:
     - durationcheck
     - errorlint
     - exhaustive
-    - exportloopref
+    - copyloopvar
     - forbidigo
     - forcetypeassert
     - gochecknoinits
@@ -130,7 +122,7 @@ linters:
     - gofmt
     - gofumpt
     - goimports
-    - gomnd
+    - mnd
     - gomoddirectives
     - gomodguard
     - goprintffuncname
@@ -158,6 +150,14 @@ linters:
     - wsl
 
 issues:
+  exclude-dirs:
+    - bin
+    - vendor
+    - testdata
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*_generated\\.go$"
+  uniq-by-line: true
   exclude-rules:
     # Exclude some linters from running on tests files
     - path: _test\.go
@@ -168,7 +168,7 @@ issues:
         - gosec
         - lll
         - gocognit
-        - gomnd
+        - mnd
         - wsl
         - goconst
 
@@ -218,3 +218,6 @@ severity:
     - linters:
         - godox
       severity: info
+    - linters:
+        - gocognit
+      severity: warning
