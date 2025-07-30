@@ -13,6 +13,7 @@ import (
 
 	"github.com/btraven00/hapiq/internal/checker"
 	"github.com/btraven00/hapiq/pkg/validators"
+	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio"
 )
 
 // TestIntegration_ValidatorPackage tests the validators package.
