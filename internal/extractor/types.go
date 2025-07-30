@@ -31,7 +31,7 @@ type Position struct {
 // ValidationResult contains validation information for a link
 type ValidationResult struct {
 	IsAccessible  bool          `json:"is_accessible"`
-	StatusCode    int           `json:"status_code,omitempty"`
+	StatusCode    int           `json:"status_code"`
 	ContentType   string        `json:"content_type,omitempty"`
 	ContentLength int64         `json:"content_length,omitempty"`
 	LastModified  string        `json:"last_modified,omitempty"`

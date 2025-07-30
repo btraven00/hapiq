@@ -19,9 +19,9 @@ var (
 	extractHeaders bool
 )
 
-// convertCmd represents the convert command
-var convertCmd = &cobra.Command{
-	Use:   "convert [pdf-file]",
+// textCmd represents the text command
+var textCmd = &cobra.Command{
+	Use:   "text [pdf-file]",
 	Short: "Convert PDF to structured text with Markdown formatting",
 	Long: `Convert PDF documents to text with proper tokenization and Markdown formatting.
 
@@ -37,23 +37,23 @@ Features:
 - Section structure preservation
 
 Examples:
-  hapiq convert paper.pdf
-  hapiq convert --output paper.md --headers paper.pdf
-  hapiq convert --preserve-layout --pages paper.pdf`,
+  hapiq text paper.pdf
+  hapiq text --output paper.md --headers paper.pdf
+  hapiq text --preserve-layout --include-pages paper.pdf`,
 	Args: cobra.ExactArgs(1),
-	RunE: runConvertPDF,
+	RunE: runText,
 }
 
 func init() {
-	rootCmd.AddCommand(convertCmd)
+	rootCmd.AddCommand(textCmd)
 
-	convertCmd.Flags().StringVarP(&outputFile, "output", "o", "", "output file (default: stdout)")
-	convertCmd.Flags().BoolVar(&preserveLayout, "preserve-layout", false, "preserve original layout spacing")
-	convertCmd.Flags().BoolVar(&includePages, "pages", false, "include page number annotations")
-	convertCmd.Flags().BoolVar(&extractHeaders, "headers", true, "detect and format headers as Markdown")
+	textCmd.Flags().StringVarP(&outputFile, "output", "o", "", "output file (default: stdout)")
+	textCmd.Flags().BoolVar(&preserveLayout, "preserve-layout", false, "preserve original text layout and spacing")
+	textCmd.Flags().BoolVar(&includePages, "include-pages", false, "include page numbers in output")
+	textCmd.Flags().BoolVar(&extractHeaders, "headers", true, "detect and format headers as Markdown")
 }
 
-func runConvertPDF(cmd *cobra.Command, args []string) error {
+func runText(cmd *cobra.Command, args []string) error {
 	filename := args[0]
 
 	if !quiet {

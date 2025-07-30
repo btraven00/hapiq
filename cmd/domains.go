@@ -19,27 +19,26 @@ var (
 	listJSON     bool
 )
 
-// domainsCmd represents the domains command
-var domainsCmd = &cobra.Command{
-	Use:   "domains",
+// listCmd represents the list command
+var listCmd = &cobra.Command{
+	Use:   "list",
 	Short: "List and explore domain-specific validators",
-	Long: `The domains command allows you to explore the available domain-specific
+	Long: `The list command allows you to explore the available domain-specific
 validators that can recognize and validate identifiers from scientific databases
 and repositories.
 
 Each domain represents a scientific field (e.g., bioinformatics, chemistry)
-and contains validators for specific databases within that domain.
+and contains validators for that field's specific databases and formats.
 
 Examples:
-  hapiq domains --list                    # List all available validators
-  hapiq domains --domains                 # List available domains
-  hapiq domains --domain bio              # Show validators in bioinformatics domain
-  hapiq domains --patterns                # Show recognition patterns
-  hapiq domains --output json             # Output as JSON`,
-	RunE: runDomains,
+  hapiq list                              # List all available validators
+  hapiq list --domain bio                 # Show validators in bioinformatics domain
+  hapiq list --patterns                   # Show recognition patterns
+  hapiq list --output json                # Output as JSON`,
+	RunE: runList,
 }
 
-func runDomains(cmd *cobra.Command, args []string) error {
+func runList(cmd *cobra.Command, args []string) error {
 	if listJSON {
 		return outputDomainsJSON()
 	}
@@ -223,14 +222,14 @@ func getDomainDescription(domain string) string {
 }
 
 func init() {
-	rootCmd.AddCommand(domainsCmd)
+	rootCmd.AddCommand(listCmd)
 
-	// Flags for the domains command
-	domainsCmd.Flags().BoolVar(&listDomains, "domains", false, "list available scientific domains")
-	domainsCmd.Flags().BoolVar(&showPatterns, "patterns", false, "show recognition patterns for validators")
-	domainsCmd.Flags().StringVar(&domainFilter, "domain", "", "filter by specific domain (e.g., 'bio', 'chemistry')")
-	domainsCmd.Flags().BoolVar(&listJSON, "json", false, "output as JSON")
+	// Flags for the list command
+	listCmd.Flags().BoolVar(&listDomains, "domains", false, "list available scientific domains")
+	listCmd.Flags().BoolVar(&showPatterns, "patterns", false, "show recognition patterns for validators")
+	listCmd.Flags().StringVar(&domainFilter, "domain", "", "filter by specific domain (e.g., 'bio', 'chem')")
+	listCmd.Flags().BoolVar(&listJSON, "json", false, "output as JSON")
 
 	// Mark flags as mutually exclusive where appropriate
-	domainsCmd.MarkFlagsMutuallyExclusive("domains", "domain")
+	listCmd.MarkFlagsMutuallyExclusive("domains", "domain")
 }

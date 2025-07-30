@@ -35,12 +35,12 @@ var (
 // extractCmd represents the extract command
 var extractCmd = &cobra.Command{
 	Use:   "extract [file...]",
-	Short: "Extract links from PDF documents",
-	Long: `Extract links from PDF documents and identify potential dataset references.
+	Short: "Extract and validate links from PDF documents",
+	Long: `Extract and validate links from PDF documents and identify potential dataset references.
 
 This command analyzes PDF files to find URLs, DOIs, and other identifiers that
-may point to datasets or supplementary materials. It can validate links for
-accessibility and categorize them by type and confidence.
+may point to datasets or supplementary materials. It validates links for
+accessibility and categorizes them by type and confidence, filtering out 404s by default.
 
 Examples:
   hapiq extract paper.pdf

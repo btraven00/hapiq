@@ -1,8 +1,12 @@
 # Hapiq
 
 **Hapiq** is a CLI tool for extracting and inspecting dataset links from
-scientific papers. It verifies, downloads, and analyzes data sources to
-estimate the likelihood of a valid dataset.
+scientific papers.
+
+To extract and check links, it verifies and analyzes data sources to estimate
+the likelihood of a valid dataset.
+
+Hapiq can also be used to directly download datasets into local folders.
 
 _"Hapiq" means "the one who fetches" in Quechua._
 
