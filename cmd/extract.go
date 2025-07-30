@@ -191,8 +191,8 @@ func outputHuman(result *extractor.ExtractionResult) error {
 		fmt.Printf("\n%s %s Links (%d):\n", emoji, strings.ToUpper(string(linkType)), len(links))
 
 		for i, link := range links {
-			// Clean up the URL using check command's cleanup logic
-			cleanedURL := cleanupIdentifier(link.URL)
+			// URLs from extractor are already cleaned, no need for additional cleanup
+			cleanedURL := link.URL
 			if cleanedURL == "" {
 				continue
 			}

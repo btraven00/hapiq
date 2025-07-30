@@ -11,8 +11,8 @@ import (
 
 	"net/url"
 
+	"code.sajari.com/docconv/v2"
 	"github.com/btraven00/hapiq/pkg/validators/domains"
-	"github.com/ledongthuc/pdf"
 )
 
 // PDFExtractor handles extraction of links from PDF documents using domain validators
@@ -49,70 +49,31 @@ func NewPDFExtractor(options ExtractionOptions) *PDFExtractor {
 func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, error) {
 	startTime := time.Now()
 
-	// Open and read PDF
-	file, reader, err := pdf.Open(filename)
+	// Extract text from PDF using docconv
+	response, err := docconv.ConvertPath(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open PDF: %w", err)
+		return nil, fmt.Errorf("failed to convert PDF file '%s': %w", filename, err)
 	}
-	defer file.Close()
 
+	if strings.TrimSpace(response.Body) == "" {
+		return nil, fmt.Errorf("no readable text found in PDF file")
+	}
+
+	text := response.Body
+	pageCount := 1 // TODO: Implement page detection
+
+	// Extract links from the text
+	var allLinks []ExtractedLink
+	links := e.extractLinksFromText(text, 1, "unknown")
+	allLinks = append(allLinks, links...)
+
+	// Create result structure
 	result := &ExtractionResult{
-		Filename:    filename,
-		Pages:       reader.NumPage(),
-		Links:       make([]ExtractedLink, 0),
-		Errors:      make([]string, 0),
-		Warnings:    make([]string, 0),
-		ProcessTime: 0,
-	}
-
-	var allText strings.Builder
-	linkCounts := make(map[int]int)
-	linkTypes := make(map[LinkType]int)
-	uniqueLinks := make(map[string]bool)
-
-	// Process each page
-	for pageNum := 1; pageNum <= reader.NumPage(); pageNum++ {
-		page := reader.Page(pageNum)
-		if page.V.IsNull() {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Page %d is null", pageNum))
-			continue
-		}
-
-		// Extract text from page
-		text, err := page.GetPlainText(nil)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to extract text from page %d: %v", pageNum, err))
-			continue
-		}
-
-		allText.WriteString(text)
-		allText.WriteString("\n")
-
-		// Detect section for this page
-		section := e.detectSection(text)
-
-		// Extract links from page text using domain validators
-		pageLinks := e.extractLinksFromText(text, pageNum, section)
-
-		// Apply per-page limit
-		if e.options.MaxLinksPerPage > 0 && len(pageLinks) > e.options.MaxLinksPerPage {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("Page %d has %d links, limiting to %d", pageNum, len(pageLinks), e.options.MaxLinksPerPage))
-			pageLinks = pageLinks[:e.options.MaxLinksPerPage]
-		}
-
-		// Filter by confidence and domains
-		filteredLinks := e.filterLinks(pageLinks)
-
-		// Add to results
-		result.Links = append(result.Links, filteredLinks...)
-
-		// Update statistics
-		linkCounts[pageNum] = len(filteredLinks)
-		for _, link := range filteredLinks {
-			linkTypes[link.Type]++
-			uniqueLinks[link.URL] = true
-		}
+		Filename: filename,
+		Pages:    pageCount,
+		Links:    allLinks,
+		Errors:   []string{},
+		Warnings: []string{},
 	}
 
 	// Validate links using domain validators if requested (parallelized)
@@ -122,13 +83,23 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 		accessibleCount, validatedCount = e.validateLinksParallel(result)
 	}
 
-	// Populate summary statistics
-	result.TotalText = allText.Len()
+	// Calculate statistics
+	linksByType := make(map[LinkType]int)
+	linksByPage := make(map[int]int)
+	uniqueURLs := make(map[string]bool)
+
+	for _, link := range result.Links {
+		linksByType[link.Type]++
+		linksByPage[link.Page]++
+		uniqueURLs[link.URL] = true
+	}
+
+	result.TotalText = len(text)
 	result.Summary = ExtractionStats{
 		TotalLinks:      len(result.Links),
-		UniqueLinks:     len(uniqueLinks),
-		LinksByType:     linkTypes,
-		LinksByPage:     linkCounts,
+		UniqueLinks:     len(uniqueURLs),
+		LinksByType:     linksByType,
+		LinksByPage:     linksByPage,
 		ValidatedLinks:  validatedCount,
 		AccessibleLinks: accessibleCount,
 	}
@@ -141,11 +112,12 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section string) []ExtractedLink {
 	var links []ExtractedLink
 
-	// Clean and improve text tokenization if requested
+	// Clean text but skip aggressive tokenization since we're using proper docconv extraction
 	cleanedText := e.cleanText(text)
-	if e.options.UseConvertTokenization {
-		cleanedText = e.improveTokenization(cleanedText)
-	}
+	// Disabled: improveTokenization was a hack for poor text extraction, not needed with docconv
+	// if e.options.UseConvertTokenization {
+	//     cleanedText = e.improveTokenization(cleanedText)
+	// }
 
 	// Step 1: Extract potential identifiers using improved patterns and accession recognition
 	candidates := e.extractCandidates(cleanedText)
@@ -182,10 +154,15 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 			}
 		} else {
 			// Fallback to pattern-based classification
+			context := e.extractContextForMatch(cleanedText, candidate.Text)
+
+			// Try to reconstruct complete URL from context
+			reconstructedURL := e.reconstructURLFromContext(candidate.NormalizedURL, context)
+
 			link := ExtractedLink{
-				URL:        candidate.NormalizedURL,
+				URL:        reconstructedURL,
 				Type:       candidate.Type,
-				Context:    e.extractContextForMatch(cleanedText, candidate.Text),
+				Context:    context,
 				Page:       pageNum,
 				Position:   Position{},
 				Confidence: candidate.Confidence,
@@ -226,12 +203,14 @@ type LinkCandidate struct {
 }
 
 // extractCandidates finds potential identifiers and URLs in text
+// extractCandidates extracts potential link candidates from text using all patterns
 func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 	var candidates []LinkCandidate
 
 	// Use accession recognition if enabled
 	if e.options.UseAccessionRecognition {
-		candidates = append(candidates, e.extractAccessions(text)...)
+		accessionCandidates := e.extractAccessions(text)
+		candidates = append(candidates, accessionCandidates...)
 	}
 
 	for _, pattern := range e.extractionPatterns {
@@ -257,6 +236,16 @@ func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 			normalized := e.normalizeCandidate(matchText, pattern.Type)
 			cleaned := e.cleanURL(normalized)
 
+			// Filter out non-URL identifiers that should not appear as generic URLs
+			if pattern.Type == LinkTypeURL && !strings.HasPrefix(cleaned, "http") &&
+				!strings.HasPrefix(cleaned, "ftp://") &&
+				!regexp.MustCompile(`^\d{4}\.\d{4,5}(?:v\d+)?$`).MatchString(matchText) {
+				// Skip generic identifiers that aren't proper URLs or known patterns
+				if len(cleaned) < 10 && !strings.Contains(cleaned, ".") {
+					continue
+				}
+			}
+
 			// Validate URL is reasonable
 			if e.isValidURL(cleaned) {
 				candidate.NormalizedURL = cleaned
@@ -270,18 +259,20 @@ func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 
 // improveTokenization applies convert-style text tokenization to improve boundary detection
 func (e *PDFExtractor) improveTokenization(text string) string {
-	// Apply word boundary patterns similar to convert command
+	// Apply word boundary patterns similar to convert command, but be more selective
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`([a-z])([A-Z])`),                              // lowercase followed by uppercase
-		regexp.MustCompile(`([a-zA-Z])(\d)`),                              // letter followed by digit
-		regexp.MustCompile(`(\d)([a-zA-Z])`),                              // digit followed by letter
+		// Only split lowercase-uppercase when NOT within URLs or short identifiers
+		regexp.MustCompile(`([a-z]{4,})([A-Z][a-z])`), // longer words followed by capitalized words (preserve short identifiers like "scPSM")
+		// More selective letter-digit pattern: only split when it looks like separate words
+		regexp.MustCompile(`([a-z]{3,})(\d{4,})`),                         // longer words followed by longer numbers (e.g., "method2024")
+		regexp.MustCompile(`(\d{4,})([a-z]{3,})`),                         // longer numbers followed by longer words (e.g., "2024results")
 		regexp.MustCompile(`([.!?])([A-Z])`),                              // sentence end followed by capital
 		regexp.MustCompile(`(https?://[^\s]+?)([A-Z][a-z])`),              // URLs followed by capitalized words
 		regexp.MustCompile(`([a-z])(https?://)`),                          // text followed by URLs
 		regexp.MustCompile(`(doi\.org/[^\s]+?)([A-Z][a-z])`),              // DOIs followed by capitalized words
 		regexp.MustCompile(`([0-9]/[0-9\-]+)([A-Z])`),                     // DOI numbers followed by text
 		regexp.MustCompile(`([a-z])(doi\.org)`),                           // text followed by DOIs
-		regexp.MustCompile(`([0-9])([A-Z])`),                              // numbers followed by uppercase
+		regexp.MustCompile(`(\d{4,})([A-Z][a-z])`),                        // long numbers followed by capitalized words
 		regexp.MustCompile(`(figshare\.com/[^/\s]+/[^/\s]+)([A-Z][a-z])`), // figshare URLs followed by text
 		regexp.MustCompile(`(zenodo\.org/[^/\s]+/[^/\s]+)([A-Z][a-z])`),   // zenodo URLs followed by text
 		regexp.MustCompile(`(\.\d+)([A-Z][a-z])`),                         // numbers with decimal followed by text
@@ -294,6 +285,7 @@ func (e *PDFExtractor) improveTokenization(text string) string {
 
 	// Clean up multiple spaces
 	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+
 	return strings.TrimSpace(result)
 }
 
@@ -342,6 +334,13 @@ func (e *PDFExtractor) extractAccessions(text string) []LinkCandidate {
 	return candidates
 }
 
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // normalizeCandidate normalizes a candidate based on its type
 func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string {
 	text = strings.TrimSpace(text)
@@ -354,6 +353,11 @@ func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string
 		return text
 
 	case LinkTypeURL:
+		// Check if this is an arXiv ID and convert to full URL
+		if matched, _ := regexp.MatchString(`^\d{4}\.\d{4,5}(?:v\d+)?$`, text); matched {
+			return "https://arxiv.org/abs/" + text
+		}
+
 		// Remove common trailing punctuation
 		text = strings.TrimRight(text, ".,:;!?)]}")
 		return text
@@ -761,13 +765,21 @@ func (e *PDFExtractor) selectBestCandidate(candidates []ExtractedLink) Extracted
 func (e *PDFExtractor) scoreLinkQuality(link ExtractedLink) float64 {
 	score := link.Confidence
 
-	// Prefer shorter, cleaner URLs (less likely to have garbage)
-	lengthPenalty := float64(len(link.URL)) / 1000.0
-	score -= lengthPenalty
+	// Don't penalize length for valid URLs - complete URLs are better than partial ones
+	// Only penalize extremely long URLs that are likely corrupted
+	if len(link.URL) > 300 {
+		lengthPenalty := float64(len(link.URL)-300) / 1000.0
+		score -= lengthPenalty
+	}
 
 	// Bonus for proper URL structure
 	if strings.HasPrefix(link.URL, "https://") {
 		score += 0.1
+	}
+
+	// Bonus for complete arXiv URLs vs partial ones
+	if strings.Contains(link.URL, "arxiv.org/abs/") && strings.Contains(link.URL, ".") {
+		score += 0.2 // Prefer full arXiv URLs like "1802.03426" over truncated "1802"
 	}
 
 	// Penalty for obvious corruption patterns
@@ -777,8 +789,9 @@ func (e *PDFExtractor) scoreLinkQuality(link ExtractedLink) float64 {
 	if strings.Contains(strings.ToLower(link.URL), "article") && link.Type == LinkTypeDOI {
 		score -= 0.2
 	}
-	if regexp.MustCompile(`\d{2,}$`).MatchString(link.URL) && link.Type == LinkTypeDOI {
-		// Trailing digits often indicate corruption
+	// Only penalize trailing digits for DOIs, not for arXiv URLs
+	if regexp.MustCompile(`\d{2,}$`).MatchString(link.URL) && link.Type == LinkTypeDOI && !strings.Contains(link.URL, "arxiv") {
+		// Trailing digits often indicate corruption in DOIs
 		score -= 0.15
 	}
 
@@ -868,6 +881,73 @@ func (e *PDFExtractor) extractContextForMatch(text, match string) string {
 	context = regexp.MustCompile(`\s+`).ReplaceAllString(context, " ")
 
 	return strings.TrimSpace(context)
+}
+
+// reconstructURLFromContext attempts to find a complete URL in the context
+// when the extracted URL appears incomplete (e.g., ends with slash, missing ID)
+func (e *PDFExtractor) reconstructURLFromContext(partialURL, context string) string {
+	// If URL looks complete, return as-is
+	if !e.isIncompleteURL(partialURL) {
+		return partialURL
+	}
+
+	// Look for patterns that suggest the URL continues in the context
+	// Handle figshare URLs with spaces before IDs
+	if strings.Contains(partialURL, "figshare.com") {
+		// Pattern: https://figshare.com/articles/dataset/name/ 123456
+		figsharePattern := regexp.MustCompile(`(https?://[^\s]*figshare\.com/[^\s]*?/?\s*)\s*(\d{6,8})`)
+		if matches := figsharePattern.FindStringSubmatch(context); len(matches) > 2 {
+			baseURL := strings.TrimSpace(strings.ReplaceAll(matches[1], " ", ""))
+			id := matches[2]
+			if !strings.HasSuffix(baseURL, "/") {
+				baseURL += "/"
+			}
+			reconstructed := baseURL + id
+			return reconstructed
+		}
+	}
+
+	// Handle other repository URLs with similar patterns
+	// Pattern: domain.com/path/name 123456 or domain.com/path/name/ 123456
+	repoPattern := regexp.MustCompile(`(https?://[^\s]*(?:zenodo|dryad|osf|mendeley)\.(?:org|com)/[^\s]*?/?\s*)\s*(\w{6,})`)
+	if matches := repoPattern.FindStringSubmatch(context); len(matches) > 2 {
+		baseURL := strings.TrimSpace(strings.ReplaceAll(matches[1], " ", ""))
+		id := matches[2]
+		if !strings.HasSuffix(baseURL, "/") {
+			baseURL += "/"
+		}
+		return baseURL + id
+	}
+
+	// Handle DOIs that might be split
+	doiPattern := regexp.MustCompile(`(10\.\d{4,}/[^\s]*)\s+([^\s]+)`)
+	if matches := doiPattern.FindStringSubmatch(context); len(matches) > 2 {
+		return matches[1] + matches[2]
+	}
+
+	// Return original if no reconstruction possible
+	return partialURL
+}
+
+// isIncompleteURL checks if a URL appears to be incomplete
+func (e *PDFExtractor) isIncompleteURL(url string) bool {
+	// URLs ending with slash but no ID (common in figshare)
+	if strings.HasSuffix(url, "/") && strings.Contains(url, "/dataset/") {
+		return true
+	}
+
+	// Figshare URLs that are too short (missing ID)
+	if strings.Contains(url, "figshare.com/articles/dataset/") && !regexp.MustCompile(`/\d{6,}/?$`).MatchString(url) {
+		return true
+	}
+
+	// Other repository URLs that end abruptly
+	if regexp.MustCompile(`https?://[^/]+/[^/]+/?$`).MatchString(url) &&
+		strings.Contains(url, "zenodo") || strings.Contains(url, "dryad") {
+		return true
+	}
+
+	return false
 }
 
 // adjustConfidenceByValidation adjusts the confidence score based on HTTP validation results
@@ -993,6 +1073,7 @@ type validationResult struct {
 
 // cleanURL removes common PDF extraction artifacts from URLs
 func (e *PDFExtractor) cleanURL(rawURL string) string {
+
 	// Remove common trailing text that gets concatenated in PDFs
 	// Only match these as complete words to avoid breaking valid paths
 	stopPatterns := []string{
@@ -1020,7 +1101,29 @@ func (e *PDFExtractor) cleanURL(rawURL string) string {
 
 	// Remove trailing punctuation and whitespace (but preserve valid URL chars)
 	rawURL = strings.TrimSpace(rawURL)
-	rawURL = strings.TrimRight(rawURL, ".,:;!?)]}")
+	// Be more aggressive about trailing dots for URLs
+	if strings.HasPrefix(rawURL, "http") {
+		rawURL = strings.TrimRight(rawURL, ".,:;!?)]}")
+	} else {
+		// For non-URLs, only remove obvious punctuation but keep dots that might be part of identifiers
+		rawURL = strings.TrimRight(rawURL, ",:;!?)]}")
+	}
+
+	// Handle figshare and repository corruption patterns
+	// Be careful not to break valid identifiers like arXiv IDs
+	if !regexp.MustCompile(`^\d{4}\.\d{4,5}(?:v\d+)?$`).MatchString(rawURL) {
+		corruptionPatterns := []*regexp.Regexp{
+			regexp.MustCompile(`\.\s*[1-9]\s*$`),           // Remove trailing ". 2" or ".2" etc. (single digits only)
+			regexp.MustCompile(`\s+[1-9]\s*$`),             // Remove trailing " 2" etc. (single digits only)
+			regexp.MustCompile(`[A-Z][a-z]+dataset.*$`),    // Remove concatenated text like "Mouselung..."
+			regexp.MustCompile(`[A-Z][a-z]+[A-Z][a-z].*$`), // Remove camelCase concatenated text
+			regexp.MustCompile(`\.[A-Z][a-z]+.*$`),         // Remove text after periods with caps
+		}
+
+		for _, pattern := range corruptionPatterns {
+			rawURL = pattern.ReplaceAllString(rawURL, "")
+		}
+	}
 
 	// Remove any trailing incomplete DOI patterns that look suspicious
 	if strings.HasSuffix(rawURL, "/10.") || strings.HasSuffix(rawURL, "/10") {
@@ -1069,8 +1172,11 @@ func (e *PDFExtractor) isValidURL(rawURL string) bool {
 			}
 		}
 
-		// For arXiv IDs (YYYY.NNNNN format)
+		// For arXiv IDs (YYYY.NNNNN format) - allow both raw IDs and full URLs
 		if matched, _ := regexp.MatchString(`^\d{4}\.\d{4,5}(?:v\d+)?$`, rawURL); matched {
+			return true
+		}
+		if strings.HasPrefix(rawURL, "https://arxiv.org/abs/") {
 			return true
 		}
 

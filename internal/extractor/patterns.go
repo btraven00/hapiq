@@ -77,12 +77,20 @@ func getExtractionPatterns() []ExtractionPattern {
 			Examples:    []string{"https://doi.org/10.5281/zenodo.123456"},
 		},
 		{
+			Name:        "Figshare URLs with IDs",
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]+/?\s*\d+)`),
+			Type:        LinkTypeFigshare,
+			Confidence:  0.98,
+			Description: "Figshare repository URLs with numeric IDs (may have spaces)",
+			Examples:    []string{"https://figshare.com/articles/dataset/scPSM/ 19306661"},
+		},
+		{
 			Name:        "Figshare URLs",
 			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
 			Type:        LinkTypeFigshare,
 			Confidence:  0.95,
 			Description: "Figshare repository URLs",
-			Examples:    []string{"https://figshare.com/articles/dataset/title/123456"},
+			Examples:    []string{"https://figshare.com/s/865e694ad06d5857db4b"},
 		},
 
 		// GitHub repository patterns (potential datasets)
@@ -194,10 +202,10 @@ func getExtractionPatterns() []ExtractionPattern {
 		},
 		{
 			Name:        "PDB ID",
-			Regex:       regexp.MustCompile(`\b([1-9][a-zA-Z0-9]{3})\b`),
+			Regex:       regexp.MustCompile(`\b([1-9][A-Za-z][A-Za-z0-9]{2})\b`),
 			Type:        LinkTypeURL,
 			Confidence:  0.7,
-			Description: "Protein Data Bank identifiers",
+			Description: "Protein Data Bank identifiers (must have at least one letter)",
 			Examples:    []string{"1ABC", "2XYZ"},
 		},
 

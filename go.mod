@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	code.sajari.com/docconv v1.3.8 // indirect
 	code.sajari.com/docconv/v2 v2.0.0-pre.4 // indirect
 	github.com/JalfResi/justext v0.0.0-20170829062021-c0282dea7198 // indirect
 	github.com/PuerkitoBio/goquery v1.5.1 // indirect
