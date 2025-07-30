@@ -173,38 +173,193 @@ func cleanupIdentifier(identifier string) string {
 
 	// Remove leading/trailing whitespace
 	cleaned := strings.TrimSpace(identifier)
-
-	// Enhanced URL boundary detection patterns
-	var cleanupPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[\(\)\[\]\{\}].*$`),   // Remove everything from first bracket onwards
-		regexp.MustCompile(`[,;].*$`),             // Remove everything from first comma/semicolon onwards
-		regexp.MustCompile(`\s+`),                 // Normalize whitespace
-		regexp.MustCompile(`\.[A-Z][a-z].*$`),     // Remove text starting with period followed by capitalized word
-		regexp.MustCompile(`[0-9]+[A-Z][a-z].*$`), // Remove text starting with number followed by capitalized word
-		regexp.MustCompile(`[a-z]+[A-Z][a-z].*$`), // Remove concatenated text starting with lowercase-uppercase pattern
-		regexp.MustCompile(`\.\d+.*$`),            // Remove figshare version numbers (e.g., .2.3MouselungdatasetThis...)
+	if cleaned == "" {
+		return ""
 	}
 
-	// Apply cleanup patterns
-	for _, pattern := range cleanupPatterns {
-		if pattern.MatchString(cleaned) {
-			if strings.Contains(pattern.String(), `.*$`) {
-				// For patterns that remove everything after a character
-				cleaned = pattern.ReplaceAllString(cleaned, "")
-			} else {
-				// For patterns that normalize (like whitespace)
-				cleaned = pattern.ReplaceAllString(cleaned, " ")
+	// Handle edge case: brackets at beginning (e.g., "[Dataset] 10.5281/zenodo.123456")
+	// These should return empty string as they're not valid identifiers
+	if strings.HasPrefix(cleaned, "[") || strings.HasPrefix(cleaned, "(") || strings.HasPrefix(cleaned, ",") {
+		return ""
+	}
+
+	// Check for edge case: only brackets/punctuation with no valid identifier
+	if !containsValidIdentifier(cleaned) {
+		return ""
+	}
+
+	// Normalize internal whitespace, but preserve single spaces in DOIs
+	if strings.HasPrefix(cleaned, "10.") {
+		// For DOIs, be more careful with whitespace normalization
+		// Convert multiple spaces to single space, but preserve existing single spaces
+		cleaned = regexp.MustCompile(`\s{2,}`).ReplaceAllString(cleaned, " ")
+	} else {
+		cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
+	}
+
+	// Remove content in brackets/parentheses that comes after the main identifier
+	// This preserves brackets that are part of URLs (like query parameters)
+	cleaned = regexp.MustCompile(`\s+[\(\[\{].*$`).ReplaceAllString(cleaned, "")
+
+	// Remove content after comma or semicolon (citation info, access dates, etc.)
+	cleaned = regexp.MustCompile(`\s*[,;].*$`).ReplaceAllString(cleaned, "")
+
+	// Special handling for URLs with brackets in path - truncate at brackets
+	if strings.HasPrefix(cleaned, "http") && strings.Contains(cleaned, "[") && !strings.Contains(cleaned, " ") {
+		bracketIdx := strings.Index(cleaned, "[")
+		cleaned = cleaned[:bracketIdx]
+	}
+
+	// Handle special characters - preserve copyright and similar symbols
+	if strings.Contains(cleaned, " ") {
+		parts := strings.Fields(cleaned)
+		if len(parts) >= 2 {
+			// Check if any part contains special characters that should be preserved
+			hasSpecialChars := false
+			for _, part := range parts {
+				if regexp.MustCompile(`[©®™]`).MatchString(part) {
+					hasSpecialChars = true
+					break
+				}
 			}
+
+			if !hasSpecialChars {
+				// Normal processing for other cases
+				if isValidIdentifierStart(parts[0]) {
+					if strings.HasPrefix(parts[0], "http") {
+						cleaned = extractURL(cleaned)
+					} else {
+						cleaned = extractDOI(cleaned)
+					}
+				}
+			}
+			// If hasSpecialChars is true, we keep the text as-is
 		}
 	}
 
-	// Final cleanup
+	// Only remove basic trailing punctuation if no special characters present
+	if !regexp.MustCompile(`[©®™]`).MatchString(cleaned) {
+		cleaned = strings.TrimRight(cleaned, ".,;:!?")
+	}
+
+	// Remove unmatched trailing brackets
+	cleaned = strings.TrimRight(cleaned, "()[]{}")
+
 	cleaned = strings.TrimSpace(cleaned)
 
-	// Remove trailing punctuation that's not part of the identifier
-	cleaned = strings.TrimRight(cleaned, ".,;:!?()[]{})")
+	// Final check: if we ended up with something that doesn't look like an identifier, return empty
+	if !containsValidIdentifier(cleaned) {
+		return ""
+	}
 
 	return cleaned
+}
+
+// containsValidIdentifier checks if a string contains a valid identifier
+func containsValidIdentifier(s string) bool {
+	// Check for URLs
+	if strings.Contains(s, "http://") || strings.Contains(s, "https://") {
+		return true
+	}
+	// Check for DOI patterns anywhere in string
+	if regexp.MustCompile(`10\.\d+/`).MatchString(s) {
+		return true
+	}
+	// Check for other identifier patterns
+	if regexp.MustCompile(`(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
+		return true
+	}
+	return false
+}
+
+// isValidIdentifierStart checks if a string starts like a valid identifier
+func isValidIdentifierStart(s string) bool {
+	// Check for URLs
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		return true
+	}
+	// Check for DOI patterns
+	if regexp.MustCompile(`^10\.\d+/`).MatchString(s) {
+		return true
+	}
+	// Check for other identifier patterns
+	if regexp.MustCompile(`^(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
+		return true
+	}
+	return false
+}
+
+// extractURL extracts a clean URL from text that may contain trailing description
+func extractURL(text string) string {
+	// Find the URL part before any obvious descriptive text
+	// Look for patterns that indicate the end of a URL
+
+	// Special handling for URLs with brackets in the path
+	// If we have brackets without spaces, they're likely part of the path and should truncate the URL
+	if strings.Contains(text, "[") {
+		bracketIdx := strings.Index(text, "[")
+		spaceIdx := strings.Index(text, " ")
+
+		// If brackets appear in URL path (no space before them), truncate at brackets
+		if spaceIdx == -1 || bracketIdx < spaceIdx {
+			return strings.TrimSpace(text[:bracketIdx])
+		}
+	}
+
+	// Remove text after patterns that indicate trailing description
+	patterns := []string{
+		` \(`,       // space + opening parenthesis
+		` \[`,       // space + opening bracket
+		` \{`,       // space + opening brace
+		` accessed`, // access date info
+		` version`,  // version info
+		` dataset`,  // dataset description
+		` data`,     // data description
+	}
+
+	for _, pattern := range patterns {
+		if idx := strings.Index(text, pattern); idx != -1 {
+			text = text[:idx]
+		}
+	}
+
+	return strings.TrimSpace(text)
+}
+
+// extractDOI extracts a clean DOI from text that may contain trailing description
+func extractDOI(text string) string {
+	// For DOIs with internal spaces, handle them specially
+	if strings.HasPrefix(text, "10.") && strings.Contains(text, " ") {
+		// Check if this looks like "10.5281/ zenodo.123456" pattern
+		parts := strings.Fields(text)
+		if len(parts) >= 2 && strings.HasSuffix(parts[0], "/") {
+			// This is likely a DOI split by space - preserve it
+			return text
+		}
+	}
+
+	// For regular DOIs, be more conservative and look for the DOI pattern
+	doiPattern := regexp.MustCompile(`^(10\.\d+/[^\s\(\[\{,;]+)`)
+	if match := doiPattern.FindString(text); match != "" {
+		return match
+	}
+
+	// For other identifiers, take the first word if it looks like an identifier
+	parts := strings.Fields(text)
+	if len(parts) > 0 && isValidIdentifierStart(parts[0]) {
+		// Check if first part is complete identifier or if we need more parts
+		firstPart := parts[0]
+
+		// For patterns like "PRJNA123456", one part is enough
+		if regexp.MustCompile(`^(PRJNA|PRJEB|GSE|SRA|ERP|DRP)\d+`).MatchString(firstPart) {
+			return firstPart
+		}
+
+		// For other cases, might need to be more careful
+		return firstPart
+	}
+
+	return text
 }
 
 func init() {

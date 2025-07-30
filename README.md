@@ -23,8 +23,6 @@ _"Hapiq" means "the one who fetches" in Quechua._
 - 📊 Estimate likelihood of dataset validity
 - 🌐 HTTP status and metadata inspection
 - 📝 JSON or human-readable output formats
-- ⚡ Fast validation with comprehensive error handling
-- 🧪 Extensible architecture for future enhancements
 
 ---
 
@@ -78,11 +76,6 @@ Output as JSON:
 hapiq check "10.5061/dryad.example" --output json
 ```
 
-With download attempt:
-```bash
-hapiq check https://zenodo.org/record/123456 --download --timeout 60
-```
-
 ### Supported Repositories
 
 - **Zenodo** - `zenodo.org`
@@ -131,100 +124,9 @@ Target: https://zenodo.org/record/1234567
 - Go 1.21 or later
 - Make (optional, for convenience)
 
-### Building
-
-```bash
-make build
-```
-
-### Testing
-
-```bash
-make test
-```
-
-### Code Quality
-
-```bash
-make check  # Run all checks (fmt, vet, lint, test)
-```
-
-### Available Make Targets
-
-```bash
-make help   # Show all available targets
-```
-
-Common targets:
-- `build` - Build the binary
-- `test` - Run tests
-- `coverage` - Generate test coverage report
-- `lint` - Run golangci-lint
-- `clean` - Clean build artifacts
-- `install` - Install to GOPATH/bin
-
-## Architecture
-
-```
-hapiq/
-├── cmd/           # CLI commands (Cobra)
-├── internal/      # Internal packages
-│   └── checker/   # Core checking logic
-├── pkg/           # Public packages
-│   └── validators/ # URL and DOI validation
-└── test/          # Test utilities and data
-```
-
-### Key Components
-
-- **Validators** (`pkg/validators`) - URL and DOI validation with repository classification
-- **Checker** (`internal/checker`) - Main checking logic and HTTP operations
-- **CLI** (`cmd/`) - Command-line interface using Cobra
-
-## Roadmap
-
-### Phase 1 (Current)
-- [x] URL/DOI validation
-- [x] HTTP status checking
-- [x] Repository classification
-- [x] Likelihood scoring
-
-### Phase 2
-- [ ] Archive and file extraction
-- [ ] File structure analysis
-- [ ] Content type detection
-- [ ] Download size estimation
-
-### Phase 3
-- [ ] PDF/HTML paper parsing
-- [ ] Named entity extraction (methods, metrics, datasets)
-- [ ] LangChain integration
-- [ ] Machine learning-based classification
-
-### Phase 4
-- [ ] Web UI (optional)
-- [ ] API server mode
-- [ ] Database integration
-- [ ] Batch processing
-
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run `make check` to ensure code quality
-5. Submit a pull request
-
-### Code Style
-
-- Follow standard Go conventions
-- Use `gofmt` and `goimports`
-- Write tests for new functionality
-- Document public APIs
 
 ## License
 

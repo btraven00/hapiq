@@ -49,46 +49,39 @@ func TestWorkerPoolProcessing(t *testing.T) {
 	}
 
 	pool := NewWorkerPool(2)
+
+	// Track all progress updates
+	var progressUpdates []ProgressUpdate
+	var progressMu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Start collecting progress updates
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for update := range pool.Progress() {
+			progressMu.Lock()
+			progressUpdates = append(progressUpdates, update)
+			progressMu.Unlock()
+		}
+	}()
+
 	pool.Start()
 
-	// Submit tasks
+	// Submit tasks with small delay to help with race conditions
 	for _, task := range testTasks {
 		pool.SubmitTask(task)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Collect results
 	var results []ExtractionTaskResult
-	var progressUpdates []ProgressUpdate
+	for i := 0; i < len(testTasks); i++ {
+		result := <-pool.Results()
+		results = append(results, result)
+	}
 
-	// Use goroutines to collect results and progress
-	var wg sync.WaitGroup
-
-	// Collect results
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < len(testTasks); i++ {
-			result := <-pool.Results()
-			results = append(results, result)
-		}
-	}()
-
-	// Collect progress updates (with timeout to avoid hanging)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		timeout := time.After(5 * time.Second)
-		for {
-			select {
-			case update := <-pool.Progress():
-				progressUpdates = append(progressUpdates, update)
-			case <-timeout:
-				return
-			}
-		}
-	}()
-
-	// Wait for processing to complete
+	// Wait for all workers to finish and close channels
 	pool.Wait()
 	wg.Wait()
 
@@ -104,14 +97,20 @@ func TestWorkerPoolProcessing(t *testing.T) {
 		}
 	}
 
+	// Get final progress updates safely
+	progressMu.Lock()
+	finalProgressUpdates := make([]ProgressUpdate, len(progressUpdates))
+	copy(finalProgressUpdates, progressUpdates)
+	progressMu.Unlock()
+
 	// Should have received progress updates
-	if len(progressUpdates) == 0 {
+	if len(finalProgressUpdates) == 0 {
 		t.Error("Expected progress updates, got none")
 	}
 
 	// Verify task status progression
 	taskStatuses := make(map[string][]TaskStatus)
-	for _, update := range progressUpdates {
+	for _, update := range finalProgressUpdates {
 		taskStatuses[update.TaskID] = append(taskStatuses[update.TaskID], update.Status)
 	}
 
@@ -124,10 +123,11 @@ func TestWorkerPoolProcessing(t *testing.T) {
 		for _, status := range statuses {
 			if status == TaskStatusPending {
 				foundPending = true
+				break
 			}
 		}
 		if !foundPending {
-			t.Errorf("Task %s never had pending status", taskID)
+			t.Errorf("Task %s never had pending status. Statuses received: %v", taskID, statuses)
 		}
 	}
 }

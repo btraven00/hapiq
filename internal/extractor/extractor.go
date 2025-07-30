@@ -323,6 +323,9 @@ func (e *PDFExtractor) extractAccessions(text string) []LinkCandidate {
 		{"ArrayExpress", regexp.MustCompile(`\b(E-\w{4}-\d+)\b`), LinkTypeURL, 0.95},
 		{"BioProject", regexp.MustCompile(`\b(PRJNA\d{6,9})\b`), LinkTypeURL, 0.95},
 		{"BioSample", regexp.MustCompile(`\b(SAMN\d{8,9})\b`), LinkTypeURL, 0.95},
+		{"PubMed ID", regexp.MustCompile(`(?i)(?:PMID:?\s*)(\d{7,8})`), LinkTypeURL, 0.85},
+		{"PDB ID", regexp.MustCompile(`\b([1-9][A-Za-z][A-Za-z0-9]{2})\b`), LinkTypeURL, 0.7},
+		{"arXiv ID", regexp.MustCompile(`(?i)arXiv:(\d{4}\.\d{4,5}(?:v\d+)?)`), LinkTypeURL, 0.9},
 	}
 
 	for _, pattern := range accessionPatterns {

@@ -121,29 +121,38 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		v.addGSAMetadata(result, metadata)
 	}
 
-	// Check if HTTP validation failed (404, etc.)
+	// Note: Keep format validation separate from HTTP accessibility
+	// A properly formatted accession should remain Valid=true even if temporarily inaccessible
 	if httpResult != nil && !httpResult.Accessible {
-		result.Valid = false
-		result.Error = fmt.Sprintf("accession not accessible (HTTP %d)", httpResult.StatusCode)
-		result.Confidence = 0.0
-		result.Likelihood = 0.0
+		// Add HTTP error to metadata, but don't invalidate the accession format
+		if result.Metadata == nil {
+			result.Metadata = make(map[string]string)
+		}
+		result.Metadata["http_error"] = fmt.Sprintf("HTTP %d", httpResult.StatusCode)
+		result.Metadata["accessibility"] = "false"
 
-		// Add availability tags for inaccessible data
-		v.addAvailabilityTags(result, httpResult)
-
-		result.ValidationTime = time.Since(start)
-		return result, nil
+		// Lower confidence due to inaccessibility, but keep some base confidence for format validity
+		result.Confidence = 0.3
+		result.Likelihood = 0.3
+	} else if httpResult != nil {
+		// HTTP accessible
+		if result.Metadata == nil {
+			result.Metadata = make(map[string]string)
+		}
+		result.Metadata["accessibility"] = "true"
 	}
 
-	// Calculate final scores (only if accessible)
-	result.Confidence = v.calculateGSAConfidence(result, httpResult)
-	result.Likelihood = result.Confidence // Remove redundancy - likelihood = confidence
+	// Calculate final scores and add metadata only if accessible
+	if httpResult != nil && httpResult.Accessible {
+		result.Confidence = v.calculateGSAConfidence(result, httpResult)
+		result.Likelihood = result.Confidence // Remove redundancy - likelihood = confidence
 
-	// Add availability tags based on HTTP status
+		// Add GSA-specific tags and metadata (only if accessible)
+		v.enhanceGSAResult(result, pattern, httpResult)
+	}
+
+	// Add availability tags based on HTTP status (always)
 	v.addAvailabilityTags(result, httpResult)
-
-	// Add GSA-specific tags and metadata (only if accessible)
-	v.enhanceGSAResult(result, pattern, httpResult)
 
 	result.ValidationTime = time.Since(start)
 	return result, nil

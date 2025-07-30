@@ -3,6 +3,8 @@ package accessions
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -479,6 +481,79 @@ func (v *BaseAccessionValidator) ValidateHTTPAccess(ctx context.Context, url str
 	// Add user agent for better compatibility with biological databases
 	req.Header.Set("User-Agent", "Hapiq/1.0 (Biological Database Validator)")
 
+	// Temporarily suppress HTTP client logs that might contain protocol errors
+	oldLogOutput := log.Writer()
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(oldLogOutput)
+
+	resp, err := v.client.Do(req)
+	if err != nil {
+		// Re-enable logging before handling errors
+		log.SetOutput(oldLogOutput)
+
+		// Handle protocol errors gracefully - some servers violate HTTP specs
+		errorStr := err.Error()
+		if strings.Contains(errorStr, "protocol error") && strings.Contains(errorStr, "received DATA on a HEAD request") {
+			// Try GET request as fallback for servers that violate HTTP specs
+			return v.validateHTTPAccessWithGET(ctx, url, start)
+		}
+
+		return &HTTPValidationResult{
+			URL:            url,
+			Accessible:     false,
+			Error:          err.Error(),
+			ValidationTime: time.Since(start),
+		}, nil
+	}
+	defer resp.Body.Close()
+
+	// Re-enable logging after successful request
+	log.SetOutput(oldLogOutput)
+
+	result := &HTTPValidationResult{
+		URL:            url,
+		Accessible:     v.isHTTPStatusSuccessful(resp.StatusCode),
+		StatusCode:     resp.StatusCode,
+		ContentType:    resp.Header.Get("Content-Type"),
+		ContentLength:  resp.ContentLength,
+		LastModified:   resp.Header.Get("Last-Modified"),
+		ValidationTime: time.Since(start),
+		Headers:        make(map[string]string),
+	}
+
+	// Extract relevant headers
+	relevantHeaders := []string{
+		"Server", "X-Powered-By", "Content-Encoding", "Cache-Control",
+		"ETag", "Expires", "Location", "X-RateLimit-Remaining",
+	}
+
+	for _, header := range relevantHeaders {
+		if value := resp.Header.Get(header); value != "" {
+			result.Headers[header] = value
+		}
+	}
+
+	return result, nil
+}
+
+// validateHTTPAccessWithGET performs HTTP validation using GET request as fallback
+func (v *BaseAccessionValidator) validateHTTPAccessWithGET(ctx context.Context, url string, start time.Time) (*HTTPValidationResult, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return &HTTPValidationResult{
+			URL:            url,
+			Accessible:     false,
+			Error:          err.Error(),
+			ValidationTime: time.Since(start),
+		}, nil
+	}
+
+	// Add user agent for better compatibility with biological databases
+	req.Header.Set("User-Agent", "Hapiq/1.0 (Biological Database Validator)")
+
+	// Limit response body size for validation purposes
+	req.Header.Set("Range", "bytes=0-1023") // Only read first 1KB
+
 	resp, err := v.client.Do(req)
 	if err != nil {
 		return &HTTPValidationResult{
@@ -500,6 +575,9 @@ func (v *BaseAccessionValidator) ValidateHTTPAccess(ctx context.Context, url str
 		ValidationTime: time.Since(start),
 		Headers:        make(map[string]string),
 	}
+
+	// Add note that this was a GET fallback
+	result.Headers["Validation-Method"] = "GET-fallback"
 
 	// Extract relevant headers
 	relevantHeaders := []string{
