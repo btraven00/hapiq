@@ -12,6 +12,7 @@ run:
   skip-files:
     - ".*\\.pb\\.go$"
     - ".*_generated\\.go$"
+  go: "1.21"
 
 output:
   format: colored-line-number
@@ -28,8 +29,6 @@ linters-settings:
     min-complexity: 15
   goimports:
     local-prefixes: github.com/btraven00/hapiq
-  golint:
-    min-confidence: 0.8
   gofmt:
     simplify: true
   gocognit:
@@ -58,18 +57,15 @@ linters-settings:
     extra-rules: true
   gosec:
     excludes:
-      - G204  # Subprocess launched with variable
-      - G304  # File path provided as taint input
+      - G204 # Subprocess launched with variable
+      - G304 # File path provided as taint input
   gosimple:
-    go: "1.21"
     checks: ["all"]
-  gostaticcheck:
-    go: "1.21"
+  staticcheck:
     checks: ["all"]
   lll:
     line-length: 120
-  maligned:
-    suggest-new: true
+
   misspell:
     locale: US
     ignore-words:
@@ -87,8 +83,7 @@ linters-settings:
     skip-regexp: '(export|internal)_test\.go'
   unparam:
     check-exported: false
-  unused:
-    go: "1.21"
+
   whitespace:
     multi-if: false
     multi-func: false
@@ -159,7 +154,6 @@ linters:
     - tparallel
     - unconvert
     - unparam
-    - wastedassign
     - whitespace
     - wsl
 

@@ -1,7 +1,7 @@
 # Hapiq Makefile
 # Common development tasks for the hapiq CLI tool
 
-.PHONY: help build test clean install run fmt vet lint deps tidy check coverage benchmark
+.PHONY: help build test clean install run fmt vet lint lint-fix install-lint deps tidy check coverage benchmark
 
 # Default target
 help: ## Show this help message
@@ -62,13 +62,31 @@ vet: ## Run go vet
 	go vet ./...
 
 # Run golangci-lint (requires golangci-lint to be installed)
-lint: ## Run golangci-lint
+# Usage: make lint [ARGS="--fix"]
+lint: ## Run golangci-lint (pass ARGS="--fix" to auto-fix issues)
 	@echo "Running golangci-lint..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
+	@if [ -f scripts/lint.sh ]; then \
+		./scripts/lint.sh $(ARGS); \
 	else \
-		echo "golangci-lint not found. Install it with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		@if command -v golangci-lint >/dev/null 2>&1; then \
+			golangci-lint run --timeout=5m $(ARGS); \
+		else \
+			echo "golangci-lint not found. Install it with 'make install-lint'"; \
+		fi \
 	fi
+
+# Install golangci-lint
+install-lint: ## Install golangci-lint
+	@echo "Installing golangci-lint..."
+	@if [ -f scripts/lint.sh ]; then \
+		./scripts/lint.sh --help >/dev/null 2>&1; \
+	else \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v1.56.2; \
+	fi
+
+# Shortcut to run linter with fix flag
+lint-fix: ## Run golangci-lint with auto-fix enabled
+	@$(MAKE) lint ARGS="--fix"
 
 # Download dependencies
 deps: ## Download dependencies
@@ -89,12 +107,8 @@ run: build ## Build and run with example
 	./bin/hapiq check https://zenodo.org/record/123456
 
 # Development setup
-setup: deps ## Setup development environment
+setup: deps install-lint ## Setup development environment
 	@echo "Setting up development environment..."
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-	fi
 	@echo "Development setup complete!"
 
 # Release preparation
