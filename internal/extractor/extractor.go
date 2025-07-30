@@ -3,13 +3,12 @@ package extractor
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"net/url"
 
 	"code.sajari.com/docconv/v2"
 	"github.com/btraven00/hapiq/pkg/validators/domains"
@@ -76,11 +75,19 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 		Warnings: []string{},
 	}
 
+	// Sort links for deterministic output
+	e.sortLinksForDeterministicOutput(result.Links)
+
 	// Validate links using domain validators if requested (parallelized)
 	accessibleCount := 0
 	validatedCount := 0
 	if e.options.ValidateLinks && len(result.Links) > 0 {
 		accessibleCount, validatedCount = e.validateLinksParallel(result)
+
+		// Filter out 404s and inaccessible links by default
+		if !e.options.Keep404s {
+			result.Links = e.filterAccessibleLinks(result.Links)
+		}
 	}
 
 	// Calculate statistics
@@ -156,8 +163,13 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 			// Fallback to pattern-based classification
 			context := e.extractContextForMatch(cleanedText, candidate.Text)
 
-			// Try to reconstruct complete URL from context
-			reconstructedURL := e.reconstructURLFromContext(candidate.NormalizedURL, context)
+			// For figshare URLs, always try reconstruction regardless of apparent completeness
+			var reconstructedURL string
+			if candidate.Type == LinkTypeFigshare {
+				reconstructedURL = e.reconstructFigshareURL(candidate.NormalizedURL, context)
+			} else {
+				reconstructedURL = e.reconstructURLFromContext(candidate.NormalizedURL, context)
+			}
 
 			link := ExtractedLink{
 				URL:        reconstructedURL,
@@ -186,9 +198,8 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 		}
 	}
 
-	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].Confidence > filtered[j].Confidence
-	})
+	// Sort for deterministic output instead of just by confidence
+	e.sortLinksForDeterministicOutput(filtered)
 
 	return filtered
 }
@@ -339,6 +350,73 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// sortLinksForDeterministicOutput sorts links to ensure consistent ordering across runs
+func (e *PDFExtractor) sortLinksForDeterministicOutput(links []ExtractedLink) {
+	sort.Slice(links, func(i, j int) bool {
+		// Primary sort: by normalized URL for consistent ordering
+		urlI := e.normalizeURLForSorting(links[i].URL)
+		urlJ := e.normalizeURLForSorting(links[j].URL)
+		if urlI != urlJ {
+			return urlI < urlJ
+		}
+
+		// Secondary sort: by type
+		if links[i].Type != links[j].Type {
+			return links[i].Type < links[j].Type
+		}
+
+		// Tertiary sort: by page number
+		if links[i].Page != links[j].Page {
+			return links[i].Page < links[j].Page
+		}
+
+		// Quaternary sort: by confidence (descending)
+		return links[i].Confidence > links[j].Confidence
+	})
+}
+
+// normalizeURLForSorting normalizes URLs for consistent sorting
+func (e *PDFExtractor) normalizeURLForSorting(url string) string {
+	normalized := strings.ToLower(url)
+
+	// Remove protocol variations
+	normalized = strings.TrimPrefix(normalized, "https://")
+	normalized = strings.TrimPrefix(normalized, "http://")
+	normalized = strings.TrimPrefix(normalized, "www.")
+
+	// Remove trailing slashes for comparison
+	normalized = strings.TrimSuffix(normalized, "/")
+
+	// Handle figshare URL variations consistently
+	if strings.Contains(normalized, "figshare.com") {
+		// Normalize spaces in figshare URLs
+		normalized = strings.ReplaceAll(normalized, " ", "")
+	}
+
+	return normalized
+}
+
+// filterAccessibleLinks removes links that are not accessible (404s, timeouts, etc.)
+func (e *PDFExtractor) filterAccessibleLinks(links []ExtractedLink) []ExtractedLink {
+	filtered := make([]ExtractedLink, 0, len(links))
+
+	for _, link := range links {
+		if link.Validation == nil {
+			// Not validated, keep it
+			filtered = append(filtered, link)
+			continue
+		}
+
+		if link.Validation.IsAccessible {
+			// Accessible, keep it
+			filtered = append(filtered, link)
+		}
+		// Skip inaccessible links (404s, etc.)
+	}
+
+	return filtered
 }
 
 // normalizeCandidate normalizes a candidate based on its type
@@ -495,6 +573,7 @@ func (e *PDFExtractor) filterLinks(links []ExtractedLink) []ExtractedLink {
 
 // deduplicateLinks removes duplicate links based on URL
 func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
+
 	// First pass: group by normalized DOI/identifier for smart deduplication
 	normalizedGroups := make(map[string][]ExtractedLink)
 
@@ -506,8 +585,16 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 	var deduped []ExtractedLink
 	seen := make(map[string]bool)
 
+	// Sort keys for deterministic iteration
+	var keys []string
+	for key := range normalizedGroups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
 	// For each group, pick the best candidate
-	for _, group := range normalizedGroups {
+	for _, key := range keys {
+		group := normalizedGroups[key]
 		if len(group) == 1 {
 			// Single item, just add it
 			link := group[0]
@@ -886,25 +973,9 @@ func (e *PDFExtractor) extractContextForMatch(text, match string) string {
 // reconstructURLFromContext attempts to find a complete URL in the context
 // when the extracted URL appears incomplete (e.g., ends with slash, missing ID)
 func (e *PDFExtractor) reconstructURLFromContext(partialURL, context string) string {
-	// If URL looks complete, return as-is
-	if !e.isIncompleteURL(partialURL) {
-		return partialURL
-	}
-
-	// Look for patterns that suggest the URL continues in the context
-	// Handle figshare URLs with spaces before IDs
+	// Handle figshare URLs with comprehensive heuristics
 	if strings.Contains(partialURL, "figshare.com") {
-		// Pattern: https://figshare.com/articles/dataset/name/ 123456
-		figsharePattern := regexp.MustCompile(`(https?://[^\s]*figshare\.com/[^\s]*?/?\s*)\s*(\d{6,8})`)
-		if matches := figsharePattern.FindStringSubmatch(context); len(matches) > 2 {
-			baseURL := strings.TrimSpace(strings.ReplaceAll(matches[1], " ", ""))
-			id := matches[2]
-			if !strings.HasSuffix(baseURL, "/") {
-				baseURL += "/"
-			}
-			reconstructed := baseURL + id
-			return reconstructed
-		}
+		return e.reconstructFigshareURL(partialURL, context)
 	}
 
 	// Handle other repository URLs with similar patterns
@@ -916,34 +987,184 @@ func (e *PDFExtractor) reconstructURLFromContext(partialURL, context string) str
 		if !strings.HasSuffix(baseURL, "/") {
 			baseURL += "/"
 		}
-		return baseURL + id
+		reconstructed := baseURL + id
+		return reconstructed
 	}
 
-	// Handle DOIs that might be split
-	doiPattern := regexp.MustCompile(`(10\.\d{4,}/[^\s]*)\s+([^\s]+)`)
-	if matches := doiPattern.FindStringSubmatch(context); len(matches) > 2 {
-		return matches[1] + matches[2]
-	}
-
-	// Return original if no reconstruction possible
 	return partialURL
 }
 
-// isIncompleteURL checks if a URL appears to be incomplete
+// reconstructFigshareURL applies comprehensive heuristics to reconstruct figshare URLs
+func (e *PDFExtractor) reconstructFigshareURL(partialURL, context string) string {
+
+	// Normalize the partial URL
+	normalized := strings.TrimSpace(partialURL)
+	normalized = strings.TrimSuffix(normalized, "/")
+
+	// Extract surrounding context around the URL (expand search window)
+	contextWindow := e.expandContextWindow(partialURL, context, 200)
+
+	// Apply heuristics in order of specificity
+
+	// Heuristic 1: Look for spaced numeric IDs after the URL
+	if reconstructed := e.findSpacedNumericID(normalized, contextWindow); reconstructed != normalized {
+		return reconstructed
+	}
+
+	// Heuristic 2: Look for IDs on the same line after punctuation
+	if reconstructed := e.findIDAfterPunctuation(normalized, contextWindow); reconstructed != normalized {
+		return reconstructed
+	}
+
+	// Heuristic 3: Handle version suffixes (e.g., .v2, .2.3Something)
+	if reconstructed := e.cleanVersionSuffix(normalized); reconstructed != normalized {
+		return reconstructed
+	}
+
+	// Heuristic 4: Ensure minimum path structure for articles
+	if reconstructed := e.ensureMinimalFigshareStructure(normalized); reconstructed != normalized {
+		return reconstructed
+	}
+
+	return normalized
+}
+
+// expandContextWindow extracts a larger context window around the URL
+func (e *PDFExtractor) expandContextWindow(url, context string, windowSize int) string {
+	urlIndex := strings.Index(context, url)
+	if urlIndex == -1 {
+		return context
+	}
+
+	start := urlIndex - windowSize/2
+	if start < 0 {
+		start = 0
+	}
+
+	end := urlIndex + len(url) + windowSize/2
+	if end > len(context) {
+		end = len(context)
+	}
+
+	return context[start:end]
+}
+
+// findSpacedNumericID looks for numeric IDs separated by spaces
+func (e *PDFExtractor) findSpacedNumericID(url, context string) string {
+	// Pattern: figshare.com/path/name/ 123456 or figshare.com/path/name 123456
+	// Use a more aggressive search that looks for the base URL pattern + any trailing ID
+	baseURL := regexp.QuoteMeta(url)
+
+	// First try exact URL match with space and ID
+	patterns := []string{
+		fmt.Sprintf(`%s/?\s+(\d{6,8})`, baseURL),
+		fmt.Sprintf(`%s\s+(\d{6,8})`, baseURL),
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		if matches := re.FindStringSubmatch(context); len(matches) > 1 {
+			cleanURL := strings.TrimSuffix(url, "/")
+			if strings.Contains(url, "/articles/") && !strings.HasSuffix(cleanURL, "/") {
+				cleanURL += "/"
+			}
+			return cleanURL + matches[1]
+		}
+	}
+
+	// More aggressive: look for any figshare URL in context that might be an extension
+	figsharePattern := regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]*?/?\s*\d{6,8})`)
+	if matches := figsharePattern.FindAllString(context, -1); len(matches) > 0 {
+		for _, match := range matches {
+			// Clean up the match by removing spaces before the ID
+			cleaned := regexp.MustCompile(`\s+(\d{6,8})`).ReplaceAllString(match, "/$1")
+			if strings.Contains(cleaned, url) || strings.Contains(url, "figshare.com") {
+				return cleaned
+			}
+		}
+	}
+
+	return url
+}
+
+// findIDAfterPunctuation looks for IDs after punctuation marks
+func (e *PDFExtractor) findIDAfterPunctuation(url, context string) string {
+	// Pattern: figshare.com/path, 123456 or figshare.com/path. 123456
+	pattern := fmt.Sprintf(`%s[,.\s]+(\d{6,8})`, regexp.QuoteMeta(url))
+	re := regexp.MustCompile(pattern)
+
+	if matches := re.FindStringSubmatch(context); len(matches) > 1 {
+		cleanURL := strings.TrimSuffix(url, "/")
+		if strings.Contains(url, "/articles/") && !strings.HasSuffix(cleanURL, "/") {
+			cleanURL += "/"
+		}
+		return cleanURL + matches[1]
+	}
+
+	return url
+}
+
+// cleanVersionSuffix removes figshare version suffixes
+func (e *PDFExtractor) cleanVersionSuffix(url string) string {
+	// Remove patterns like .v2, .2.3MouselungdatasetThis, etc.
+	versionPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`\.v\d+.*$`),               // .v2, .v10, etc.
+		regexp.MustCompile(`\.\d+\.\d+[A-Z][a-z].*$`), // .2.3MouselungdatasetThis
+		regexp.MustCompile(`\.\d+[A-Z][a-z].*$`),      // .2MouselungdatasetThis
+		regexp.MustCompile(`\.[\w]+[A-Z][a-z].*$`),    // .someVersionInfo
+	}
+
+	for _, pattern := range versionPatterns {
+		if pattern.MatchString(url) {
+			cleaned := pattern.ReplaceAllString(url, "")
+			return cleaned
+		}
+	}
+
+	return url
+}
+
+// ensureMinimalFigshareStructure ensures figshare URLs have proper structure
+func (e *PDFExtractor) ensureMinimalFigshareStructure(url string) string {
+	// For figshare articles, ensure they have at least /articles/type/name structure
+	if strings.Contains(url, "/articles/") {
+		parts := strings.Split(url, "/")
+		if len(parts) >= 5 { // https, "", domain, articles, type
+			// Structure looks reasonable
+			return url
+		}
+	}
+
+	// For figshare share URLs, ensure they have /s/hash structure
+	if strings.Contains(url, "/s/") {
+		sharePattern := regexp.MustCompile(`figshare\.com/s/([a-zA-Z0-9]+)`)
+		if sharePattern.MatchString(url) {
+			return url
+		}
+	}
+
+	return url
+}
+
+// isIncompleteURL checks if a URL appears to be incomplete or truncated
 func (e *PDFExtractor) isIncompleteURL(url string) bool {
-	// URLs ending with slash but no ID (common in figshare)
+	// For figshare URLs, we now handle completion in post-processing
+	// so we're less aggressive about marking them as incomplete
+	if strings.Contains(url, "figshare.com") {
+		// Only mark as incomplete if clearly truncated
+		if strings.HasSuffix(url, "figshare.com") || strings.HasSuffix(url, "figshare.com/") {
+			return true
+		}
+		return false
+	}
+
+	// URLs ending with slash but no ID (common in other repositories)
 	if strings.HasSuffix(url, "/") && strings.Contains(url, "/dataset/") {
 		return true
 	}
 
-	// Figshare URLs that are too short (missing ID)
-	if strings.Contains(url, "figshare.com/articles/dataset/") && !regexp.MustCompile(`/\d{6,}/?$`).MatchString(url) {
-		return true
-	}
-
-	// Other repository URLs that end abruptly
-	if regexp.MustCompile(`https?://[^/]+/[^/]+/?$`).MatchString(url) &&
-		strings.Contains(url, "zenodo") || strings.Contains(url, "dryad") {
+	// Generic check: very short URLs or URLs ending with incomplete paths
+	if len(url) < 20 {
 		return true
 	}
 
@@ -960,7 +1181,7 @@ func (e *PDFExtractor) adjustConfidenceByValidation(originalConfidence float64, 
 	if validation.IsAccessible {
 		// Boost confidence for dataset-like content
 		if validation.IsDataset {
-			return min(originalConfidence*1.1, 1.0)
+			return minFloat64(originalConfidence*1.1, 1.0)
 		}
 		// Maintain confidence for accessible links
 		return originalConfidence
@@ -970,28 +1191,20 @@ func (e *PDFExtractor) adjustConfidenceByValidation(originalConfidence float64, 
 	switch {
 	case validation.StatusCode == 404:
 		// 404 Not Found - severely reduce confidence
-		return min(originalConfidence*0.1, 0.15)
+		return minFloat64(originalConfidence*0.1, 0.15)
 	case validation.StatusCode == 403:
 		// 403 Forbidden - might be blocking bots, moderate reduction
-		return min(originalConfidence*0.6, 0.7)
+		return minFloat64(originalConfidence*0.6, 0.7)
 	case validation.StatusCode >= 500:
 		// 5xx Server Error - temporary issue, less reduction
-		return min(originalConfidence*0.7, 0.8)
+		return minFloat64(originalConfidence*0.7, 0.8)
 	case validation.StatusCode >= 400:
 		// Other 4xx Client Error - significant reduction
-		return min(originalConfidence*0.3, 0.4)
+		return minFloat64(originalConfidence*0.3, 0.4)
 	default:
 		// Network/DNS errors or other issues - moderate reduction
-		return min(originalConfidence*0.5, 0.6)
+		return minFloat64(originalConfidence*0.5, 0.6)
 	}
-}
-
-// min returns the smaller of two float64 values
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // minFloat64 returns the smaller of two float64 values (duplicate for clarity)

@@ -97,6 +97,7 @@ type ExtractionOptions struct {
 	UseAccessionRecognition bool     `json:"use_accession_recognition"`
 	UseConvertTokenization  bool     `json:"use_convert_tokenization"`
 	ExtractPositions        bool     `json:"extract_positions"`
+	Keep404s                bool     `json:"keep_404s"`
 }
 
 // DefaultExtractionOptions returns default extraction options
@@ -111,5 +112,6 @@ func DefaultExtractionOptions() ExtractionOptions {
 		UseAccessionRecognition: true,
 		UseConvertTokenization:  true,
 		ExtractPositions:        false,
+		Keep404s:                false,
 	}
 }

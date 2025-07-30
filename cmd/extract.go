@@ -29,6 +29,7 @@ var (
 	maxLinksPerPage int
 	numWorkers      int
 	showProgress    bool
+	keep404s        bool
 )
 
 // extractCmd represents the extract command
@@ -45,7 +46,8 @@ Examples:
   hapiq extract paper.pdf
   hapiq extract --validate-links --output csv paper.pdf
   hapiq extract --batch --min-confidence 0.8 *.pdf
-  hapiq extract --filter-domains figshare.com,zenodo.org paper.pdf`,
+  hapiq extract --filter-domains figshare.com,zenodo.org paper.pdf
+  hapiq extract --validate-links --filter-404s paper.pdf`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runExtractLinks,
 }
@@ -63,6 +65,7 @@ func init() {
 	extractCmd.Flags().IntVar(&maxLinksPerPage, "max-links-per-page", 50, "maximum number of links to extract per page")
 	extractCmd.Flags().IntVar(&numWorkers, "workers", runtime.NumCPU(), "number of parallel workers for processing")
 	extractCmd.Flags().BoolVar(&showProgress, "progress", true, "show progress during batch processing")
+	extractCmd.Flags().BoolVar(&keep404s, "keep-404s", false, "keep links that return 404 or are inaccessible (by default they are filtered out)")
 }
 
 func runExtractLinks(cmd *cobra.Command, args []string) error {
@@ -77,6 +80,7 @@ func runExtractLinks(cmd *cobra.Command, args []string) error {
 		UseAccessionRecognition: true,
 		UseConvertTokenization:  true,
 		ExtractPositions:        false,
+		Keep404s:                keep404s,
 	}
 
 	pdfExtractor := extractor.NewPDFExtractor(options)
@@ -85,7 +89,6 @@ func runExtractLinks(cmd *cobra.Command, args []string) error {
 		return processBatchFilesParallel(args, options)
 	}
 
-	// Process individual files
 	for _, filename := range args {
 		if err := processSingleFile(pdfExtractor, filename); err != nil {
 			return fmt.Errorf("failed to process %s: %w", filename, err)

@@ -77,20 +77,12 @@ func getExtractionPatterns() []ExtractionPattern {
 			Examples:    []string{"https://doi.org/10.5281/zenodo.123456"},
 		},
 		{
-			Name:        "Figshare URLs with IDs",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]+/?\s*\d+)`),
-			Type:        LinkTypeFigshare,
-			Confidence:  0.98,
-			Description: "Figshare repository URLs with numeric IDs (may have spaces)",
-			Examples:    []string{"https://figshare.com/articles/dataset/scPSM/ 19306661"},
-		},
-		{
 			Name:        "Figshare URLs",
-			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]+)(?:\s|$|[^a-zA-Z0-9._/-])`),
+			Regex:       regexp.MustCompile(`(https?://(?:www\.)?figshare\.com/[a-zA-Z0-9/_.-]*)`),
 			Type:        LinkTypeFigshare,
 			Confidence:  0.95,
-			Description: "Figshare repository URLs",
-			Examples:    []string{"https://figshare.com/s/865e694ad06d5857db4b"},
+			Description: "Figshare repository URLs (post-processed for completeness)",
+			Examples:    []string{"https://figshare.com/s/865e694ad06d5857db4b", "https://figshare.com/articles/dataset/scPSM", "https://figshare.com/articles/dataset/example/12345678"},
 		},
 
 		// GitHub repository patterns (potential datasets)
