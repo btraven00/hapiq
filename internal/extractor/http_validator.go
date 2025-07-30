@@ -384,7 +384,7 @@ func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, ma
 				resultChan <- struct {
 					result *HTTPValidationResult
 					url    string
-				}{url, result}
+				}{result, url}
 			}
 		}()
 	}

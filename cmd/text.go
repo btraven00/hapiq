@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"code.sajari.com/docconv/v2"
+	docconv_v2 "code.sajari.com/docconv/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -129,7 +129,7 @@ func convertPDFToMarkdown(filename string) (string, error) {
 	converter := NewPDFConverter(preserveLayout, includePages, extractHeaders)
 
 	// Use docconv to extract text from PDF
-	response, err := docconv.ConvertPath(filename)
+	response, err := docconv_v2.ConvertPath(filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to convert PDF file '%s': %w", filename, err)
 	}
@@ -429,7 +429,7 @@ func (c *PDFConverter) formatListItem(line string) string {
 	return "- " + line
 }
 
-// processDocumentText processes the entire document text extracted by docconv.
+// processDocumentText processes the entire document text extracted by docconv_v2.
 func (c *PDFConverter) processDocumentText(text string) string {
 	// Clean up the text first
 	cleaned := c.cleanText(text)

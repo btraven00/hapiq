@@ -335,8 +335,8 @@ func TestGEODownloader_parseEUtilsDate(t *testing.T) {
 
 	tests := []struct {
 		input       string
-		description string
 		expectError bool
+		description string
 	}{
 		{"2020/01/15", false, "E-utilities format should parse"},
 		{"2020-01-15", false, "ISO format should parse"},
@@ -530,17 +530,17 @@ func TestGEODownloader_shouldDownloadFile(t *testing.T) {
 		filename string
 		expected bool
 	}{
-		{"test.txt", nil, true},
-		{"raw_data.fastq", &downloaders.DownloadOptions{IncludeRaw: true}, true},
-		{"raw_data.fastq", &downloaders.DownloadOptions{IncludeRaw: false}, false},
-		{"supplementary.pdf", &downloaders.DownloadOptions{ExcludeSupplementary: true}, false},
-		{"supplementary.pdf", &downloaders.DownloadOptions{ExcludeSupplementary: false}, true},
-		{"data.txt", &downloaders.DownloadOptions{CustomFilters: map[string]string{"extension": ".txt"}}, true},
-		{"data.csv", &downloaders.DownloadOptions{CustomFilters: map[string]string{"extension": ".txt"}}, false},
-		{"experiment_data.txt", &downloaders.DownloadOptions{CustomFilters: map[string]string{"contains": "experiment"}}, true},
-		{"control_data.txt", &downloaders.DownloadOptions{CustomFilters: map[string]string{"contains": "experiment"}}, false},
-		{"temp_file.txt", &downloaders.DownloadOptions{CustomFilters: map[string]string{"excludes": "temp"}}, false},
-		{"final_file.txt", &downloaders.DownloadOptions{CustomFilters: map[string]string{"excludes": "temp"}}, true},
+		{nil, "test.txt", true},
+		{&downloaders.DownloadOptions{IncludeRaw: true}, "raw_data.fastq", true},
+		{&downloaders.DownloadOptions{IncludeRaw: false}, "raw_data.fastq", false},
+		{&downloaders.DownloadOptions{ExcludeSupplementary: true}, "supplementary.pdf", false},
+		{&downloaders.DownloadOptions{ExcludeSupplementary: false}, "supplementary.pdf", true},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"extension": ".txt"}}, "data.txt", true},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"extension": ".txt"}}, "data.csv", false},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"contains": "experiment"}}, "experiment_data.txt", true},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"contains": "experiment"}}, "control_data.txt", false},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"excludes": "temp"}}, "temp_file.txt", false},
+		{&downloaders.DownloadOptions{CustomFilters: map[string]string{"excludes": "temp"}}, "final_file.txt", true},
 	}
 
 	for _, tt := range tests {

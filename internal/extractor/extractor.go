@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"code.sajari.com/docconv/v2"
+	docconv_v2 "code.sajari.com/docconv/v2"
 
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
@@ -50,7 +50,7 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 	startTime := time.Now()
 
 	// Extract text from PDF using docconv
-	response, err := docconv.ConvertPath(filename)
+	response, err := docconv_v2.ConvertPath(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert PDF file '%s': %w", filename, err)
 	}
