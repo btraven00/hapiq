@@ -1,3 +1,4 @@
+// Package cmd provides command-line interface commands for the hapiq tool.
 package cmd
 
 import (
@@ -39,7 +40,7 @@ Examples:
 	RunE: runList,
 }
 
-func runList(cmd *cobra.Command, args []string) error {
+func runList(_ *cobra.Command, _ []string) error {
 	if listJSON {
 		return outputDomainsJSON()
 	}
@@ -78,23 +79,23 @@ func outputDomainsJSON() error {
 func listAvailableDomains() error {
 	domainList := domains.DefaultRegistry.ListDomains()
 	if len(domainList) == 0 {
-		fmt.Println("No domain validators are currently registered.")
+		_, _ = fmt.Fprintln(os.Stderr, "No domain validators are currently registered.")
 		return nil
 	}
 
 	sort.Strings(domainList)
 
-	fmt.Printf("Available Domains (%d):\n\n", len(domainList))
+	_, _ = fmt.Fprintf(os.Stderr, "Available Domains (%d):\n\n", len(domainList))
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DOMAIN\tVALIDATORS\tDESCRIPTION")
-	fmt.Fprintln(w, "------\t----------\t-----------")
+	_, _ = fmt.Fprintln(w, "DOMAIN\tVALIDATORS\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "------\t----------\t-----------")
 
 	for _, domain := range domainList {
 		validators := domains.DefaultRegistry.GetByDomain(domain)
 		description := getDomainDescription(domain)
 
-		fmt.Fprintf(w, "%s\t%d\t%s\n", domain, len(validators), description)
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\n", domain, len(validators), description)
 	}
 
 	return w.Flush()
@@ -106,26 +107,26 @@ func showDomainValidators(domain string) error {
 		return fmt.Errorf("no validators found for domain: %s", domain)
 	}
 
-	fmt.Printf("Validators in domain '%s' (%d):\n\n", domain, len(validators))
+	_, _ = fmt.Fprintf(os.Stderr, "Validators in domain '%s' (%d):\n\n", domain, len(validators))
 
 	for _, validator := range validators {
-		fmt.Printf("📊 %s (priority: %d)\n", validator.Name(), validator.Priority())
-		fmt.Printf("   %s\n\n", validator.Description())
+		_, _ = fmt.Fprintf(os.Stderr, "📊 %s (priority: %d)\n", validator.Name(), validator.Priority())
+		_, _ = fmt.Fprintf(os.Stderr, "   %s\n\n", validator.Description())
 
 		if showPatterns {
 			patterns := validator.GetPatterns()
 			if len(patterns) > 0 {
-				fmt.Printf("   Patterns:\n")
+				_, _ = fmt.Fprintf(os.Stderr, "   Patterns:\n")
 
 				for _, pattern := range patterns {
-					fmt.Printf("   • %s: %s\n", pattern.Type, pattern.Pattern)
-					fmt.Printf("     %s\n", pattern.Description)
+					_, _ = fmt.Fprintf(os.Stderr, "   • %s: %s\n", pattern.Type, pattern.Pattern)
+					_, _ = fmt.Fprintf(os.Stderr, "     %s\n", pattern.Description)
 
 					if len(pattern.Examples) > 0 {
-						fmt.Printf("     Examples: %s\n", strings.Join(pattern.Examples, ", "))
+						_, _ = fmt.Fprintf(os.Stderr, "     Examples: %s\n", strings.Join(pattern.Examples, ", "))
 					}
 
-					fmt.Println()
+					_, _ = fmt.Fprintln(os.Stderr)
 				}
 			}
 		}
@@ -137,13 +138,13 @@ func showDomainValidators(domain string) error {
 func showAllValidators() error {
 	info := domains.DefaultRegistry.ListValidators()
 	if len(info) == 0 {
-		fmt.Println("No domain validators are currently registered.")
-		fmt.Println("\nTo see how to add validators, run: hapiq domains --help")
+		_, _ = fmt.Fprintln(os.Stderr, "No domain validators are currently registered.")
+		_, _ = fmt.Fprintln(os.Stderr, "\nTo see how to add validators, run: hapiq domains --help")
 
 		return nil
 	}
 
-	fmt.Printf("Available Domain Validators (%d):\n\n", len(info))
+	_, _ = fmt.Fprintf(os.Stderr, "Available Domain Validators (%d):\n\n", len(info))
 
 	// Group by domain
 	domainGroups := make(map[string][]domains.ValidatorInfo)
@@ -168,12 +169,12 @@ func showAllValidators() error {
 	for _, domain := range domainList {
 		validators := domainGroups[domain]
 
-		fmt.Printf("🔬 %s\n", strings.ToUpper(domain))
-		fmt.Printf("   %s\n\n", getDomainDescription(domain))
+		_, _ = fmt.Fprintf(os.Stderr, "🔬 %s\n", strings.ToUpper(domain))
+		_, _ = fmt.Fprintf(os.Stderr, "   %s\n\n", getDomainDescription(domain))
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "   NAME\tPRIORITY\tDESCRIPTION")
-		fmt.Fprintln(w, "   ----\t--------\t-----------")
+		_, _ = fmt.Fprintln(w, "   NAME\tPRIORITY\tDESCRIPTION")
+		_, _ = fmt.Fprintln(w, "   ----\t--------\t-----------")
 
 		for _, validator := range validators {
 			desc := validator.Description
@@ -181,38 +182,38 @@ func showAllValidators() error {
 				desc = desc[:57] + "..."
 			}
 
-			fmt.Fprintf(w, "   %s\t%d\t%s\n", validator.Name, validator.Priority, desc)
+			_, _ = fmt.Fprintf(w, "   %s\t%d\t%s\n", validator.Name, validator.Priority, desc)
 		}
 
-		w.Flush()
-		fmt.Println()
+		_ = w.Flush()
+		_, _ = fmt.Fprintln(os.Stderr)
 
 		if showPatterns {
-			fmt.Printf("   Supported Patterns:\n")
+			_, _ = fmt.Fprintf(os.Stderr, "   Supported Patterns:\n")
 
 			for _, validator := range validators {
 				if len(validator.Patterns) > 0 {
-					fmt.Printf("   • %s:\n", validator.Name)
+					_, _ = fmt.Fprintf(os.Stderr, "   • %s:\n", validator.Name)
 
 					for _, pattern := range validator.Patterns {
-						fmt.Printf("     - %s patterns: %s\n", pattern.Type, pattern.Pattern)
+						_, _ = fmt.Fprintf(os.Stderr, "     - %s patterns: %s\n", pattern.Type, pattern.Pattern)
 
 						if len(pattern.Examples) > 0 && len(pattern.Examples[0]) < 50 {
-							fmt.Printf("       Example: %s\n", pattern.Examples[0])
+							_, _ = fmt.Fprintf(os.Stderr, "       Example: %s\n", pattern.Examples[0])
 						}
 					}
 				}
 			}
 
-			fmt.Println()
+			_, _ = fmt.Fprintln(os.Stderr)
 		}
 	}
 
-	fmt.Printf("💡 Tips:\n")
-	fmt.Printf("   • Use --domain <name> to focus on a specific domain\n")
-	fmt.Printf("   • Use --patterns to see recognition patterns\n")
-	fmt.Printf("   • Use --output json for machine-readable output\n")
-	fmt.Printf("   • Run 'hapiq check <identifier>' to test validation\n")
+	_, _ = fmt.Fprintf(os.Stderr, "💡 Tips:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "   • Use --domain <name> to focus on a specific domain\n")
+	_, _ = fmt.Fprintf(os.Stderr, "   • Use --patterns to see recognition patterns\n")
+	_, _ = fmt.Fprintf(os.Stderr, "   • Use --output json for machine-readable output\n")
+	_, _ = fmt.Fprintf(os.Stderr, "   • Run 'hapiq check <identifier>' to test validation\n")
 
 	return nil
 }

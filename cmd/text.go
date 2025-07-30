@@ -53,11 +53,11 @@ func init() {
 	textCmd.Flags().BoolVar(&extractHeaders, "headers", true, "detect and format headers as Markdown")
 }
 
-func runText(cmd *cobra.Command, args []string) error {
+func runText(_ *cobra.Command, args []string) error {
 	filename := args[0]
 
 	if !quiet {
-		fmt.Fprintf(os.Stderr, "Converting %s to text...\n", filename)
+		_, _ = fmt.Fprintf(os.Stderr, "Converting %s to text...\n", filename)
 	}
 
 	// Check if file exists and is readable
@@ -72,15 +72,15 @@ func runText(cmd *cobra.Command, args []string) error {
 
 	// Output to file or stdout
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(text), 0o644); err != nil {
+		if err := os.WriteFile(outputFile, []byte(text), 0o600); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
 
 		if !quiet {
-			fmt.Fprintf(os.Stderr, "Converted text written to %s\n", outputFile)
+			_, _ = fmt.Fprintf(os.Stderr, "Converted text written to %s\n", outputFile)
 		}
 	} else {
-		fmt.Print(text)
+		_, _ = fmt.Fprint(os.Stdout, text)
 	}
 
 	return nil
@@ -142,17 +142,17 @@ func convertPDFToMarkdown(filename string) (string, error) {
 
 	// Add document header
 	baseName := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-	result.WriteString(fmt.Sprintf("# %s\n\n", strings.Title(strings.ReplaceAll(baseName, "_", " "))))
+	result.WriteString(fmt.Sprintf("# %s\n\n", titleCase(strings.ReplaceAll(baseName, "_", " "))))
 	result.WriteString(fmt.Sprintf("*Converted from PDF: %s*\n", filename))
 	result.WriteString(fmt.Sprintf("*Conversion date: %s*\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
 	// Add metadata if available
-	if response.Meta != nil && len(response.Meta) > 0 {
+	if len(response.Meta) > 0 {
 		result.WriteString("## Document Metadata\n\n")
 
 		for key, value := range response.Meta {
 			if value != "" {
-				result.WriteString(fmt.Sprintf("- **%s**: %s\n", strings.Title(key), value))
+				result.WriteString(fmt.Sprintf("- **%s**: %s\n", titleCase(key), value))
 			}
 		}
 
@@ -270,7 +270,7 @@ func (c *PDFConverter) cleanText(text string) string {
 	// Normalize whitespace but preserve line structure
 	lines := strings.Split(text, "\n")
 
-	var cleanedLines []string
+	cleanedLines := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		// Normalize whitespace within each line
@@ -333,7 +333,7 @@ func (c *PDFConverter) isHeader(line string) bool {
 		capitalizedCount := 0
 
 		for _, word := range words {
-			if len(word) > 0 && word[0] >= 'A' && word[0] <= 'Z' {
+			if word != "" && word[0] >= 'A' && word[0] <= 'Z' {
 				capitalizedCount++
 			}
 		}
@@ -382,7 +382,7 @@ func (c *PDFConverter) cleanHeaderText(line string) string {
 
 	// Normalize case for all-caps headers
 	if strings.ToUpper(cleaned) == cleaned && len(cleaned) > 5 {
-		cleaned = strings.Title(strings.ToLower(cleaned))
+		cleaned = titleCase(strings.ToLower(cleaned))
 	}
 
 	return strings.TrimSpace(cleaned)
@@ -427,6 +427,22 @@ func (c *PDFConverter) formatListItem(line string) string {
 	}
 
 	return "- " + line
+}
+
+// titleCase provides a replacement for the deprecated strings.Title function.
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+
+	words := strings.Fields(s)
+	for i, word := range words {
+		if word != "" {
+			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+		}
+	}
+
+	return strings.Join(words, " ")
 }
 
 // processDocumentText processes the entire document text extracted by docconv_v2.
@@ -573,16 +589,16 @@ func (c *PDFConverter) AddBasicSpacing(text string) string {
 // applyBasicPatterns applies simple regex patterns for obvious word boundaries.
 func (c *PDFConverter) applyBasicPatterns(text string) string {
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`([a-z])([A-Z])`),           // lowercase followed by uppercase
-		regexp.MustCompile(`([a-zA-Z])(\d)`),           // letter followed by digit
-		regexp.MustCompile(`(\d)([a-zA-Z])`),           // digit followed by letter
-		regexp.MustCompile(`([.!?])([A-Z])`),           // sentence end followed by capital
-		regexp.MustCompile(`(https?://[^\s]+)([A-Z])`), // URLs followed by text
-		regexp.MustCompile(`([a-z])(https?://)`),       // text followed by URLs
-		regexp.MustCompile(`(doi\.org/[^\s]+)([A-Z])`), // DOIs followed by text
-		regexp.MustCompile(`([0-9]/[0-9\-]+)([A-Z])`),  // DOI numbers followed by text
-		regexp.MustCompile(`([a-z])(doi\.org)`),        // text followed by DOIs
-		regexp.MustCompile(`([0-9])([A-Z])`),           // numbers followed by uppercase
+		regexp.MustCompile(`([a-z])([A-Z])`),        // lowercase followed by uppercase
+		regexp.MustCompile(`([a-zA-Z])(\d)`),        // letter followed by digit
+		regexp.MustCompile(`(\d)([a-zA-Z])`),        // digit followed by letter
+		regexp.MustCompile(`([.!?])([A-Z])`),        // sentence end followed by capital
+		regexp.MustCompile(`(https?://\S+)([A-Z])`), // URLs followed by text
+		regexp.MustCompile(`([a-z])(https?://)`),    // text followed by URLs
+		regexp.MustCompile(`(doi\.org/\S+)([A-Z])`), // DOIs followed by text
+		regexp.MustCompile(`(\d/[0-9\-]+)([A-Z])`),  // DOI numbers followed by text
+		regexp.MustCompile(`([a-z])(doi\.org)`),     // text followed by DOIs
+		regexp.MustCompile(`(\d)([A-Z])`),           // numbers followed by uppercase
 	}
 
 	result := text
@@ -628,7 +644,7 @@ func (c *PDFConverter) segmentWords(text string) string {
 
 // dynamicWordSegmentation uses dynamic programming to find optimal word boundaries.
 func (c *PDFConverter) dynamicWordSegmentation(text string) string {
-	if len(text) == 0 {
+	if text == "" {
 		return text
 	}
 
@@ -685,7 +701,7 @@ func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 		start := parent[pos]
 
 		word := text[start:pos]
-		if len(word) > 0 {
+		if word != "" {
 			words = append([]string{word}, words...)
 		}
 
@@ -712,14 +728,14 @@ func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 
 // preserveCase attempts to preserve the original case when applying segmentation.
 func (c *PDFConverter) preserveCase(original, segmented string) string {
-	if len(original) == 0 || len(segmented) == 0 {
+	if original == "" || segmented == "" {
 		return segmented
 	}
 
 	// If the original starts with uppercase, capitalize the first word
 	result := segmented
-	if len(original) > 0 && original[0] >= 'A' && original[0] <= 'Z' {
-		if len(result) > 0 && result[0] >= 'a' && result[0] <= 'z' {
+	if original != "" && original[0] >= 'A' && original[0] <= 'Z' {
+		if result != "" && result[0] >= 'a' && result[0] <= 'z' {
 			result = strings.ToUpper(result[:1]) + result[1:]
 		}
 	}
@@ -754,7 +770,7 @@ func (c *PDFConverter) isValidWord(word string, dictionary map[string]bool) bool
 
 // getWordScore assigns scores to words for optimal segmentation.
 func (c *PDFConverter) getWordScore(word string, dictionary map[string]bool) int {
-	if len(word) == 0 {
+	if word == "" {
 		return -100
 	}
 

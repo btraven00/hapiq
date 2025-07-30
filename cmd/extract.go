@@ -1,3 +1,4 @@
+// Package cmd provides command-line interface commands for the hapiq tool.
 package cmd
 
 import (
@@ -17,6 +18,10 @@ import (
 	"github.com/btraven00/hapiq/internal/extractor"
 
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
+)
+
+const (
+	outputFormatCSV = "csv"
 )
 
 var (
@@ -59,17 +64,20 @@ func init() {
 	extractCmd.Flags().BoolVar(&validateLinks, "validate-links", false, "validate extracted links for accessibility")
 	extractCmd.Flags().BoolVar(&includeContext, "include-context", true, "include surrounding text context for links")
 	extractCmd.Flags().IntVar(&contextLength, "context-length", 100, "length of context to extract around links")
-	extractCmd.Flags().StringSliceVar(&filterDomains, "filter-domains", nil, "comma-separated list of domains to filter (e.g., figshare.com,zenodo.org)")
-	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", 0.85, "minimum confidence threshold for including links")
+	extractCmd.Flags().StringSliceVar(&filterDomains, "filter-domains", nil,
+		"comma-separated list of domains to filter (e.g., figshare.com,zenodo.org)")
+	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", 0.85,
+		"minimum confidence threshold for including links")
 	extractCmd.Flags().StringVar(&outputFormat, "format", "human", "output format (human, json, csv)")
 	extractCmd.Flags().BoolVar(&batchMode, "batch", false, "process multiple files and output summary")
 	extractCmd.Flags().IntVar(&maxLinksPerPage, "max-links-per-page", 50, "maximum number of links to extract per page")
 	extractCmd.Flags().IntVar(&numWorkers, "workers", runtime.NumCPU(), "number of parallel workers for processing")
 	extractCmd.Flags().BoolVar(&showProgress, "progress", true, "show progress during batch processing")
-	extractCmd.Flags().BoolVar(&keep404s, "keep-404s", false, "keep links that return 404 or are inaccessible (by default they are filtered out)")
+	extractCmd.Flags().BoolVar(&keep404s, "keep-404s", false,
+		"keep links that return 404 or are inaccessible (by default they are filtered out)")
 }
 
-func runExtractLinks(cmd *cobra.Command, args []string) error {
+func runExtractLinks(_ *cobra.Command, args []string) error {
 	// Create extraction options
 	options := extractor.ExtractionOptions{
 		ValidateLinks:           validateLinks,
@@ -115,8 +123,8 @@ func processSingleFile(pdfExtractor *extractor.PDFExtractor, filename string) er
 func outputResult(result *extractor.ExtractionResult) error {
 	switch strings.ToLower(outputFormat) {
 	case "json":
-		return outputJSON(result)
-	case "csv":
+		return outputExtractionJSON(result)
+	case outputFormatCSV:
 		return outputCSV(result)
 	case "human":
 		return outputHuman(result)
@@ -126,43 +134,44 @@ func outputResult(result *extractor.ExtractionResult) error {
 }
 
 func outputHuman(result *extractor.ExtractionResult) error {
-	fmt.Printf("📄 File: %s\n", result.Filename)
-	fmt.Printf("📊 Pages: %d | Text: %d chars | Processing time: %v\n",
+	_, _ = fmt.Fprintf(os.Stderr, "📄 File: %s\n", result.Filename)
+	_, _ = fmt.Fprintf(os.Stderr, "📊 Pages: %d | Text: %d chars | Processing time: %v\n",
 		result.Pages, result.TotalText, result.ProcessTime)
 	// Count links above confidence threshold
 	highConfidenceLinks := 0
 
-	for _, link := range result.Links {
-		if link.Confidence >= minConfidence {
+	for i := range result.Links {
+		if result.Links[i].Confidence >= minConfidence {
 			highConfidenceLinks++
 		}
 	}
 
-	fmt.Printf("🔗 Found %d links total (%d above %.0f%% confidence)\n",
+	_, _ = fmt.Fprintf(os.Stderr, "🔗 Found %d links total (%d above %.0f%% confidence)\n",
 		result.Summary.TotalLinks, highConfidenceLinks, minConfidence*100)
 
 	if len(result.Errors) > 0 {
-		fmt.Printf("\n❌ Errors:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\n❌ Errors:\n")
 
 		for _, err := range result.Errors {
-			fmt.Printf("   • %s\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "   • %s\n", err)
 		}
 	}
 
 	if len(result.Warnings) > 0 && !quiet {
-		fmt.Printf("\n⚠️  Warnings:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\n⚠️  Warnings:\n")
 
 		for _, warning := range result.Warnings {
-			fmt.Printf("   • %s\n", warning)
+			_, _ = fmt.Fprintf(os.Stderr, "   • %s\n", warning)
 		}
 	}
 
 	// Filter links by confidence threshold and group by type
 	linksByType := make(map[extractor.LinkType][]extractor.ExtractedLink)
 
-	for _, link := range result.Links {
+	for i := range result.Links {
+		link := &result.Links[i]
 		if link.Confidence >= minConfidence {
-			linksByType[link.Type] = append(linksByType[link.Type], link)
+			linksByType[link.Type] = append(linksByType[link.Type], *link)
 		}
 	}
 
@@ -196,9 +205,10 @@ func outputHuman(result *extractor.ExtractionResult) error {
 			emoji = "🔗"
 		}
 
-		fmt.Printf("\n%s %s Links (%d):\n", emoji, strings.ToUpper(string(linkType)), len(links))
+		_, _ = fmt.Fprintf(os.Stderr, "\n%s %s Links (%d):\n", emoji, strings.ToUpper(string(linkType)), len(links))
 
-		for i, link := range links {
+		for i := range links {
+			link := &links[i]
 			// URLs from extractor are already cleaned, no need for additional cleanup
 			cleanedURL := link.URL
 			if cleanedURL == "" {
@@ -206,7 +216,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 			}
 
 			if i >= 10 && quiet {
-				fmt.Printf("   ... and %d more (use without --quiet to show all)\n", len(links)-10)
+				_, _ = fmt.Fprintf(os.Stderr, "   ... and %d more (use without --quiet to show all)\n", len(links)-10)
 				break
 			}
 
@@ -224,29 +234,29 @@ func outputHuman(result *extractor.ExtractionResult) error {
 				}
 			}
 
-			fmt.Printf("   • %s [%s, %s]%s\n", cleanedURL, confidence, pageInfo, status)
+			_, _ = fmt.Fprintf(os.Stderr, "   • %s [%s, %s]%s\n", cleanedURL, confidence, pageInfo, status)
 		}
 	}
 
 	// Summary statistics
-	fmt.Printf("\n📈 Summary:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "\n📈 Summary:\n")
 
 	for linkType, count := range result.Summary.LinksByType {
 		if count > 0 {
-			fmt.Printf("   %s: %d\n", linkType, count)
+			_, _ = fmt.Fprintf(os.Stderr, "   %s: %d\n", linkType, count)
 		}
 	}
 
 	if result.Summary.ValidatedLinks > 0 {
 		accessiblePercent := float64(result.Summary.AccessibleLinks) / float64(result.Summary.ValidatedLinks) * 100
-		fmt.Printf("   Validated: %d/%d (%.1f%% accessible)\n",
+		_, _ = fmt.Fprintf(os.Stderr, "   Validated: %d/%d (%.1f%% accessible)\n",
 			result.Summary.AccessibleLinks, result.Summary.ValidatedLinks, accessiblePercent)
 	}
 
 	return nil
 }
 
-func outputJSON(result *extractor.ExtractionResult) error {
+func outputExtractionJSON(result *extractor.ExtractionResult) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 
@@ -267,7 +277,8 @@ func outputCSV(result *extractor.ExtractionResult) error {
 	}
 
 	// Write data rows
-	for _, link := range result.Links {
+	for i := range result.Links {
+		link := &result.Links[i]
 		row := []string{
 			result.Filename,
 			link.URL,
@@ -303,7 +314,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 		numWorkers = runtime.NumCPU()
 	}
 
-	fmt.Printf("🚀 Processing %d files with %d workers...\n", len(filenames), numWorkers)
+	_, _ = fmt.Fprintf(os.Stderr, "🚀 Processing %d files with %d workers...\n", len(filenames), numWorkers)
 
 	// Create worker pool
 	pool := extractor.NewWorkerPool(numWorkers)
@@ -368,24 +379,22 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 
 	// Collect all results
 	for i := 0; i < len(filenames); i++ {
-		select {
-		case result := <-pool.Results():
-			if result.Error != nil {
-				failedFiles = append(failedFiles, result.Task.Filename)
+		result := <-pool.Results()
+		if result.Error != nil {
+			failedFiles = append(failedFiles, result.Task.Filename)
 
-				if quiet {
-					fmt.Fprintf(os.Stderr, "❌ Failed: %s\n", filepath.Base(result.Task.Filename))
-				}
-
-				continue
+			if quiet {
+				fmt.Fprintf(os.Stderr, "❌ Failed: %s\n", filepath.Base(result.Task.Filename))
 			}
 
-			allResults = append(allResults, result.Result)
-			totalLinks += result.Result.Summary.TotalLinks
-			totalAccessible += result.Result.Summary.AccessibleLinks
-			totalValidated += result.Result.Summary.ValidatedLinks
-			totalProcessTime += result.Result.ProcessTime
+			continue
 		}
+
+		allResults = append(allResults, result.Result)
+		totalLinks += result.Result.Summary.TotalLinks
+		totalAccessible += result.Result.Summary.AccessibleLinks
+		totalValidated += result.Result.Summary.ValidatedLinks
+		totalProcessTime += result.Result.ProcessTime
 	}
 
 	// Shutdown worker pool
@@ -396,24 +405,25 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 		progressMu.Lock()
 		if progressTracker != nil {
 			progressTracker.PrintProgress()
-			fmt.Println() // New line after final progress
 		}
+
+		_, _ = fmt.Fprintln(os.Stderr) // New line after final progress
 
 		progressTracker = nil
 		progressMu.Unlock()
 	}
 
 	// Show completion summary
-	fmt.Printf("✅ Completed processing %d files", len(filenames))
+	_, _ = fmt.Fprintf(os.Stderr, "✅ Completed processing %d files", len(filenames))
 
 	if len(failedFiles) > 0 {
-		fmt.Printf(" (%d failed)", len(failedFiles))
+		_, _ = fmt.Fprintf(os.Stderr, " (%d failed)", len(failedFiles))
 	}
 
-	fmt.Printf(" in %v\n", totalProcessTime)
+	_, _ = fmt.Fprintf(os.Stderr, " in %v\n", totalProcessTime)
 
 	if len(failedFiles) > 0 && !quiet {
-		fmt.Printf("Failed files: %v\n", failedFiles)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed files: %v\n", failedFiles)
 	}
 
 	// Output batch summary
@@ -422,7 +432,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 
 func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, totalAccessible, totalValidated int, totalTime time.Duration) error {
 	if len(results) == 0 {
-		fmt.Println("⚠️  No files were successfully processed")
+		_, _ = fmt.Fprintln(os.Stderr, "⚠️  No files were successfully processed")
 		return nil
 	}
 
@@ -454,7 +464,8 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 
 		// Write all results
 		for _, result := range results {
-			for _, link := range result.Links {
+			for i := range result.Links {
+				link := &result.Links[i]
 				row := []string{
 					filepath.Base(result.Filename),
 					link.URL,
@@ -483,28 +494,28 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 		}
 
 	default: // human format
-		fmt.Printf("📊 Batch Processing Summary\n")
-		fmt.Printf("═══════════════════════════\n")
-		fmt.Printf("Files processed: %d\n", len(results))
-		fmt.Printf("Total links found: %d\n", totalLinks)
+		_, _ = fmt.Fprintf(os.Stderr, "📊 Batch Processing Summary\n")
+		_, _ = fmt.Fprintf(os.Stderr, "═══════════════════════════\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Files processed: %d\n", len(results))
+		_, _ = fmt.Fprintf(os.Stderr, "Total links found: %d\n", totalLinks)
 
 		if totalValidated > 0 {
 			accessiblePercent := float64(totalAccessible) / float64(totalValidated) * 100
-			fmt.Printf("Links validated: %d (%.1f%% accessible)\n", totalValidated, accessiblePercent)
+			_, _ = fmt.Fprintf(os.Stderr, "Links validated: %d (%.1f%% accessible)\n", totalValidated, accessiblePercent)
 		}
 
-		fmt.Printf("Total processing time: %v\n", totalTime)
-		fmt.Printf("Average per file: %v\n", totalTime/time.Duration(len(results)))
+		_, _ = fmt.Fprintf(os.Stderr, "Total processing time: %v\n", totalTime)
+		_, _ = fmt.Fprintf(os.Stderr, "Average per file: %v\n", totalTime/time.Duration(len(results)))
 
-		fmt.Printf("\n📄 Per-file Results:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "\n📄 Per-file Results:\n")
 
 		for _, result := range results {
 			filename := filepath.Base(result.Filename)
-			fmt.Printf("• %s: %d links (%d unique) in %v\n",
+			_, _ = fmt.Fprintf(os.Stderr, "• %s: %d links (%d unique) in %v\n",
 				filename, result.Summary.TotalLinks, result.Summary.UniqueLinks, result.ProcessTime)
 
 			if len(result.Errors) > 0 {
-				fmt.Printf("  ❌ %d errors\n", len(result.Errors))
+				_, _ = fmt.Fprintf(os.Stderr, "  ❌ %d errors\n", len(result.Errors))
 			}
 		}
 
@@ -513,7 +524,8 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 			domainCounts := make(map[string]int)
 
 			for _, result := range results {
-				for _, link := range result.Links {
+				for i := range result.Links {
+					link := &result.Links[i]
 					// Extract domain from URL
 					if strings.HasPrefix(link.URL, "http") {
 						parts := strings.Split(link.URL, "/")
@@ -525,7 +537,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 				}
 			}
 
-			fmt.Printf("\n🌐 Top Domains:\n")
+			_, _ = fmt.Fprintf(os.Stderr, "\n🌐 Top Domains:\n")
 			// Sort domains by count (simple approach)
 			type domainCount struct {
 				domain string
@@ -553,7 +565,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 			}
 
 			for i := 0; i < maxShow; i++ {
-				fmt.Printf("• %s: %d links\n", domains[i].domain, domains[i].count)
+				_, _ = fmt.Fprintf(os.Stderr, "• %s: %d links\n", domains[i].domain, domains[i].count)
 			}
 		}
 	}

@@ -1,3 +1,4 @@
+// Package cmd provides command-line interface commands for the hapiq tool.
 package cmd
 
 import (
@@ -35,7 +36,7 @@ Examples:
 	RunE: runCheck,
 }
 
-func runCheck(cmd *cobra.Command, args []string) error {
+func runCheck(_ *cobra.Command, args []string) error {
 	// Validate arguments
 	if inputFile == "" && len(args) == 0 {
 		return fmt.Errorf("either provide a URL/identifier as argument or use -i flag with input file")
@@ -59,23 +60,23 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	// Process single target or batch file
 	if inputFile != "" {
 		return processBatchFile(c, inputFile)
-	} else {
-		return processSingleTarget(c, args[0])
 	}
+
+	return processSingleTarget(c, args[0])
 }
 
 func processSingleTarget(c *checker.Checker, target string) error {
 	if !quiet {
-		fmt.Printf("Checking: %s\n", target)
-		fmt.Printf("Download enabled: %t\n", downloadFlag)
-		fmt.Printf("Timeout: %ds\n", timeoutFlag)
-		fmt.Printf("Output format: %s\n", output)
+		_, _ = fmt.Fprintf(os.Stderr, "Checking: %s\n", target)
+		_, _ = fmt.Fprintf(os.Stderr, "Download enabled: %t\n", downloadFlag)
+		_, _ = fmt.Fprintf(os.Stderr, "Timeout: %ds\n", timeoutFlag)
+		_, _ = fmt.Fprintf(os.Stderr, "Output format: %s\n", output)
 	}
 
 	// Clean and normalize the target
 	cleanTarget := cleanupIdentifier(target)
 	if !quiet && cleanTarget != target {
-		fmt.Printf("Normalized: %s -> %s\n", target, cleanTarget)
+		_, _ = fmt.Fprintf(os.Stderr, "Normalized: %s -> %s\n", target, cleanTarget)
 	}
 
 	// Perform the check
@@ -94,10 +95,10 @@ func processSingleTarget(c *checker.Checker, target string) error {
 
 func processBatchFile(c *checker.Checker, filename string) error {
 	if !quiet {
-		fmt.Printf("Processing batch file: %s\n", filename)
-		fmt.Printf("Download enabled: %t\n", downloadFlag)
-		fmt.Printf("Timeout: %ds\n", timeoutFlag)
-		fmt.Printf("Output format: %s\n", output)
+		_, _ = fmt.Fprintf(os.Stderr, "Processing batch file: %s\n", filename)
+		_, _ = fmt.Fprintf(os.Stderr, "Download enabled: %t\n", downloadFlag)
+		_, _ = fmt.Fprintf(os.Stderr, "Timeout: %ds\n", timeoutFlag)
+		_, _ = fmt.Fprintf(os.Stderr, "Output format: %s\n", output)
 	}
 
 	// Open input file
@@ -105,7 +106,12 @@ func processBatchFile(c *checker.Checker, filename string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open input file: %w", err)
 	}
-	defer file.Close()
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error closing file: %v\n", err)
+		}
+	}()
 
 	// Read and process each line
 	scanner := bufio.NewScanner(file)
@@ -126,7 +132,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		cleanLine := cleanupIdentifier(line)
 		if cleanLine == "" {
 			if !quiet {
-				fmt.Printf("Line %d: Skipping empty after cleanup: %s\n", lineNumber, line)
+				_, _ = fmt.Fprintf(os.Stderr, "Line %d: Skipping empty after cleanup: %s\n", lineNumber, line)
 			}
 
 			continue
@@ -134,13 +140,13 @@ func processBatchFile(c *checker.Checker, filename string) error {
 
 		processedCount++
 		if !quiet {
-			fmt.Printf("\n[%d/%d] Processing: %s", processedCount, lineNumber, cleanLine)
+			_, _ = fmt.Fprintf(os.Stderr, "\n[%d/%d] Processing: %s", processedCount, lineNumber, cleanLine)
 
 			if cleanLine != line {
-				fmt.Printf(" (normalized from: %s)", line)
+				_, _ = fmt.Fprintf(os.Stderr, " (normalized from: %s)", line)
 			}
 
-			fmt.Println()
+			_, _ = fmt.Fprintln(os.Stderr)
 		}
 
 		// Perform the check
@@ -168,7 +174,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 	}
 
 	if !quiet {
-		fmt.Printf("\nBatch processing completed: %d processed, %d errors\n", processedCount, errorCount)
+		_, _ = fmt.Fprintf(os.Stderr, "\nBatch processing completed: %d processed, %d errors\n", processedCount, errorCount)
 	}
 
 	return nil
@@ -216,36 +222,13 @@ func cleanupIdentifier(identifier string) string {
 	// Special handling for URLs with brackets in path - truncate at brackets
 	if strings.HasPrefix(cleaned, "http") && strings.Contains(cleaned, "[") && !strings.Contains(cleaned, " ") {
 		bracketIdx := strings.Index(cleaned, "[")
-		cleaned = cleaned[:bracketIdx]
+		if bracketIdx > 0 {
+			cleaned = cleaned[:bracketIdx]
+		}
 	}
 
 	// Handle special characters - preserve copyright and similar symbols
-	if strings.Contains(cleaned, " ") {
-		parts := strings.Fields(cleaned)
-		if len(parts) >= 2 {
-			// Check if any part contains special characters that should be preserved
-			hasSpecialChars := false
-
-			for _, part := range parts {
-				if regexp.MustCompile(`[©®™]`).MatchString(part) {
-					hasSpecialChars = true
-					break
-				}
-			}
-
-			if !hasSpecialChars {
-				// Normal processing for other cases
-				if isValidIdentifierStart(parts[0]) {
-					if strings.HasPrefix(parts[0], "http") {
-						cleaned = extractURL(cleaned)
-					} else {
-						cleaned = extractDOI(cleaned)
-					}
-				}
-			}
-			// If hasSpecialChars is true, we keep the text as-is
-		}
-	}
+	cleaned = handleSpecialCharacters(cleaned)
 
 	// Only remove basic trailing punctuation if no special characters present
 	if !regexp.MustCompile(`[©®™]`).MatchString(cleaned) {
@@ -371,6 +354,36 @@ func extractDOI(text string) string {
 	}
 
 	return text
+}
+
+// handleSpecialCharacters processes text with spaces, handling special characters appropriately.
+func handleSpecialCharacters(cleaned string) string {
+	if !strings.Contains(cleaned, " ") {
+		return cleaned
+	}
+
+	parts := strings.Fields(cleaned)
+	if len(parts) < 2 {
+		return cleaned
+	}
+
+	// Check if any part contains special characters that should be preserved
+	for _, part := range parts {
+		if regexp.MustCompile(`[©®™]`).MatchString(part) {
+			return cleaned // Keep text as-is if special characters found
+		}
+	}
+
+	// Normal processing for other cases
+	if isValidIdentifierStart(parts[0]) {
+		if strings.HasPrefix(parts[0], "http") {
+			return extractURL(cleaned)
+		}
+
+		return extractDOI(cleaned)
+	}
+
+	return cleaned
 }
 
 func init() {

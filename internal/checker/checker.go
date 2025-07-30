@@ -1,3 +1,4 @@
+// Package checker provides functionality for validating and checking dataset URLs and identifiers.
 package checker
 
 import (
@@ -12,7 +13,14 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/pkg/validators/domains"
-	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
+)
+
+const (
+	datasetTypeDOI      = "doi"
+	datasetTypeZenodo   = "zenodo"
+	datasetTypeFigshare = "figshare"
+	datasetTypeDryad    = "dryad"
+	datasetTypeGitHub   = "github"
 )
 
 // Config holds configuration for the checker.
@@ -86,8 +94,8 @@ func (c *Checker) Check(target string) (*Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.config.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	domainResults, domainErr := c.tryDomainValidation(ctx, target)
-	if domainErr == nil && len(domainResults) > 0 {
+	domainResults := c.tryDomainValidation(ctx, target)
+	if len(domainResults) > 0 {
 		result.DomainResults = domainResults
 		// Use the best domain result for primary classification
 		bestResult := c.selectBestDomainResult(domainResults)
@@ -143,17 +151,28 @@ func (c *Checker) Check(target string) (*Result, error) {
 	}
 
 	if c.config.Verbose {
-		fmt.Printf("Normalized URL: %s\n", normalizedURL)
-		fmt.Printf("Dataset type: %s\n", datasetType)
+		_, _ = fmt.Fprintf(os.Stderr, "Normalized URL: %s\n", normalizedURL)
+		_, _ = fmt.Fprintf(os.Stderr, "Dataset type: %s\n", datasetType)
 	}
 
 	// Perform HTTP check
 	start := time.Now()
 
-	resp, err := c.client.Head(normalizedURL)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", normalizedURL, nil)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to create request: %v", err)
+		return result, nil
+	}
+
+	resp, err := c.client.Do(req)
 	if err != nil {
 		// Try GET request if HEAD fails
-		resp, err = c.client.Get(normalizedURL)
+		req, err = http.NewRequestWithContext(ctx, "GET", normalizedURL, nil)
+		if err != nil {
+			result.Error = fmt.Sprintf("Failed to create GET request: %v", err)
+			return result, nil
+		}
+		resp, err = c.client.Do(req)
 	}
 
 	result.ResponseTime = time.Since(start)
@@ -163,7 +182,11 @@ func (c *Checker) Check(target string) (*Result, error) {
 		return result, nil
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error closing response body: %v\n", err)
+		}
+	}()
 
 	result.HTTPStatus = resp.StatusCode
 	result.ContentType = resp.Header.Get("Content-Type")
@@ -179,35 +202,32 @@ func (c *Checker) Check(target string) (*Result, error) {
 	}
 
 	// Attempt download if requested and the URL seems valid
+	// Try downloading if requested and looks promising
 	if c.config.Download && result.Valid && result.LikelihoodScore > 0.3 {
-		if err := c.attemptDownload(normalizedURL, result); err != nil {
-			if c.config.Verbose {
-				fmt.Printf("Download failed: %v\n", err)
-			}
-		}
+		c.attemptDownload(normalizedURL, result)
 	}
 
 	return result, nil
 }
 
 // tryDomainValidation attempts validation using domain-specific validators.
-func (c *Checker) tryDomainValidation(ctx context.Context, target string) ([]*domains.DomainValidationResult, error) {
+func (c *Checker) tryDomainValidation(ctx context.Context, target string) []*domains.DomainValidationResult {
 	validators := domains.FindValidators(target)
 	if len(validators) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	results := make([]*domains.DomainValidationResult, 0, len(validators))
 
 	for _, validator := range validators {
 		if c.config.Verbose {
-			fmt.Printf("Trying domain validator: %s (%s)\n", validator.Name(), validator.Domain())
+			_, _ = fmt.Fprintf(os.Stderr, "Trying domain validator: %s (%s)\n", validator.Name(), validator.Domain())
 		}
 
 		result, err := validator.Validate(ctx, target)
 		if err != nil {
 			if c.config.Verbose {
-				fmt.Printf("Domain validator %s failed: %v\n", validator.Name(), err)
+				_, _ = fmt.Fprintf(os.Stderr, "Domain validator %s failed: %v\n", validator.Name(), err)
 			}
 
 			continue
@@ -217,13 +237,13 @@ func (c *Checker) tryDomainValidation(ctx context.Context, target string) ([]*do
 			results = append(results, result)
 
 			if c.config.Verbose {
-				fmt.Printf("Domain validator %s: valid=%t, confidence=%.2f, likelihood=%.2f\n",
+				_, _ = fmt.Fprintf(os.Stderr, "Domain validator %s: valid=%t, confidence=%.2f, likelihood=%.2f\n",
 					validator.Name(), result.Valid, result.Confidence, result.Likelihood)
 			}
 		}
 	}
 
-	return results, nil
+	return results
 }
 
 // selectBestDomainResult chooses the best domain validation result.
@@ -254,7 +274,7 @@ func (c *Checker) selectBestDomainResult(results []*domains.DomainValidationResu
 }
 
 // normalizeTarget converts various identifier formats to URLs.
-func (c *Checker) normalizeTarget(target string) (string, string, error) {
+func (c *Checker) normalizeTarget(target string) (normalizedURL, datasetType string, err error) {
 	// Check if it's already a valid URL
 	if u, err := url.Parse(target); err == nil && u.Scheme != "" {
 		return c.classifyURL(target)
@@ -263,20 +283,20 @@ func (c *Checker) normalizeTarget(target string) (string, string, error) {
 	// Check for DOI pattern
 	doiPattern := regexp.MustCompile(`^10\.\d+/.+`)
 	if doiPattern.MatchString(target) {
-		return "https://doi.org/" + target, "doi", nil
+		return "https://doi.org/" + target, datasetTypeDOI, nil
 	}
 
 	// Check for Zenodo record ID
 	zenodoPattern := regexp.MustCompile(`^\d+$`)
 	if zenodoPattern.MatchString(target) {
-		return fmt.Sprintf("https://zenodo.org/record/%s", target), "zenodo", nil
+		return fmt.Sprintf("https://zenodo.org/record/%s", target), datasetTypeZenodo, nil
 	}
 
 	return "", "", fmt.Errorf("unrecognized target format: %s", target)
 }
 
 // classifyURL determines the type of dataset repository from URL.
-func (c *Checker) classifyURL(target string) (string, string, error) {
+func (c *Checker) classifyURL(target string) (normalizedURL, datasetType string, err error) {
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", "", err
@@ -288,11 +308,11 @@ func (c *Checker) classifyURL(target string) (string, string, error) {
 	case strings.Contains(host, "zenodo.org"):
 		return target, "zenodo", nil
 	case strings.Contains(host, "figshare.com"):
-		return target, "figshare", nil
+		return target, datasetTypeFigshare, nil
 	case strings.Contains(host, "dryad.org"):
-		return target, "dryad", nil
+		return target, datasetTypeDryad, nil
 	case strings.Contains(host, "github.com"):
-		return target, "github", nil
+		return target, datasetTypeGitHub, nil
 	case strings.Contains(host, "doi.org"):
 		return target, "doi", nil
 	default:
@@ -367,7 +387,7 @@ func (c *Checker) calculateLikelihood(result *Result) float64 {
 }
 
 // attemptDownload tries to download and analyze the dataset structure.
-func (c *Checker) attemptDownload(url string, result *Result) error {
+func (c *Checker) attemptDownload(url string, result *Result) {
 	// This is a placeholder for download functionality
 	// In a real implementation, this would:
 	// 1. Create a temporary directory
@@ -376,7 +396,7 @@ func (c *Checker) attemptDownload(url string, result *Result) error {
 	// 4. Analyze file structure
 	// 5. Clean up temporary files
 	if c.config.Verbose {
-		fmt.Printf("Download functionality not yet implemented for: %s\n", url)
+		_, _ = fmt.Fprintf(os.Stderr, "Download functionality not yet implemented for: %s\n", url)
 	}
 
 	// Mock file structure for demonstration
@@ -387,7 +407,6 @@ func (c *Checker) attemptDownload(url string, result *Result) error {
 		Extensions: make(map[string]int),
 	}
 
-	return nil
 }
 
 // OutputResult outputs the result in the specified format.
@@ -412,32 +431,32 @@ func (c *Checker) outputJSON(result *Result) error {
 
 // outputHuman outputs the result in human-readable format.
 func (c *Checker) outputHuman(result *Result) error {
-	fmt.Printf("Target: %s\n", result.Target)
+	_, _ = fmt.Fprintf(os.Stderr, "Target: %s\n", result.Target)
 
 	if result.Error != "" {
-		fmt.Printf("❌ Error: %s\n", result.Error)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ Error: %s\n", result.Error)
 		return nil
 	}
 
 	if result.Valid {
-		fmt.Printf("✅ Status: Valid (HTTP %d)\n", result.HTTPStatus)
+		_, _ = fmt.Fprintf(os.Stderr, "✅ Status: Valid (HTTP %d)\n", result.HTTPStatus)
 	} else {
-		fmt.Printf("❌ Status: Invalid (HTTP %d)\n", result.HTTPStatus)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ Status: Invalid (HTTP %d)\n", result.HTTPStatus)
 	}
 
-	fmt.Printf("📂 Dataset Type: %s\n", result.DatasetType)
-	fmt.Printf("🔗 Content Type: %s\n", result.ContentType)
+	_, _ = fmt.Fprintf(os.Stderr, "📂 Dataset Type: %s\n", result.DatasetType)
+	_, _ = fmt.Fprintf(os.Stderr, "🔗 Content Type: %s\n", result.ContentType)
 
 	if result.ContentLength > 0 {
-		fmt.Printf("📏 Size: %d bytes\n", result.ContentLength)
+		_, _ = fmt.Fprintf(os.Stderr, "📏 Size: %d bytes\n", result.ContentLength)
 	}
 
-	fmt.Printf("⏱️  Response Time: %v\n", result.ResponseTime)
-	fmt.Printf("🧠 Dataset Likelihood: %.2f\n", result.LikelihoodScore)
+	_, _ = fmt.Fprintf(os.Stderr, "⏱️  Response Time: %v\n", result.ResponseTime)
+	_, _ = fmt.Fprintf(os.Stderr, "🧠 Dataset Likelihood: %.2f\n", result.LikelihoodScore)
 
 	// Display domain-specific results
 	if len(result.DomainResults) > 0 {
-		fmt.Printf("🔬 Domain Analysis:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "🔬 Domain Analysis:\n")
 
 		for _, domainResult := range result.DomainResults {
 			status := "❌"
@@ -445,31 +464,31 @@ func (c *Checker) outputHuman(result *Result) error {
 				status = "✅"
 			}
 
-			fmt.Printf("   %s %s (%s): confidence=%.2f, likelihood=%.2f\n",
+			_, _ = fmt.Fprintf(os.Stderr, "   %s %s (%s): confidence=%.2f, likelihood=%.2f\n",
 				status, domainResult.ValidatorName, domainResult.Domain,
 				domainResult.Confidence, domainResult.Likelihood)
 
 			if domainResult.Valid && domainResult.DatasetType != "" {
-				fmt.Printf("      Type: %s", domainResult.DatasetType)
+				_, _ = fmt.Fprintf(os.Stderr, "      Type: %s", domainResult.DatasetType)
 
 				if domainResult.Subtype != "" {
-					fmt.Printf(" (%s)", domainResult.Subtype)
+					_, _ = fmt.Fprintf(os.Stderr, " (%s)", domainResult.Subtype)
 				}
 
-				fmt.Printf("\n")
+				_, _ = fmt.Fprintf(os.Stderr, "\n")
 			}
 
 			if len(domainResult.Tags) > 0 && c.config.Verbose {
-				fmt.Printf("      Tags: %s\n", strings.Join(domainResult.Tags, ", "))
+				_, _ = fmt.Fprintf(os.Stderr, "      Tags: %s\n", strings.Join(domainResult.Tags, ", "))
 			}
 		}
 	}
 
 	if len(result.Metadata) > 0 && c.config.Verbose {
-		fmt.Printf("📋 Metadata:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "📋 Metadata:\n")
 
 		for key, value := range result.Metadata {
-			fmt.Printf("   %s: %s\n", key, value)
+			_, _ = fmt.Fprintf(os.Stderr, "   %s: %s\n", key, value)
 		}
 	}
 
