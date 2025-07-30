@@ -287,9 +287,9 @@ func TestAdjustConfidenceByValidation(t *testing.T) {
 	extractor := NewPDFExtractor(DefaultExtractionOptions())
 
 	testCases := []struct {
+		validation         *ValidationResult
 		name               string
 		originalConfidence float64
-		validation         *ValidationResult
 		expectDecrease     bool
 		expectIncrease     bool
 	}{

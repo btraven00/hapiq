@@ -19,32 +19,34 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
-// Rate limiting for E-utilities (3 requests per second without API key, 10 with API key)
-var lastEUtilsRequest time.Time
-var eUtilsRateLimit = 400 * time.Millisecond           // More conservative: 2.5 requests/second
-var eUtilsRateLimitWithAPIKey = 120 * time.Millisecond // 8 requests/second (conservative 10/sec limit)
+// Rate limiting for E-utilities (3 requests per second without API key, 10 with API key).
+var (
+	lastEUtilsRequest         time.Time
+	eUtilsRateLimit           = 400 * time.Millisecond // More conservative: 2.5 requests/second
+	eUtilsRateLimitWithAPIKey = 120 * time.Millisecond // 8 requests/second (conservative 10/sec limit)
+)
 
-// ELinkResponse represents the response from ELink utility for finding related records
+// ELinkResponse represents the response from ELink utility for finding related records.
 type ELinkResponse struct {
 	XMLName  xml.Name  `xml:"eLinkResult"`
 	LinkSets []LinkSet `xml:"LinkSet"`
 }
 
-// LinkSet contains linked records
+// LinkSet contains linked records.
 type LinkSet struct {
 	DbFrom   string   `xml:"DbFrom"`
 	IdList   []string `xml:"IdList>Id"`
 	LinkInfo []LinkDB `xml:"LinkSetDb"`
 }
 
-// LinkDB contains links to specific databases
+// LinkDB contains links to specific databases.
 type LinkDB struct {
 	DbTo     string   `xml:"DbTo"`
 	LinkName string   `xml:"LinkName"`
 	Links    []string `xml:"Link>Id"`
 }
 
-// downloadSeries downloads a complete GEO Series (GSE) with all samples
+// downloadSeries downloads a complete GEO Series (GSE) with all samples.
 func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("📦 Downloading GEO Series: %s\n", id)
@@ -74,6 +76,7 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 		if d.verbose {
 			fmt.Printf("⚠️  Series supplementary download had issues: %v\n", err)
 		}
+
 		result.Warnings = append(result.Warnings, fmt.Sprintf("series supplementary files: %v", err))
 	}
 
@@ -84,6 +87,7 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 		if d.verbose {
 			fmt.Printf("⚠️  Could not get sample list: %v\n", err)
 		}
+
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to get samples list: %v", err))
 		// Continue without individual samples - this is not a critical error
 	} else {
@@ -105,6 +109,7 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 				if d.verbose {
 					fmt.Printf("   No individual files found for %s\n", sampleID)
 				}
+
 				continue
 			}
 
@@ -114,6 +119,7 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 					result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create samples directory: %v", err))
 					break
 				}
+
 				sampleFilesFound = true
 			}
 
@@ -139,7 +145,7 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 	return nil
 }
 
-// downloadSample downloads a single GEO Sample (GSM)
+// downloadSample downloads a single GEO Sample (GSM).
 func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("🧬 Downloading GEO Sample: %s\n", id)
@@ -168,6 +174,7 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing file: %s\n", filename)
 				}
+
 				continue
 			}
 		}
@@ -177,6 +184,7 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 			if d.verbose {
 				fmt.Printf("🚫 Filtering out file: %s\n", filename)
 			}
+
 			continue
 		}
 
@@ -195,6 +203,7 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 		if err != nil {
 			relPath = fileInfo.Path
 		}
+
 		fileInfo.Path = relPath
 
 		result.Files = append(result.Files, *fileInfo)
@@ -203,7 +212,7 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 	return nil
 }
 
-// downloadPlatform downloads a GEO Platform (GPL) annotation file
+// downloadPlatform downloads a GEO Platform (GPL) annotation file.
 func (d *GEODownloader) downloadPlatform(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("🔬 Downloading GEO Platform: %s\n", id)
@@ -241,13 +250,15 @@ func (d *GEODownloader) downloadPlatform(ctx context.Context, id, targetDir stri
 	if err != nil {
 		relPath = fileInfo.Path
 	}
+
 	fileInfo.Path = relPath
 
 	result.Files = append(result.Files, *fileInfo)
+
 	return nil
 }
 
-// downloadDataset downloads a GEO Dataset (GDS) processed data
+// downloadDataset downloads a GEO Dataset (GDS) processed data.
 func (d *GEODownloader) downloadDataset(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("📊 Downloading GEO Dataset: %s\n", id)
@@ -273,13 +284,15 @@ func (d *GEODownloader) downloadDataset(ctx context.Context, id, targetDir strin
 	if err != nil {
 		relPath = fileInfo.Path
 	}
+
 	fileInfo.Path = relPath
 
 	result.Files = append(result.Files, *fileInfo)
+
 	return nil
 }
 
-// downloadSeriesMetadata downloads series-level metadata files using FTP patterns
+// downloadSeriesMetadata downloads series-level metadata files using FTP patterns.
 func (d *GEODownloader) downloadSeriesMetadata(ctx context.Context, id, targetDir string, result *downloaders.DownloadResult) error {
 	// Try matrix directory first (more reliable structure)
 	matrixFile := fmt.Sprintf("%s_series_matrix.txt.gz", id)
@@ -295,6 +308,7 @@ func (d *GEODownloader) downloadSeriesMetadata(ctx context.Context, id, targetDi
 	}
 
 	var downloadedAny bool
+
 	for filename, url := range metadataFiles {
 		targetPath := filepath.Join(targetDir, filename)
 
@@ -323,8 +337,7 @@ func (d *GEODownloader) downloadSeriesMetadata(ctx context.Context, id, targetDi
 	return nil
 }
 
-// downloadSeriesSupplementary downloads supplementary files for a series
-// downloadSeriesSupplementary downloads supplementary files from series suppl directory
+// downloadSeriesSupplementary downloads supplementary files from series suppl directory.
 func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, targetDir string, result *downloaders.DownloadResult) error {
 	// Supplementary files base URL
 	suppBaseURL := fmt.Sprintf("%s/series/%s/%s/suppl/", d.ftpBaseURL, d.getGSESubdir(id), id)
@@ -339,6 +352,7 @@ func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, tar
 		if d.verbose {
 			fmt.Printf("⚠️  Could not access supplementary directory: %v\n", err)
 		}
+
 		return fmt.Errorf("failed to access supplementary directory: %w", err)
 	}
 
@@ -346,6 +360,7 @@ func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, tar
 		if d.verbose {
 			fmt.Printf("ℹ️  No supplementary files found in directory\n")
 		}
+
 		return nil
 	}
 
@@ -354,6 +369,7 @@ func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, tar
 	}
 
 	downloadedAny := false
+
 	for _, filename := range files {
 		fileURL := suppBaseURL + filename
 		targetPath := filepath.Join(targetDir, filename)
@@ -383,7 +399,7 @@ func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, tar
 	return nil
 }
 
-// getSeriesSamplesViaEUtils retrieves sample IDs for a series using series matrix file
+// getSeriesSamplesViaEUtils retrieves sample IDs for a series using series matrix file.
 func (d *GEODownloader) getSeriesSamplesViaEUtils(ctx context.Context, seriesID string) ([]string, error) {
 	// Try to get samples from the series matrix file, which reliably contains sample IDs
 	samples, err := d.extractSamplesFromMatrixFile(ctx, seriesID)
@@ -398,7 +414,7 @@ func (d *GEODownloader) getSeriesSamplesViaEUtils(ctx context.Context, seriesID 
 	return samples, nil
 }
 
-// extractSamplesFromMatrixFile downloads series matrix file and extracts sample IDs
+// extractSamplesFromMatrixFile downloads series matrix file and extracts sample IDs.
 func (d *GEODownloader) extractSamplesFromMatrixFile(ctx context.Context, seriesID string) ([]string, error) {
 	// Series matrix URL pattern
 	matrixURL := fmt.Sprintf("%s/series/%s/%s/matrix/%s_series_matrix.txt.gz", d.ftpBaseURL, d.getGSESubdir(seriesID), seriesID, seriesID)
@@ -406,7 +422,7 @@ func (d *GEODownloader) extractSamplesFromMatrixFile(ctx context.Context, series
 	// Rate limit requests
 	d.rateLimitEUtils()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", matrixURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", matrixURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -423,16 +439,18 @@ func (d *GEODownloader) extractSamplesFromMatrixFile(ctx context.Context, series
 
 	// Read first few KB to find sample IDs (they're at the beginning)
 	buffer := make([]byte, 8192) // 8KB should be enough for sample headers
+
 	n, err := resp.Body.Read(buffer)
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("failed to read matrix file: %w", err)
 	}
 
 	content := string(buffer[:n])
+
 	return d.extractSampleIDsFromMatrixContent(content), nil
 }
 
-// extractSampleIDsFromMatrixContent extracts GSM IDs from series matrix content
+// extractSampleIDsFromMatrixContent extracts GSM IDs from series matrix content.
 func (d *GEODownloader) extractSampleIDsFromMatrixContent(content string) []string {
 	// Series matrix files have sample IDs in headers like:
 	// !Sample_geo_accession	"GSM123456"	"GSM123457"	...
@@ -441,7 +459,9 @@ func (d *GEODownloader) extractSampleIDsFromMatrixContent(content string) []stri
 
 	// Remove duplicates
 	seen := make(map[string]bool)
+
 	var samples []string
+
 	for _, sample := range matches {
 		if !seen[sample] {
 			samples = append(samples, sample)
@@ -452,7 +472,7 @@ func (d *GEODownloader) extractSampleIDsFromMatrixContent(content string) []stri
 	return samples
 }
 
-// searchSamplesForSeries searches for samples that belong to a series
+// searchSamplesForSeries searches for samples that belong to a series.
 func (d *GEODownloader) searchSamplesForSeries(ctx context.Context, seriesID string) ([]string, error) {
 	// Rate limit E-utilities requests
 	d.rateLimitEUtils()
@@ -484,6 +504,7 @@ func (d *GEODownloader) searchSamplesForSeries(ctx context.Context, seriesID str
 
 	// For each UID found, get its summary to extract the GSM ID
 	var samples []string
+
 	for _, uid := range response.IdList.IDs {
 		summary, err := d.getSummary(ctx, "gds", uid)
 		if err != nil {
@@ -502,13 +523,14 @@ func (d *GEODownloader) searchSamplesForSeries(ctx context.Context, seriesID str
 	return samples, nil
 }
 
-// extractSampleIDsFromSOFT extracts GSM IDs from SOFT format content (fallback method)
+// extractSampleIDsFromSOFT extracts GSM IDs from SOFT format content (fallback method).
 func (d *GEODownloader) extractSampleIDsFromSOFT(content string) []string {
 	// Pattern to match GSM sample references in SOFT format
 	gsmPattern := regexp.MustCompile(`\^SAMPLE\s*=\s*(GSM\d+)`)
 	matches := gsmPattern.FindAllStringSubmatch(content, -1)
 
 	seen := make(map[string]bool)
+
 	var samples []string
 
 	for _, match := range matches {
@@ -524,7 +546,7 @@ func (d *GEODownloader) extractSampleIDsFromSOFT(content string) []string {
 	return samples
 }
 
-// generateSampleFileURLs generates FTP URLs for sample files based on metadata
+// generateSampleFileURLs generates FTP URLs for sample files based on metadata.
 func (d *GEODownloader) generateSampleFileURLs(sampleID string, metadata *downloaders.Metadata) map[string]string {
 	urls := make(map[string]string)
 
@@ -573,9 +595,10 @@ func (d *GEODownloader) generateSampleFileURLs(sampleID string, metadata *downlo
 	return urls
 }
 
-// downloadFileWithRetry downloads a file with retry logic for common network issues
+// downloadFileWithRetry downloads a file with retry logic for common network issues.
 func (d *GEODownloader) downloadFileWithRetry(ctx context.Context, url, targetPath string) (*downloaders.FileInfo, error) {
 	maxRetries := 3
+
 	var lastErr error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -608,7 +631,7 @@ func (d *GEODownloader) downloadFileWithRetry(ctx context.Context, url, targetPa
 	return nil, lastErr
 }
 
-// isRetryableError determines if an error is worth retrying
+// isRetryableError determines if an error is worth retrying.
 func isRetryableError(err error) bool {
 	errStr := err.Error()
 	retryablePatterns := []string{
@@ -628,7 +651,7 @@ func isRetryableError(err error) bool {
 	return false
 }
 
-// shouldDownloadFile determines if a file should be downloaded based on options
+// shouldDownloadFile determines if a file should be downloaded based on options.
 func (d *GEODownloader) shouldDownloadFile(filename string, options *downloaders.DownloadOptions) bool {
 	if options == nil {
 		return true
@@ -684,7 +707,7 @@ func (d *GEODownloader) shouldDownloadFile(filename string, options *downloaders
 	return true
 }
 
-// getGSESubdir returns the FTP subdirectory for a GSE accession
+// getGSESubdir returns the FTP subdirectory for a GSE accession.
 func (d *GEODownloader) getGSESubdir(gseID string) string {
 	// Extract number from GSE ID
 	numberStr := strings.TrimPrefix(gseID, "GSE")
@@ -697,11 +720,13 @@ func (d *GEODownloader) getGSESubdir(gseID string) string {
 	if len(numberStr) == 3 {
 		return "GSE000nnn"
 	}
+
 	prefix := numberStr[:len(numberStr)-3]
+
 	return "GSE" + prefix + "nnn"
 }
 
-// getGSMSubdir returns the FTP subdirectory for a GSM accession
+// getGSMSubdir returns the FTP subdirectory for a GSM accession.
 func (d *GEODownloader) getGSMSubdir(gsmID string) string {
 	// Extract number from GSM ID
 	numberStr := strings.TrimPrefix(gsmID, "GSM")
@@ -713,11 +738,13 @@ func (d *GEODownloader) getGSMSubdir(gsmID string) string {
 	if len(numberStr) == 3 {
 		return "GSM000nnn"
 	}
+
 	prefix := numberStr[:len(numberStr)-3]
+
 	return "GSM" + prefix + "nnn"
 }
 
-// getGPLSubdir returns the FTP subdirectory for a GPL accession
+// getGPLSubdir returns the FTP subdirectory for a GPL accession.
 func (d *GEODownloader) getGPLSubdir(gplID string) string {
 	// Extract number from GPL ID
 	numberStr := strings.TrimPrefix(gplID, "GPL")
@@ -734,7 +761,7 @@ func (d *GEODownloader) getGPLSubdir(gplID string) string {
 	}
 }
 
-// getGDSSubdir returns the FTP subdirectory for a GDS accession
+// getGDSSubdir returns the FTP subdirectory for a GDS accession.
 func (d *GEODownloader) getGDSSubdir(gdsID string) string {
 	// Extract number from GDS ID
 	numberStr := strings.TrimPrefix(gdsID, "GDS")
@@ -744,10 +771,11 @@ func (d *GEODownloader) getGDSSubdir(gdsID string) string {
 
 	// Create subdirectory based on number range
 	prefix := numberStr[:len(numberStr)-3]
+
 	return "GDS" + prefix + "nnn"
 }
 
-// rateLimitEUtils implements rate limiting for E-utilities requests
+// rateLimitEUtils implements rate limiting for E-utilities requests.
 func (d *GEODownloader) rateLimitEUtils() {
 	now := time.Now()
 	elapsed := now.Sub(lastEUtilsRequest)
@@ -765,15 +793,14 @@ func (d *GEODownloader) rateLimitEUtils() {
 	lastEUtilsRequest = time.Now()
 }
 
-// fetchPageContent is deprecated - keeping for backward compatibility but should not be used
-// sampleHasFiles checks if a sample has individual supplementary files
+// sampleHasFiles checks if a sample has individual supplementary files.
 func (d *GEODownloader) sampleHasFiles(ctx context.Context, sampleID string) bool {
 	// Rate limit to avoid overwhelming the server
 	d.rateLimitEUtils()
 
 	sampleURL := fmt.Sprintf("%s/samples/%s/%s/", d.ftpBaseURL, d.getGSMSubdir(sampleID), sampleID)
 
-	req, err := http.NewRequestWithContext(ctx, "HEAD", sampleURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", sampleURL, http.NoBody)
 	if err != nil {
 		return false
 	}
@@ -782,6 +809,7 @@ func (d *GEODownloader) sampleHasFiles(ctx context.Context, sampleID string) boo
 	if err != nil {
 		return false
 	}
+
 	resp.Body.Close()
 
 	// If we can access the sample directory, assume it has files
@@ -792,7 +820,7 @@ func (d *GEODownloader) fetchPageContent(ctx context.Context, url string) ([]byt
 	// Rate limit requests
 	d.rateLimitEUtils()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -815,12 +843,12 @@ func (d *GEODownloader) fetchPageContent(ctx context.Context, url string) ([]byt
 	return content, nil
 }
 
-// getDirectoryListing attempts to parse an FTP directory listing to get filenames
+// getDirectoryListing attempts to parse an FTP directory listing to get filenames.
 func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) ([]string, error) {
 	// Rate limit requests
 	d.rateLimitEUtils()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", dirURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", dirURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -844,7 +872,7 @@ func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) 
 	return d.parseDirectoryListing(string(content))
 }
 
-// parseDirectoryListing extracts filenames from HTML directory listing
+// parseDirectoryListing extracts filenames from HTML directory listing.
 func (d *GEODownloader) parseDirectoryListing(htmlContent string) ([]string, error) {
 	var files []string
 

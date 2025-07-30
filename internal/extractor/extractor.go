@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"code.sajari.com/docconv/v2"
+
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// PDFExtractor handles extraction of links from PDF documents using domain validators
+// PDFExtractor handles extraction of links from PDF documents using domain validators.
 type PDFExtractor struct {
 	extractionPatterns []ExtractionPattern
 	sectionRegexes     []*regexp.Regexp
@@ -22,17 +23,17 @@ type PDFExtractor struct {
 	options            ExtractionOptions
 }
 
-// ExtractionPattern defines how to extract identifiers from text
+// ExtractionPattern defines how to extract identifiers from text.
 type ExtractionPattern struct {
-	Name        string
 	Regex       *regexp.Regexp
+	Name        string
 	Type        LinkType
-	Confidence  float64
 	Description string
 	Examples    []string
+	Confidence  float64
 }
 
-// NewPDFExtractor creates a new PDF extractor that uses domain validators
+// NewPDFExtractor creates a new PDF extractor that uses domain validators.
 func NewPDFExtractor(options ExtractionOptions) *PDFExtractor {
 	extractor := &PDFExtractor{
 		extractionPatterns: getExtractionPatterns(),
@@ -44,7 +45,7 @@ func NewPDFExtractor(options ExtractionOptions) *PDFExtractor {
 	return extractor
 }
 
-// ExtractFromFile extracts links from a PDF file using domain validators
+// ExtractFromFile extracts links from a PDF file using domain validators.
 func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, error) {
 	startTime := time.Now()
 
@@ -63,6 +64,7 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 
 	// Extract links from the text
 	var allLinks []ExtractedLink
+
 	links := e.extractLinksFromText(text, 1, "unknown")
 	allLinks = append(allLinks, links...)
 
@@ -81,6 +83,7 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 	// Validate links using domain validators if requested (parallelized)
 	accessibleCount := 0
 	validatedCount := 0
+
 	if e.options.ValidateLinks && len(result.Links) > 0 {
 		accessibleCount, validatedCount = e.validateLinksParallel(result)
 
@@ -115,7 +118,7 @@ func (e *PDFExtractor) ExtractFromFile(filename string) (*ExtractionResult, erro
 	return result, nil
 }
 
-// extractLinksFromText extracts links using both patterns and domain validators
+// extractLinksFromText extracts links using both patterns and domain validators.
 func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section string) []ExtractedLink {
 	var links []ExtractedLink
 
@@ -192,6 +195,7 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 
 	// Filter by minimum confidence threshold
 	filtered := make([]ExtractedLink, 0)
+
 	for _, link := range links {
 		if link.Confidence >= e.options.MinConfidence {
 			filtered = append(filtered, link)
@@ -204,7 +208,7 @@ func (e *PDFExtractor) extractLinksFromText(text string, pageNum int, section st
 	return filtered
 }
 
-// LinkCandidate represents a potential link found in text
+// LinkCandidate represents a potential link found in text.
 type LinkCandidate struct {
 	Text          string
 	NormalizedURL string
@@ -213,8 +217,7 @@ type LinkCandidate struct {
 	Position      int
 }
 
-// extractCandidates finds potential identifiers and URLs in text
-// extractCandidates extracts potential link candidates from text using all patterns
+// extractCandidates extracts potential link candidates from text using all patterns.
 func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 	var candidates []LinkCandidate
 
@@ -268,7 +271,7 @@ func (e *PDFExtractor) extractCandidates(text string) []LinkCandidate {
 	return candidates
 }
 
-// improveTokenization applies convert-style text tokenization to improve boundary detection
+// improveTokenization applies convert-style text tokenization to improve boundary detection.
 func (e *PDFExtractor) improveTokenization(text string) string {
 	// Apply word boundary patterns similar to convert command, but be more selective
 	patterns := []*regexp.Regexp{
@@ -300,7 +303,7 @@ func (e *PDFExtractor) improveTokenization(text string) string {
 	return strings.TrimSpace(result)
 }
 
-// extractAccessions finds biological accessions using regex patterns similar to check command
+// extractAccessions finds biological accessions using regex patterns similar to check command.
 func (e *PDFExtractor) extractAccessions(text string) []LinkCandidate {
 	var candidates []LinkCandidate
 
@@ -352,15 +355,17 @@ func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
+
 	return b
 }
 
-// sortLinksForDeterministicOutput sorts links to ensure consistent ordering across runs
+// sortLinksForDeterministicOutput sorts links to ensure consistent ordering across runs.
 func (e *PDFExtractor) sortLinksForDeterministicOutput(links []ExtractedLink) {
 	sort.Slice(links, func(i, j int) bool {
 		// Primary sort: by normalized URL for consistent ordering
 		urlI := e.normalizeURLForSorting(links[i].URL)
 		urlJ := e.normalizeURLForSorting(links[j].URL)
+
 		if urlI != urlJ {
 			return urlI < urlJ
 		}
@@ -380,7 +385,7 @@ func (e *PDFExtractor) sortLinksForDeterministicOutput(links []ExtractedLink) {
 	})
 }
 
-// normalizeURLForSorting normalizes URLs for consistent sorting
+// normalizeURLForSorting normalizes URLs for consistent sorting.
 func (e *PDFExtractor) normalizeURLForSorting(url string) string {
 	normalized := strings.ToLower(url)
 
@@ -422,7 +427,7 @@ func (e *PDFExtractor) filterAccessibleLinks(links []ExtractedLink) []ExtractedL
 	return filtered
 }
 
-// normalizeCandidate normalizes a candidate based on its type
+// normalizeCandidate normalizes a candidate based on its type.
 func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string {
 	text = strings.TrimSpace(text)
 
@@ -431,6 +436,7 @@ func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string
 		if !strings.HasPrefix(strings.ToLower(text), "http") {
 			return "https://doi.org/" + text
 		}
+
 		return text
 
 	case LinkTypeURL:
@@ -441,6 +447,7 @@ func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string
 
 		// Remove common trailing punctuation
 		text = strings.TrimRight(text, ".,:;!?)]}")
+
 		return text
 
 	default:
@@ -448,7 +455,7 @@ func (e *PDFExtractor) normalizeCandidate(text string, linkType LinkType) string
 	}
 }
 
-// mapDomainToLinkType maps domain validator results to our link types
+// mapDomainToLinkType maps domain validator results to our link types.
 func mapDomainToLinkType(validatorName, datasetType string) LinkType {
 	switch validatorName {
 	case "geo":
@@ -467,7 +474,7 @@ func mapDomainToLinkType(validatorName, datasetType string) LinkType {
 	}
 }
 
-// validateLinkWithDomainValidator validates a link using domain validators
+// validateLinkWithDomainValidator validates a link using domain validators.
 func (e *PDFExtractor) validateLinkWithDomainValidator(ctx context.Context, url string) (*ValidationResult, error) {
 	result := &ValidationResult{
 		LastChecked: time.Now(),
@@ -483,6 +490,7 @@ func (e *PDFExtractor) validateLinkWithDomainValidator(ctx context.Context, url 
 			}
 
 			result.IsAccessible = domainResult.Valid
+
 			if domainResult.Valid {
 				// Extract status information from metadata
 				if status, ok := domainResult.Metadata["http_status"]; ok {
@@ -490,12 +498,14 @@ func (e *PDFExtractor) validateLinkWithDomainValidator(ctx context.Context, url 
 						result.StatusCode = 200
 					}
 				}
+
 				if ct, ok := domainResult.Metadata["content_type"]; ok {
 					result.ContentType = ct
 				}
 			} else {
 				result.Error = domainResult.Error
 			}
+
 			return result, nil
 		}
 	}
@@ -504,12 +514,13 @@ func (e *PDFExtractor) validateLinkWithDomainValidator(ctx context.Context, url 
 	return e.basicHTTPValidation(url)
 }
 
-// basicHTTPValidation performs HTTP validation using the HTTP validator
+// basicHTTPValidation performs HTTP validation using the HTTP validator.
 func (e *PDFExtractor) basicHTTPValidation(url string) (*ValidationResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	httpValidator := NewHTTPValidator(15 * time.Second)
+
 	httpResult, err := httpValidator.ValidateURL(ctx, url)
 	if err != nil {
 		return &ValidationResult{
@@ -544,7 +555,7 @@ func (e *PDFExtractor) basicHTTPValidation(url string) (*ValidationResult, error
 	return result, nil
 }
 
-// filterLinks applies confidence and domain filters
+// filterLinks applies confidence and domain filters.
 func (e *PDFExtractor) filterLinks(links []ExtractedLink) []ExtractedLink {
 	var filtered []ExtractedLink
 
@@ -557,12 +568,14 @@ func (e *PDFExtractor) filterLinks(links []ExtractedLink) []ExtractedLink {
 		// Apply domain filter if specified
 		if len(e.options.FilterDomains) > 0 {
 			domainMatch := false
+
 			for _, domain := range e.options.FilterDomains {
 				if strings.Contains(strings.ToLower(link.URL), strings.ToLower(domain)) {
 					domainMatch = true
 					break
 				}
 			}
+
 			if !domainMatch {
 				continue
 			}
@@ -574,9 +587,8 @@ func (e *PDFExtractor) filterLinks(links []ExtractedLink) []ExtractedLink {
 	return filtered
 }
 
-// deduplicateLinks removes duplicate links based on URL
+// deduplicateLinks removes duplicate links based on URL.
 func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
-
 	// First pass: group by normalized DOI/identifier for smart deduplication
 	normalizedGroups := make(map[string][]ExtractedLink)
 
@@ -586,6 +598,7 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 	}
 
 	var deduped []ExtractedLink
+
 	seen := make(map[string]bool)
 
 	// Sort keys for deterministic iteration
@@ -593,6 +606,7 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 	for key := range normalizedGroups {
 		keys = append(keys, key)
 	}
+
 	sort.Strings(keys)
 
 	// For each group, pick the best candidate
@@ -603,6 +617,7 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 			link := group[0]
 			if !seen[link.URL] {
 				seen[link.URL] = true
+
 				deduped = append(deduped, link)
 			}
 		} else {
@@ -610,6 +625,7 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 			best := e.selectBestCandidate(group)
 			if !seen[best.URL] {
 				seen[best.URL] = true
+
 				deduped = append(deduped, best)
 			}
 		}
@@ -618,7 +634,7 @@ func (e *PDFExtractor) deduplicateLinks(links []ExtractedLink) []ExtractedLink {
 	return deduped
 }
 
-// getNormalizedKey creates a normalized key for deduplication
+// getNormalizedKey creates a normalized key for deduplication.
 func (e *PDFExtractor) getNormalizedKey(url string, linkType LinkType) string {
 	switch linkType {
 	case LinkTypeDOI:
@@ -635,7 +651,7 @@ func (e *PDFExtractor) getNormalizedKey(url string, linkType LinkType) string {
 	}
 }
 
-// normalizeDOI extracts the core DOI identifier, removing common corruption
+// normalizeDOI extracts the core DOI identifier, removing common corruption.
 func (e *PDFExtractor) normalizeDOI(url string) string {
 	// Remove DOI prefix variants
 	normalized := strings.ToLower(url)
@@ -654,12 +670,15 @@ func (e *PDFExtractor) normalizeDOI(url string) string {
 		if pipeIdx := strings.Index(doiPart, "|"); pipeIdx != -1 {
 			doiPart = doiPart[:pipeIdx]
 		}
+
 		if articleIdx := strings.Index(strings.ToLower(doiPart), "article"); articleIdx != -1 {
 			doiPart = doiPart[:articleIdx]
 		}
+
 		if natIdx := strings.Index(strings.ToLower(doiPart), "nature"); natIdx != -1 {
 			doiPart = doiPart[:natIdx]
 		}
+
 		if suppIdx := strings.Index(strings.ToLower(doiPart), "supplementary"); suppIdx != -1 {
 			doiPart = doiPart[:suppIdx]
 		}
@@ -683,7 +702,9 @@ func (e *PDFExtractor) normalizeDOI(url string) string {
 							return "doi:" + basePart + "-6"
 						}
 					}
+
 					doiPart = withoutCorruption
+
 					break
 				}
 			}
@@ -695,7 +716,7 @@ func (e *PDFExtractor) normalizeDOI(url string) string {
 	return "doi:" + normalized
 }
 
-// normalizeFigshare extracts the core figshare identifier
+// normalizeFigshare extracts the core figshare identifier.
 func (e *PDFExtractor) normalizeFigshare(url string) string {
 	normalized := strings.ToLower(url)
 
@@ -730,7 +751,7 @@ func (e *PDFExtractor) normalizeFigshare(url string) string {
 	return "figshare:" + normalized
 }
 
-// normalizeZenodo extracts the core zenodo identifier
+// normalizeZenodo extracts the core zenodo identifier.
 func (e *PDFExtractor) normalizeZenodo(url string) string {
 	normalized := strings.ToLower(url)
 
@@ -748,6 +769,7 @@ func (e *PDFExtractor) normalizeZenodo(url string) string {
 			if idx := strings.IndexAny(recordPath, "/?#"); idx != -1 {
 				recordPath = recordPath[:idx]
 			}
+
 			return "zenodo:record/" + recordPath
 		}
 	}
@@ -755,7 +777,7 @@ func (e *PDFExtractor) normalizeZenodo(url string) string {
 	return "zenodo:" + normalized
 }
 
-// adjustConfidenceForCorruption reduces confidence for URLs with obvious corruption patterns
+// adjustConfidenceForCorruption reduces confidence for URLs with obvious corruption patterns.
 func (e *PDFExtractor) adjustConfidenceForCorruption(links []ExtractedLink) []ExtractedLink {
 	for i := range links {
 		originalConfidence := links[i].Confidence
@@ -772,9 +794,11 @@ func (e *PDFExtractor) adjustConfidenceForCorruption(links []ExtractedLink) []Ex
 		if strings.Contains(strings.ToLower(url), "article") && links[i].Type == LinkTypeDOI {
 			links[i].Confidence = minFloat64(links[i].Confidence, 0.15)
 		}
+
 		if strings.Contains(strings.ToLower(url), "nature") && !strings.Contains(strings.ToLower(url), "nature.com") {
 			links[i].Confidence = minFloat64(links[i].Confidence, 0.15)
 		}
+
 		if strings.Contains(strings.ToLower(url), "supplementary") {
 			links[i].Confidence = minFloat64(links[i].Confidence, 0.2)
 		}
@@ -803,16 +827,17 @@ func (e *PDFExtractor) adjustConfidenceForCorruption(links []ExtractedLink) []Ex
 	return links
 }
 
-// normalizeGeoID extracts core GEO identifier
+// normalizeGeoID extracts core GEO identifier.
 func (e *PDFExtractor) normalizeGeoID(url string) string {
 	geoPattern := regexp.MustCompile(`\b(G[SP][EM]\d+|GPL\d+|GDS\d+)\b`)
 	if matches := geoPattern.FindStringSubmatch(strings.ToUpper(url)); len(matches) > 1 {
 		return "geo:" + strings.ToLower(matches[1])
 	}
+
 	return "geo:" + strings.ToLower(url)
 }
 
-// normalizeGenericURL normalizes URLs by domain and basic path
+// normalizeGenericURL normalizes URLs by domain and basic path.
 func (e *PDFExtractor) normalizeGenericURL(url string) string {
 	// Remove protocol for normalization
 	normalized := strings.ToLower(url)
@@ -824,6 +849,7 @@ func (e *PDFExtractor) normalizeGenericURL(url string) string {
 	if idx := strings.Index(normalized, "?"); idx != -1 {
 		normalized = normalized[:idx]
 	}
+
 	if idx := strings.Index(normalized, "#"); idx != -1 {
 		normalized = normalized[:idx]
 	}
@@ -831,7 +857,7 @@ func (e *PDFExtractor) normalizeGenericURL(url string) string {
 	return "url:" + normalized
 }
 
-// selectBestCandidate picks the best candidate from a group of similar links
+// selectBestCandidate picks the best candidate from a group of similar links.
 func (e *PDFExtractor) selectBestCandidate(candidates []ExtractedLink) ExtractedLink {
 	if len(candidates) == 1 {
 		return candidates[0]
@@ -851,7 +877,7 @@ func (e *PDFExtractor) selectBestCandidate(candidates []ExtractedLink) Extracted
 	return best
 }
 
-// scoreLinkQuality assigns a quality score to help pick the best candidate
+// scoreLinkQuality assigns a quality score to help pick the best candidate.
 func (e *PDFExtractor) scoreLinkQuality(link ExtractedLink) float64 {
 	score := link.Confidence
 
@@ -876,6 +902,7 @@ func (e *PDFExtractor) scoreLinkQuality(link ExtractedLink) float64 {
 	if strings.Contains(link.URL, "|") {
 		score -= 0.3
 	}
+
 	if strings.Contains(strings.ToLower(link.URL), "article") && link.Type == LinkTypeDOI {
 		score -= 0.2
 	}
@@ -896,7 +923,7 @@ func (e *PDFExtractor) scoreLinkQuality(link ExtractedLink) float64 {
 	return score
 }
 
-// detectSection attempts to determine which section of the paper this text belongs to
+// detectSection attempts to determine which section of the paper this text belongs to.
 func (e *PDFExtractor) detectSection(text string) string {
 	text = strings.ToLower(text)
 
@@ -935,16 +962,17 @@ func (e *PDFExtractor) detectSection(text string) string {
 	return "unknown"
 }
 
-// cleanText applies text cleaning patterns
+// cleanText applies text cleaning patterns.
 func (e *PDFExtractor) cleanText(text string) string {
 	cleaned := text
 	for _, cleaner := range e.cleaners {
 		cleaned = cleaner.ReplaceAllString(cleaned, " ")
 	}
+
 	return strings.TrimSpace(cleaned)
 }
 
-// extractContextForMatch extracts surrounding text for a matched identifier
+// extractContextForMatch extracts surrounding text for a matched identifier.
 func (e *PDFExtractor) extractContextForMatch(text, match string) string {
 	if !e.options.IncludeContext {
 		return ""
@@ -956,6 +984,7 @@ func (e *PDFExtractor) extractContextForMatch(text, match string) string {
 	}
 
 	length := e.options.ContextLength
+
 	start := index - length/2
 	if start < 0 {
 		start = 0
@@ -973,8 +1002,7 @@ func (e *PDFExtractor) extractContextForMatch(text, match string) string {
 	return strings.TrimSpace(context)
 }
 
-// reconstructURLFromContext attempts to find a complete URL in the context
-// when the extracted URL appears incomplete (e.g., ends with slash, missing ID)
+// when the extracted URL appears incomplete (e.g., ends with slash, missing ID).
 func (e *PDFExtractor) reconstructURLFromContext(partialURL, context string) string {
 	// Handle figshare URLs with comprehensive heuristics
 	if strings.Contains(partialURL, "figshare.com") {
@@ -987,19 +1015,21 @@ func (e *PDFExtractor) reconstructURLFromContext(partialURL, context string) str
 	if matches := repoPattern.FindStringSubmatch(context); len(matches) > 2 {
 		baseURL := strings.TrimSpace(strings.ReplaceAll(matches[1], " ", ""))
 		id := matches[2]
+
 		if !strings.HasSuffix(baseURL, "/") {
 			baseURL += "/"
 		}
+
 		reconstructed := baseURL + id
+
 		return reconstructed
 	}
 
 	return partialURL
 }
 
-// reconstructFigshareURL applies comprehensive heuristics to reconstruct figshare URLs
+// reconstructFigshareURL applies comprehensive heuristics to reconstruct figshare URLs.
 func (e *PDFExtractor) reconstructFigshareURL(partialURL, context string) string {
-
 	// Normalize the partial URL
 	normalized := strings.TrimSpace(partialURL)
 	normalized = strings.TrimSuffix(normalized, "/")
@@ -1032,7 +1062,7 @@ func (e *PDFExtractor) reconstructFigshareURL(partialURL, context string) string
 	return normalized
 }
 
-// expandContextWindow extracts a larger context window around the URL
+// expandContextWindow extracts a larger context window around the URL.
 func (e *PDFExtractor) expandContextWindow(url, context string, windowSize int) string {
 	urlIndex := strings.Index(context, url)
 	if urlIndex == -1 {
@@ -1052,7 +1082,7 @@ func (e *PDFExtractor) expandContextWindow(url, context string, windowSize int) 
 	return context[start:end]
 }
 
-// findSpacedNumericID looks for numeric IDs separated by spaces
+// findSpacedNumericID looks for numeric IDs separated by spaces.
 func (e *PDFExtractor) findSpacedNumericID(url, context string) string {
 	// Pattern: figshare.com/path/name/ 123456 or figshare.com/path/name 123456
 	// Use a more aggressive search that looks for the base URL pattern + any trailing ID
@@ -1071,6 +1101,7 @@ func (e *PDFExtractor) findSpacedNumericID(url, context string) string {
 			if strings.Contains(url, "/articles/") && !strings.HasSuffix(cleanURL, "/") {
 				cleanURL += "/"
 			}
+
 			return cleanURL + matches[1]
 		}
 	}
@@ -1090,7 +1121,7 @@ func (e *PDFExtractor) findSpacedNumericID(url, context string) string {
 	return url
 }
 
-// findIDAfterPunctuation looks for IDs after punctuation marks
+// findIDAfterPunctuation looks for IDs after punctuation marks.
 func (e *PDFExtractor) findIDAfterPunctuation(url, context string) string {
 	// Pattern: figshare.com/path, 123456 or figshare.com/path. 123456
 	pattern := fmt.Sprintf(`%s[,.\s]+(\d{6,8})`, regexp.QuoteMeta(url))
@@ -1101,13 +1132,14 @@ func (e *PDFExtractor) findIDAfterPunctuation(url, context string) string {
 		if strings.Contains(url, "/articles/") && !strings.HasSuffix(cleanURL, "/") {
 			cleanURL += "/"
 		}
+
 		return cleanURL + matches[1]
 	}
 
 	return url
 }
 
-// cleanVersionSuffix removes figshare version suffixes
+// cleanVersionSuffix removes figshare version suffixes.
 func (e *PDFExtractor) cleanVersionSuffix(url string) string {
 	// Remove patterns like .v2, .2.3MouselungdatasetThis, etc.
 	versionPatterns := []*regexp.Regexp{
@@ -1127,7 +1159,7 @@ func (e *PDFExtractor) cleanVersionSuffix(url string) string {
 	return url
 }
 
-// ensureMinimalFigshareStructure ensures figshare URLs have proper structure
+// ensureMinimalFigshareStructure ensures figshare URLs have proper structure.
 func (e *PDFExtractor) ensureMinimalFigshareStructure(url string) string {
 	// For figshare articles, ensure they have at least /articles/type/name structure
 	if strings.Contains(url, "/articles/") {
@@ -1149,7 +1181,7 @@ func (e *PDFExtractor) ensureMinimalFigshareStructure(url string) string {
 	return url
 }
 
-// isIncompleteURL checks if a URL appears to be incomplete or truncated
+// isIncompleteURL checks if a URL appears to be incomplete or truncated.
 func (e *PDFExtractor) isIncompleteURL(url string) bool {
 	// For figshare URLs, we now handle completion in post-processing
 	// so we're less aggressive about marking them as incomplete
@@ -1158,6 +1190,7 @@ func (e *PDFExtractor) isIncompleteURL(url string) bool {
 		if strings.HasSuffix(url, "figshare.com") || strings.HasSuffix(url, "figshare.com/") {
 			return true
 		}
+
 		return false
 	}
 
@@ -1174,7 +1207,7 @@ func (e *PDFExtractor) isIncompleteURL(url string) bool {
 	return false
 }
 
-// adjustConfidenceByValidation adjusts the confidence score based on HTTP validation results
+// adjustConfidenceByValidation adjusts the confidence score based on HTTP validation results.
 func (e *PDFExtractor) adjustConfidenceByValidation(originalConfidence float64, validation *ValidationResult) float64 {
 	if validation == nil {
 		return originalConfidence
@@ -1210,15 +1243,16 @@ func (e *PDFExtractor) adjustConfidenceByValidation(originalConfidence float64, 
 	}
 }
 
-// minFloat64 returns the smaller of two float64 values (duplicate for clarity)
+// minFloat64 returns the smaller of two float64 values (duplicate for clarity).
 func minFloat64(a, b float64) float64 {
 	if a < b {
 		return a
 	}
+
 	return b
 }
 
-// validateLinksParallel validates links in parallel using a worker pool
+// validateLinksParallel validates links in parallel using a worker pool.
 func (e *PDFExtractor) validateLinksParallel(result *ExtractionResult) (accessibleCount, validatedCount int) {
 	if len(result.Links) == 0 {
 		return 0, 0
@@ -1255,6 +1289,7 @@ func (e *PDFExtractor) validateLinksParallel(result *ExtractionResult) (accessib
 	for i := range result.Links {
 		linkChan <- i
 	}
+
 	close(linkChan)
 
 	// Collect results
@@ -1269,6 +1304,7 @@ func (e *PDFExtractor) validateLinksParallel(result *ExtractionResult) (accessib
 
 		result.Links[vResult.index].Validation = vResult.validation
 		validatedCount++
+
 		if vResult.validation.IsAccessible {
 			accessibleCount++
 		}
@@ -1280,16 +1316,15 @@ func (e *PDFExtractor) validateLinksParallel(result *ExtractionResult) (accessib
 	return accessibleCount, validatedCount
 }
 
-// validationResult holds the result of a single link validation
+// validationResult holds the result of a single link validation.
 type validationResult struct {
-	index      int
-	validation *ValidationResult
 	err        error
+	validation *ValidationResult
+	index      int
 }
 
-// cleanURL removes common PDF extraction artifacts from URLs
+// cleanURL removes common PDF extraction artifacts from URLs.
 func (e *PDFExtractor) cleanURL(rawURL string) string {
-
 	// Remove common trailing text that gets concatenated in PDFs
 	// Only match these as complete words to avoid breaking valid paths
 	stopPatterns := []string{
@@ -1352,7 +1387,7 @@ func (e *PDFExtractor) cleanURL(rawURL string) string {
 	return strings.TrimSpace(rawURL)
 }
 
-// isValidURL checks if a URL is reasonable and not malformed
+// isValidURL checks if a URL is reasonable and not malformed.
 func (e *PDFExtractor) isValidURL(rawURL string) bool {
 	// Basic length check - extremely long URLs are likely corrupted
 	if len(rawURL) > 500 {
@@ -1392,6 +1427,7 @@ func (e *PDFExtractor) isValidURL(rawURL string) bool {
 		if matched, _ := regexp.MatchString(`^\d{4}\.\d{4,5}(?:v\d+)?$`, rawURL); matched {
 			return true
 		}
+
 		if strings.HasPrefix(rawURL, "https://arxiv.org/abs/") {
 			return true
 		}

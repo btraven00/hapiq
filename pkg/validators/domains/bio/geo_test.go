@@ -168,11 +168,11 @@ func TestGEOValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          string
-		expectValid    bool
 		expectType     string
 		expectSubtype  string
 		expectGeoType  string
 		expectTags     []string
+		expectValid    bool
 		expectWarnings bool
 	}{
 		{
@@ -253,7 +253,6 @@ func TestGEOValidator_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := validator.Validate(ctx, tt.input)
-
 			if err != nil {
 				t.Fatalf("Validate() returned error: %v", err)
 			}
@@ -518,8 +517,8 @@ func TestGEOValidator_Performance(t *testing.T) {
 	// Test validation performance for non-network operations
 	testCases := []struct {
 		input       string
-		maxDuration time.Duration
 		description string
+		maxDuration time.Duration
 	}{
 		{
 			input:       "invalid-input",
@@ -594,7 +593,7 @@ func TestGEOValidator_GetPatterns(t *testing.T) {
 	}
 }
 
-// Test metadata extraction
+// Test metadata extraction.
 func TestGEOValidator_Metadata(t *testing.T) {
 	validator := NewGEOValidator()
 	ctx := context.Background()

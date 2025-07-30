@@ -16,19 +16,19 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
-// EUtilsResponse represents the response structure from NCBI E-utilities
+// EUtilsResponse represents the response structure from NCBI E-utilities.
 type EUtilsResponse struct {
 	XMLName xml.Name `xml:"eSummaryResult"`
 	DocSum  []DocSum `xml:"DocSum"`
 }
 
-// DocSum represents a document summary from E-utilities
+// DocSum represents a document summary from E-utilities.
 type DocSum struct {
 	ID    string `xml:"Id"`
 	Items []Item `xml:"Item"`
 }
 
-// Item represents individual fields in the document summary
+// Item represents individual fields in the document summary.
 type Item struct {
 	Name    string `xml:"Name,attr"`
 	Type    string `xml:"Type,attr"`
@@ -36,7 +36,7 @@ type Item struct {
 	Items   []Item `xml:"Item,omitempty"`
 }
 
-// ESearchResponse represents the response from ESearch utility
+// ESearchResponse represents the response from ESearch utility.
 type ESearchResponse struct {
 	XMLName   xml.Name `xml:"eSearchResult"`
 	Count     string   `xml:"Count"`
@@ -51,12 +51,12 @@ type ESearchResponse struct {
 	} `xml:"ErrorList,omitempty"`
 }
 
-// IdList contains the list of UIDs returned by ESearch
+// IdList contains the list of UIDs returned by ESearch.
 type IdList struct {
 	IDs []string `xml:"Id"`
 }
 
-// getSeriesMetadata retrieves metadata for a GEO Series (GSE) using E-utilities
+// getSeriesMetadata retrieves metadata for a GEO Series (GSE) using E-utilities.
 func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	// First, search for the GSE to get the UID
 	uid, err := d.searchGEORecord(ctx, id)
@@ -148,7 +148,7 @@ func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*down
 	return metadata, nil
 }
 
-// getSampleMetadata retrieves metadata for a GEO Sample (GSM) using E-utilities
+// getSampleMetadata retrieves metadata for a GEO Sample (GSM) using E-utilities.
 func (d *GEODownloader) getSampleMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	// Search for the GSM to get the UID
 	uid, err := d.searchGEORecord(ctx, id)
@@ -211,7 +211,7 @@ func (d *GEODownloader) getSampleMetadata(ctx context.Context, id string) (*down
 	return metadata, nil
 }
 
-// getPlatformMetadata retrieves metadata for a GEO Platform (GPL) using E-utilities
+// getPlatformMetadata retrieves metadata for a GEO Platform (GPL) using E-utilities.
 func (d *GEODownloader) getPlatformMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	// Search for the GPL to get the UID
 	uid, err := d.searchGEORecord(ctx, id)
@@ -266,7 +266,7 @@ func (d *GEODownloader) getPlatformMetadata(ctx context.Context, id string) (*do
 	return metadata, nil
 }
 
-// getDatasetMetadata retrieves metadata for a GEO Dataset (GDS) using E-utilities
+// getDatasetMetadata retrieves metadata for a GEO Dataset (GDS) using E-utilities.
 func (d *GEODownloader) getDatasetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	// Search for the GDS to get the UID
 	uid, err := d.searchGEORecord(ctx, id)
@@ -322,7 +322,7 @@ func (d *GEODownloader) getDatasetMetadata(ctx context.Context, id string) (*dow
 	return metadata, nil
 }
 
-// searchGEORecord searches for a GEO record and returns its UID
+// searchGEORecord searches for a GEO record and returns its UID.
 func (d *GEODownloader) searchGEORecord(ctx context.Context, accession string) (string, error) {
 	// Construct search query
 	query := fmt.Sprintf("%s[Accession]", accession)
@@ -365,7 +365,7 @@ func (d *GEODownloader) searchGEORecord(ctx context.Context, accession string) (
 	return response.IdList.IDs[0], nil
 }
 
-// getSummary retrieves document summary for a given UID
+// getSummary retrieves document summary for a given UID.
 func (d *GEODownloader) getSummary(ctx context.Context, database, uid string) (*DocSum, error) {
 	// Build ESummary URL
 	params := url.Values{}
@@ -398,7 +398,7 @@ func (d *GEODownloader) getSummary(ctx context.Context, database, uid string) (*
 	return &response.DocSum[0], nil
 }
 
-// getRelatedSamples retrieves related sample IDs for a series
+// getRelatedSamples retrieves related sample IDs for a series.
 func (d *GEODownloader) getRelatedSamples(ctx context.Context, uid string) ([]string, error) {
 	// Use ELink to find related GSM records
 	params := url.Values{}
@@ -426,7 +426,7 @@ func (d *GEODownloader) getRelatedSamples(ctx context.Context, uid string) ([]st
 	return []string{}, nil
 }
 
-// getLinkedPubMed retrieves linked PubMed IDs
+// getLinkedPubMed retrieves linked PubMed IDs.
 func (d *GEODownloader) getLinkedPubMed(ctx context.Context, uid string) ([]string, error) {
 	// Use ELink to find related PubMed records
 	params := url.Values{}
@@ -451,7 +451,7 @@ func (d *GEODownloader) getLinkedPubMed(ctx context.Context, uid string) ([]stri
 	return []string{}, nil
 }
 
-// makeEUtilsRequest makes an HTTP request to E-utilities and returns the response
+// makeEUtilsRequest makes an HTTP request to E-utilities and returns the response.
 func (d *GEODownloader) makeEUtilsRequest(ctx context.Context, url string) ([]byte, error) {
 	// Add API key to URL if available
 	if d.apiKey != "" {
@@ -459,12 +459,13 @@ func (d *GEODownloader) makeEUtilsRequest(ctx context.Context, url string) ([]by
 		if !strings.Contains(url, "?") {
 			separator = "?"
 		}
+
 		url = url + separator + "api_key=" + d.apiKey
 	}
 
 	// Note: Rate limiting is applied by the caller, not here to avoid double rate limiting
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +492,7 @@ func (d *GEODownloader) makeEUtilsRequest(ctx context.Context, url string) ([]by
 	return content, nil
 }
 
-// parseSampleInfo parses sample and subset information from SSInfo field
+// parseSampleInfo parses sample and subset information from SSInfo field.
 func (d *GEODownloader) parseSampleInfo(item Item) map[string]interface{} {
 	info := make(map[string]interface{})
 
@@ -512,7 +513,7 @@ func (d *GEODownloader) parseSampleInfo(item Item) map[string]interface{} {
 	return info
 }
 
-// parseSubsetInfo parses experimental subset information
+// parseSubsetInfo parses experimental subset information.
 func (d *GEODownloader) parseSubsetInfo(item Item) []string {
 	var subsets []string
 
@@ -525,7 +526,7 @@ func (d *GEODownloader) parseSubsetInfo(item Item) []string {
 	return subsets
 }
 
-// parseEUtilsDate parses E-utilities date formats
+// parseEUtilsDate parses E-utilities date formats.
 func (d *GEODownloader) parseEUtilsDate(dateStr string) (time.Time, error) {
 	if dateStr == "" {
 		return time.Time{}, fmt.Errorf("empty date string")
@@ -549,10 +550,11 @@ func (d *GEODownloader) parseEUtilsDate(dateStr string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
 }
 
-// min returns the minimum of two integers
+// min returns the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
+
 	return b
 }

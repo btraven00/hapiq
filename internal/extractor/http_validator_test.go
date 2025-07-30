@@ -54,7 +54,6 @@ func TestHTTPValidator_ValidateURL_Success(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL)
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}
@@ -110,7 +109,6 @@ func TestHTTPValidator_ValidateURL_Redirects(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL+"/start")
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}
@@ -149,7 +147,6 @@ func TestHTTPValidator_ValidateURL_HeadFirst(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL)
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}
@@ -193,7 +190,6 @@ func TestHTTPValidator_ValidateURL_HeadFailsGetSucceeds(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL)
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}
@@ -218,7 +214,6 @@ func TestHTTPValidator_ValidateURL_404(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL)
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}
@@ -237,7 +232,6 @@ func TestHTTPValidator_ValidateURL_InvalidURL(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, "not-a-valid-url")
-
 	if err != nil {
 		t.Fatalf("ValidateURL should not return error for invalid URL, got %v", err)
 	}
@@ -515,7 +509,6 @@ func TestHTTPValidator_RangeRequest(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := validator.ValidateURL(ctx, server.URL)
-
 	if err != nil {
 		t.Fatalf("ValidateURL failed: %v", err)
 	}

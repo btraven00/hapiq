@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// TestData contains example URLs and identifiers for testing
+// TestData contains example URLs and identifiers for testing.
 type TestData struct {
 	ValidURLs     []URLTestCase
 	ValidDOIs     []DOITestCase
@@ -14,40 +14,40 @@ type TestData struct {
 	MockResponses []MockResponse
 }
 
-// URLTestCase represents a test case for URL validation
+// URLTestCase represents a test case for URL validation.
 type URLTestCase struct {
 	URL          string
-	Expected     URLExpectation
 	Description  string
-	ShouldPass   bool
+	Expected     URLExpectation
 	ResponseCode int
+	ShouldPass   bool
 }
 
-// DOITestCase represents a test case for DOI validation
+// DOITestCase represents a test case for DOI validation.
 type DOITestCase struct {
 	DOI         string
-	Expected    DOIExpectation
 	Description string
+	Expected    DOIExpectation
 	ShouldPass  bool
 }
 
-// InvalidTestCase represents invalid inputs that should fail
+// InvalidTestCase represents invalid inputs that should fail.
 type InvalidTestCase struct {
 	Input       string
 	Description string
 	ExpectedErr string
 }
 
-// URLExpectation defines what we expect from a URL validation
+// URLExpectation defines what we expect from a URL validation.
 type URLExpectation struct {
 	Type              string
-	IsDatasetRepo     bool
-	LikelihoodScore   float64
 	ContentType       string
 	ExpectedFileTypes []string
+	LikelihoodScore   float64
+	IsDatasetRepo     bool
 }
 
-// DOIExpectation defines what we expect from a DOI validation
+// DOIExpectation defines what we expect from a DOI validation.
 type DOIExpectation struct {
 	Type            string
 	Prefix          string
@@ -55,17 +55,17 @@ type DOIExpectation struct {
 	LikelihoodScore float64
 }
 
-// MockResponse represents a mock HTTP response for testing
+// MockResponse represents a mock HTTP response for testing.
 type MockResponse struct {
-	URL           string
-	StatusCode    int
-	ContentType   string
-	ContentLength int64
 	Headers       map[string]string
+	URL           string
+	ContentType   string
 	Body          string
+	StatusCode    int
+	ContentLength int64
 }
 
-// GetTestData returns comprehensive test data for hapiq
+// GetTestData returns comprehensive test data for hapiq.
 func GetTestData() *TestData {
 	return &TestData{
 		ValidURLs: []URLTestCase{
@@ -315,7 +315,7 @@ func GetTestData() *TestData {
 	}
 }
 
-// CreateMockServer creates an HTTP test server with predefined responses
+// CreateMockServer creates an HTTP test server with predefined responses.
 func CreateMockServer() *httptest.Server {
 	data := GetTestData()
 	responseMap := make(map[string]MockResponse)
@@ -356,8 +356,7 @@ func CreateMockServer() *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
-// RealWorldExamples contains actual URLs that can be used for integration testing
-// Note: These should be used sparingly to avoid overwhelming external services
+// Note: These should be used sparingly to avoid overwhelming external services.
 var RealWorldExamples = struct {
 	ZenodoRecord  string
 	FigshareData  string
@@ -370,7 +369,7 @@ var RealWorldExamples = struct {
 	GitHubRelease: "https://github.com/scikit-learn/scikit-learn/releases/tag/1.3.0",
 }
 
-// TimingConstraints defines expected response time constraints for testing
+// TimingConstraints defines expected response time constraints for testing.
 var TimingConstraints = struct {
 	MaxValidationTime  time.Duration
 	MaxHTTPRequestTime time.Duration
@@ -381,7 +380,7 @@ var TimingConstraints = struct {
 	MaxDownloadTime:    30 * time.Second,
 }
 
-// FileTypePatterns contains common file extensions found in datasets
+// FileTypePatterns contains common file extensions found in datasets.
 var FileTypePatterns = map[string][]string{
 	"data_files": {
 		"csv", "tsv", "json", "xml", "xlsx", "xls",
@@ -401,7 +400,7 @@ var FileTypePatterns = map[string][]string{
 	},
 }
 
-// ExpectedLikelihoodRanges defines expected likelihood score ranges
+// ExpectedLikelihoodRanges defines expected likelihood score ranges.
 var ExpectedLikelihoodRanges = map[string][2]float64{
 	"zenodo_record":    {0.90, 1.00},
 	"figshare_article": {0.90, 1.00},

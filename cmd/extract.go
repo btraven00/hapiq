@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/btraven00/hapiq/internal/extractor"
 	"github.com/spf13/cobra"
+
+	"github.com/btraven00/hapiq/internal/extractor"
 
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
 )
@@ -32,7 +33,7 @@ var (
 	keep404s        bool
 )
 
-// extractCmd represents the extract command
+// extractCmd represents the extract command.
 var extractCmd = &cobra.Command{
 	Use:   "extract [file...]",
 	Short: "Extract and validate links from PDF documents",
@@ -130,6 +131,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 		result.Pages, result.TotalText, result.ProcessTime)
 	// Count links above confidence threshold
 	highConfidenceLinks := 0
+
 	for _, link := range result.Links {
 		if link.Confidence >= minConfidence {
 			highConfidenceLinks++
@@ -141,6 +143,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 
 	if len(result.Errors) > 0 {
 		fmt.Printf("\n❌ Errors:\n")
+
 		for _, err := range result.Errors {
 			fmt.Printf("   • %s\n", err)
 		}
@@ -148,6 +151,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 
 	if len(result.Warnings) > 0 && !quiet {
 		fmt.Printf("\n⚠️  Warnings:\n")
+
 		for _, warning := range result.Warnings {
 			fmt.Printf("   • %s\n", warning)
 		}
@@ -155,6 +159,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 
 	// Filter links by confidence threshold and group by type
 	linksByType := make(map[extractor.LinkType][]extractor.ExtractedLink)
+
 	for _, link := range result.Links {
 		if link.Confidence >= minConfidence {
 			linksByType[link.Type] = append(linksByType[link.Type], link)
@@ -210,6 +215,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 
 			// Add validation status if available
 			status := ""
+
 			if link.Validation != nil {
 				if link.Validation.IsAccessible {
 					status = " ✅"
@@ -224,6 +230,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 
 	// Summary statistics
 	fmt.Printf("\n📈 Summary:\n")
+
 	for linkType, count := range result.Summary.LinksByType {
 		if count > 0 {
 			fmt.Printf("   %s: %d\n", linkType, count)
@@ -242,6 +249,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 func outputJSON(result *extractor.ExtractionResult) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(result)
 }
 
@@ -303,7 +311,9 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 
 	// Start progress tracking
 	var progressTracker *extractor.ProgressTracker
+
 	var progressMu sync.Mutex
+
 	if showProgress {
 		progressTracker = extractor.NewProgressTracker()
 
@@ -334,8 +344,11 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 
 	// Collect results
 	var allResults []*extractor.ExtractionResult
+
 	var totalLinks, totalAccessible, totalValidated int
+
 	var totalProcessTime time.Duration
+
 	var failedFiles []string
 
 	// Process progress updates and results
@@ -359,9 +372,11 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 		case result := <-pool.Results():
 			if result.Error != nil {
 				failedFiles = append(failedFiles, result.Task.Filename)
+
 				if quiet {
 					fmt.Fprintf(os.Stderr, "❌ Failed: %s\n", filepath.Base(result.Task.Filename))
 				}
+
 				continue
 			}
 
@@ -383,15 +398,18 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 			progressTracker.PrintProgress()
 			fmt.Println() // New line after final progress
 		}
+
 		progressTracker = nil
 		progressMu.Unlock()
 	}
 
 	// Show completion summary
 	fmt.Printf("✅ Completed processing %d files", len(filenames))
+
 	if len(failedFiles) > 0 {
 		fmt.Printf(" (%d failed)", len(failedFiles))
 	}
+
 	fmt.Printf(" in %v\n", totalProcessTime)
 
 	if len(failedFiles) > 0 && !quiet {
@@ -407,6 +425,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 		fmt.Println("⚠️  No files were successfully processed")
 		return nil
 	}
+
 	switch strings.ToLower(outputFormat) {
 	case "json":
 		return json.NewEncoder(os.Stdout).Encode(map[string]interface{}{
@@ -468,14 +487,17 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 		fmt.Printf("═══════════════════════════\n")
 		fmt.Printf("Files processed: %d\n", len(results))
 		fmt.Printf("Total links found: %d\n", totalLinks)
+
 		if totalValidated > 0 {
 			accessiblePercent := float64(totalAccessible) / float64(totalValidated) * 100
 			fmt.Printf("Links validated: %d (%.1f%% accessible)\n", totalValidated, accessiblePercent)
 		}
+
 		fmt.Printf("Total processing time: %v\n", totalTime)
 		fmt.Printf("Average per file: %v\n", totalTime/time.Duration(len(results)))
 
 		fmt.Printf("\n📄 Per-file Results:\n")
+
 		for _, result := range results {
 			filename := filepath.Base(result.Filename)
 			fmt.Printf("• %s: %d links (%d unique) in %v\n",
@@ -489,6 +511,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 		// Show top domains if links were found
 		if totalLinks > 0 {
 			domainCounts := make(map[string]int)
+
 			for _, result := range results {
 				for _, link := range result.Links {
 					// Extract domain from URL
@@ -508,6 +531,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 				domain string
 				count  int
 			}
+
 			var domains []domainCount
 			for domain, count := range domainCounts {
 				domains = append(domains, domainCount{domain, count})
@@ -527,6 +551,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 			if len(domains) < maxShow {
 				maxShow = len(domains)
 			}
+
 			for i := 0; i < maxShow; i++ {
 				fmt.Printf("• %s: %d links\n", domains[i].domain, domains[i].count)
 			}

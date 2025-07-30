@@ -11,16 +11,16 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// BioDomainValidator provides common functionality for bioinformatics validators
+// BioDomainValidator provides common functionality for bioinformatics validators.
 type BioDomainValidator struct {
+	client      *http.Client
 	name        string
 	description string
 	patterns    []domains.Pattern
 	priority    int
-	client      *http.Client
 }
 
-// NewBioDomainValidator creates a new bioinformatics domain validator
+// NewBioDomainValidator creates a new bioinformatics domain validator.
 func NewBioDomainValidator(name, description string, priority int) *BioDomainValidator {
 	return &BioDomainValidator{
 		name:        name,
@@ -33,32 +33,32 @@ func NewBioDomainValidator(name, description string, priority int) *BioDomainVal
 	}
 }
 
-// Name returns the validator name
+// Name returns the validator name.
 func (v *BioDomainValidator) Name() string {
 	return v.name
 }
 
-// Domain returns the scientific domain
+// Domain returns the scientific domain.
 func (v *BioDomainValidator) Domain() string {
 	return "bioinformatics"
 }
 
-// Description returns the validator description
+// Description returns the validator description.
 func (v *BioDomainValidator) Description() string {
 	return v.description
 }
 
-// Priority returns the validator priority
+// Priority returns the validator priority.
 func (v *BioDomainValidator) Priority() int {
 	return v.priority
 }
 
-// GetPatterns returns the patterns this validator recognizes
+// GetPatterns returns the patterns this validator recognizes.
 func (v *BioDomainValidator) GetPatterns() []domains.Pattern {
 	return v.patterns
 }
 
-// AddPattern adds a new pattern to the validator
+// AddPattern adds a new pattern to the validator.
 func (v *BioDomainValidator) AddPattern(patternType domains.PatternType, pattern, description string, examples []string) {
 	v.patterns = append(v.patterns, domains.Pattern{
 		Type:        patternType,
@@ -68,7 +68,7 @@ func (v *BioDomainValidator) AddPattern(patternType domains.PatternType, pattern
 	})
 }
 
-// ExtractIDFromURL attempts to extract an ID from a URL using common bioinformatics patterns
+// ExtractIDFromURL attempts to extract an ID from a URL using common bioinformatics patterns.
 func (v *BioDomainValidator) ExtractIDFromURL(input string) (string, bool) {
 	u, err := url.Parse(input)
 	if err != nil {
@@ -99,7 +99,7 @@ func (v *BioDomainValidator) ExtractIDFromURL(input string) (string, bool) {
 	return "", false
 }
 
-// isCommonPathSegment checks if a path segment is a common non-ID segment
+// isCommonPathSegment checks if a path segment is a common non-ID segment.
 func (v *BioDomainValidator) isCommonPathSegment(segment string) bool {
 	commonSegments := map[string]bool{
 		"query":     true,
@@ -120,10 +120,11 @@ func (v *BioDomainValidator) isCommonPathSegment(segment string) bool {
 		"v1":        true,
 		"v2":        true,
 	}
+
 	return commonSegments[strings.ToLower(segment)]
 }
 
-// looksLikeID checks if a string looks like a biological database ID
+// looksLikeID checks if a string looks like a biological database ID.
 func (v *BioDomainValidator) looksLikeID(s string) bool {
 	// Common patterns for biological IDs
 	patterns := []string{
@@ -145,11 +146,11 @@ func (v *BioDomainValidator) looksLikeID(s string) bool {
 	return false
 }
 
-// ValidateHTTPAccess performs HTTP validation for a URL
+// ValidateHTTPAccess performs HTTP validation for a URL.
 func (v *BioDomainValidator) ValidateHTTPAccess(ctx context.Context, url string) (*HTTPValidationResult, error) {
 	start := time.Now()
 
-	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, http.NoBody)
 	if err != nil {
 		return &HTTPValidationResult{
 			URL:            url,
@@ -182,6 +183,7 @@ func (v *BioDomainValidator) ValidateHTTPAccess(ctx context.Context, url string)
 
 	// Extract additional metadata
 	result.Headers = make(map[string]string)
+
 	for key, values := range resp.Header {
 		if len(values) > 0 {
 			result.Headers[key] = values[0]
@@ -191,7 +193,7 @@ func (v *BioDomainValidator) ValidateHTTPAccess(ctx context.Context, url string)
 	return result, nil
 }
 
-// CalculateBioLikelihood calculates likelihood based on bioinformatics-specific factors
+// CalculateBioLikelihood calculates likelihood based on bioinformatics-specific factors.
 func (v *BioDomainValidator) CalculateBioLikelihood(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) float64 {
 	score := 0.0
 
@@ -206,6 +208,7 @@ func (v *BioDomainValidator) CalculateBioLikelihood(result *domains.DomainValida
 
 		// Content type bonus
 		contentType := strings.ToLower(httpResult.ContentType)
+
 		switch {
 		case strings.Contains(contentType, "text/html"):
 			score += 0.1 // Landing page
@@ -247,20 +250,20 @@ func (v *BioDomainValidator) CalculateBioLikelihood(result *domains.DomainValida
 	return score
 }
 
-// HTTPValidationResult contains HTTP validation results
+// HTTPValidationResult contains HTTP validation results.
 type HTTPValidationResult struct {
-	URL            string            `json:"url"`
-	Accessible     bool              `json:"accessible"`
-	StatusCode     int               `json:"status_code"`
-	ContentType    string            `json:"content_type,omitempty"`
-	ContentLength  int64             `json:"content_length,omitempty"`
-	LastModified   string            `json:"last_modified,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
+	URL            string            `json:"url"`
+	ContentType    string            `json:"content_type,omitempty"`
+	LastModified   string            `json:"last_modified,omitempty"`
 	Error          string            `json:"error,omitempty"`
+	StatusCode     int               `json:"status_code"`
+	ContentLength  int64             `json:"content_length,omitempty"`
 	ValidationTime time.Duration     `json:"validation_time"`
+	Accessible     bool              `json:"accessible"`
 }
 
-// Common biological database URL patterns
+// Common biological database URL patterns.
 var CommonBioURLPatterns = map[string]string{
 	"ncbi":         `^https?://www\.ncbi\.nlm\.nih\.gov/`,
 	"ebi":          `^https?://www\.ebi\.ac\.uk/`,
@@ -273,17 +276,18 @@ var CommonBioURLPatterns = map[string]string{
 	"metabolights": `^https?://www\.ebi\.ac\.uk/metabolights/`,
 }
 
-// IsKnownBioDomain checks if a URL belongs to a known bioinformatics domain
+// IsKnownBioDomain checks if a URL belongs to a known bioinformatics domain.
 func IsKnownBioDomain(url string) (string, bool) {
 	for domain, pattern := range CommonBioURLPatterns {
 		if matched, _ := regexp.MatchString(pattern, url); matched {
 			return domain, true
 		}
 	}
+
 	return "", false
 }
 
-// ExtractDatabaseFromURL attempts to extract the database name from a URL
+// ExtractDatabaseFromURL attempts to extract the database name from a URL.
 func ExtractDatabaseFromURL(inputURL string) string {
 	if domain, found := IsKnownBioDomain(inputURL); found {
 		return domain

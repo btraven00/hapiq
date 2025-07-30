@@ -15,46 +15,46 @@ import (
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
 )
 
-// Config holds configuration for the checker
+// Config holds configuration for the checker.
 type Config struct {
+	OutputFormat   string
+	TimeoutSeconds int
 	Verbose        bool
 	Download       bool
-	TimeoutSeconds int
-	OutputFormat   string
 }
 
-// Result represents the result of checking a dataset URL
+// Result represents the result of checking a dataset URL.
 type Result struct {
-	Target          string                            `json:"target"`
-	Valid           bool                              `json:"valid"`
-	HTTPStatus      int                               `json:"http_status,omitempty"`
-	ContentType     string                            `json:"content_type,omitempty"`
-	ContentLength   int64                             `json:"content_length,omitempty"`
-	ResponseTime    time.Duration                     `json:"response_time,omitempty"`
-	DatasetType     string                            `json:"dataset_type,omitempty"`
-	LikelihoodScore float64                           `json:"likelihood_score"`
-	Error           string                            `json:"error,omitempty"`
 	Metadata        map[string]string                 `json:"metadata,omitempty"`
 	FileStructure   *FileStructure                    `json:"file_structure,omitempty"`
+	Target          string                            `json:"target"`
+	ContentType     string                            `json:"content_type,omitempty"`
+	DatasetType     string                            `json:"dataset_type,omitempty"`
+	Error           string                            `json:"error,omitempty"`
 	DomainResults   []*domains.DomainValidationResult `json:"domain_results,omitempty"`
+	HTTPStatus      int                               `json:"http_status,omitempty"`
+	ContentLength   int64                             `json:"content_length,omitempty"`
+	ResponseTime    time.Duration                     `json:"response_time,omitempty"`
+	LikelihoodScore float64                           `json:"likelihood_score"`
+	Valid           bool                              `json:"valid"`
 }
 
-// FileStructure represents the structure of downloaded files
+// FileStructure represents the structure of downloaded files.
 type FileStructure struct {
-	TotalFiles int            `json:"total_files"`
-	TotalSize  int64          `json:"total_size"`
 	FileTypes  map[string]int `json:"file_types"`
 	Extensions map[string]int `json:"extensions"`
 	Archives   []string       `json:"archives,omitempty"`
+	TotalFiles int            `json:"total_files"`
+	TotalSize  int64          `json:"total_size"`
 }
 
-// Checker performs dataset validation and analysis
+// Checker performs dataset validation and analysis.
 type Checker struct {
-	config Config
 	client *http.Client
+	config Config
 }
 
-// New creates a new Checker instance
+// New creates a new Checker instance.
 func New(config Config) *Checker {
 	client := &http.Client{
 		Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
@@ -69,13 +69,13 @@ func New(config Config) *Checker {
 	}
 }
 
-// initializeDomainValidators sets up the domain-specific validators
+// initializeDomainValidators sets up the domain-specific validators.
 func initializeDomainValidators() {
 	// Domain validators are now registered via init() functions in their packages
 	// This function is kept for any additional runtime configuration if needed
 }
 
-// Check validates and analyzes a dataset URL or identifier
+// Check validates and analyzes a dataset URL or identifier.
 func (c *Checker) Check(target string) (*Result, error) {
 	result := &Result{
 		Target:   target,
@@ -111,7 +111,9 @@ func (c *Checker) Check(target string) (*Result, error) {
 				} else if strings.Contains(bestResult.Error, "500") {
 					result.HTTPStatus = 500
 				}
+
 				result.Error = bestResult.Error
+
 				return result, nil
 			}
 
@@ -129,7 +131,9 @@ func (c *Checker) Check(target string) (*Result, error) {
 		if result.Valid {
 			return result, nil
 		}
+
 		result.Error = err.Error()
+
 		return result, nil
 	}
 
@@ -145,6 +149,7 @@ func (c *Checker) Check(target string) (*Result, error) {
 
 	// Perform HTTP check
 	start := time.Now()
+
 	resp, err := c.client.Head(normalizedURL)
 	if err != nil {
 		// Try GET request if HEAD fails
@@ -157,6 +162,7 @@ func (c *Checker) Check(target string) (*Result, error) {
 		result.Error = fmt.Sprintf("HTTP request failed: %v", err)
 		return result, nil
 	}
+
 	defer resp.Body.Close()
 
 	result.HTTPStatus = resp.StatusCode
@@ -184,7 +190,7 @@ func (c *Checker) Check(target string) (*Result, error) {
 	return result, nil
 }
 
-// tryDomainValidation attempts validation using domain-specific validators
+// tryDomainValidation attempts validation using domain-specific validators.
 func (c *Checker) tryDomainValidation(ctx context.Context, target string) ([]*domains.DomainValidationResult, error) {
 	validators := domains.FindValidators(target)
 	if len(validators) == 0 {
@@ -203,11 +209,13 @@ func (c *Checker) tryDomainValidation(ctx context.Context, target string) ([]*do
 			if c.config.Verbose {
 				fmt.Printf("Domain validator %s failed: %v\n", validator.Name(), err)
 			}
+
 			continue
 		}
 
 		if result != nil {
 			results = append(results, result)
+
 			if c.config.Verbose {
 				fmt.Printf("Domain validator %s: valid=%t, confidence=%.2f, likelihood=%.2f\n",
 					validator.Name(), result.Valid, result.Confidence, result.Likelihood)
@@ -218,13 +226,14 @@ func (c *Checker) tryDomainValidation(ctx context.Context, target string) ([]*do
 	return results, nil
 }
 
-// selectBestDomainResult chooses the best domain validation result
+// selectBestDomainResult chooses the best domain validation result.
 func (c *Checker) selectBestDomainResult(results []*domains.DomainValidationResult) *domains.DomainValidationResult {
 	if len(results) == 0 {
 		return nil
 	}
 
 	var best *domains.DomainValidationResult
+
 	bestScore := -1.0
 
 	for _, result := range results {
@@ -244,7 +253,7 @@ func (c *Checker) selectBestDomainResult(results []*domains.DomainValidationResu
 	return best
 }
 
-// normalizeTarget converts various identifier formats to URLs
+// normalizeTarget converts various identifier formats to URLs.
 func (c *Checker) normalizeTarget(target string) (string, string, error) {
 	// Check if it's already a valid URL
 	if u, err := url.Parse(target); err == nil && u.Scheme != "" {
@@ -266,7 +275,7 @@ func (c *Checker) normalizeTarget(target string) (string, string, error) {
 	return "", "", fmt.Errorf("unrecognized target format: %s", target)
 }
 
-// classifyURL determines the type of dataset repository from URL
+// classifyURL determines the type of dataset repository from URL.
 func (c *Checker) classifyURL(target string) (string, string, error) {
 	u, err := url.Parse(target)
 	if err != nil {
@@ -291,7 +300,7 @@ func (c *Checker) classifyURL(target string) (string, string, error) {
 	}
 }
 
-// extractMetadata extracts useful metadata from HTTP response headers
+// extractMetadata extracts useful metadata from HTTP response headers.
 func (c *Checker) extractMetadata(resp *http.Response, result *Result) {
 	// Common headers that might contain useful information
 	headers := map[string]string{
@@ -309,7 +318,7 @@ func (c *Checker) extractMetadata(resp *http.Response, result *Result) {
 	}
 }
 
-// calculateLikelihood estimates the likelihood that this is a valid dataset
+// calculateLikelihood estimates the likelihood that this is a valid dataset.
 func (c *Checker) calculateLikelihood(result *Result) float64 {
 	score := 0.0
 
@@ -332,6 +341,7 @@ func (c *Checker) calculateLikelihood(result *Result) float64 {
 
 	// Score based on content type
 	contentType := strings.ToLower(result.ContentType)
+
 	switch {
 	case strings.Contains(contentType, "application/zip"),
 		strings.Contains(contentType, "application/x-tar"),
@@ -356,7 +366,7 @@ func (c *Checker) calculateLikelihood(result *Result) float64 {
 	return score
 }
 
-// attemptDownload tries to download and analyze the dataset structure
+// attemptDownload tries to download and analyze the dataset structure.
 func (c *Checker) attemptDownload(url string, result *Result) error {
 	// This is a placeholder for download functionality
 	// In a real implementation, this would:
@@ -365,7 +375,6 @@ func (c *Checker) attemptDownload(url string, result *Result) error {
 	// 3. Extract archives if needed
 	// 4. Analyze file structure
 	// 5. Clean up temporary files
-
 	if c.config.Verbose {
 		fmt.Printf("Download functionality not yet implemented for: %s\n", url)
 	}
@@ -381,7 +390,7 @@ func (c *Checker) attemptDownload(url string, result *Result) error {
 	return nil
 }
 
-// OutputResult outputs the result in the specified format
+// OutputResult outputs the result in the specified format.
 func (c *Checker) OutputResult(result *Result) error {
 	switch strings.ToLower(c.config.OutputFormat) {
 	case "json":
@@ -393,14 +402,15 @@ func (c *Checker) OutputResult(result *Result) error {
 	}
 }
 
-// outputJSON outputs the result as JSON
+// outputJSON outputs the result as JSON.
 func (c *Checker) outputJSON(result *Result) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(result)
 }
 
-// outputHuman outputs the result in human-readable format
+// outputHuman outputs the result in human-readable format.
 func (c *Checker) outputHuman(result *Result) error {
 	fmt.Printf("Target: %s\n", result.Target)
 
@@ -428,20 +438,24 @@ func (c *Checker) outputHuman(result *Result) error {
 	// Display domain-specific results
 	if len(result.DomainResults) > 0 {
 		fmt.Printf("🔬 Domain Analysis:\n")
+
 		for _, domainResult := range result.DomainResults {
 			status := "❌"
 			if domainResult.Valid {
 				status = "✅"
 			}
+
 			fmt.Printf("   %s %s (%s): confidence=%.2f, likelihood=%.2f\n",
 				status, domainResult.ValidatorName, domainResult.Domain,
 				domainResult.Confidence, domainResult.Likelihood)
 
 			if domainResult.Valid && domainResult.DatasetType != "" {
 				fmt.Printf("      Type: %s", domainResult.DatasetType)
+
 				if domainResult.Subtype != "" {
 					fmt.Printf(" (%s)", domainResult.Subtype)
 				}
+
 				fmt.Printf("\n")
 			}
 
@@ -453,6 +467,7 @@ func (c *Checker) outputHuman(result *Result) error {
 
 	if len(result.Metadata) > 0 && c.config.Verbose {
 		fmt.Printf("📋 Metadata:\n")
+
 		for key, value := range result.Metadata {
 			fmt.Printf("   %s: %s\n", key, value)
 		}

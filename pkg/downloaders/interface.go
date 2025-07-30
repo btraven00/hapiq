@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Downloader defines the interface for downloading datasets from specific sources
+// Downloader defines the interface for downloading datasets from specific sources.
 type Downloader interface {
 	// Validate checks if the ID is valid for this source type
 	Validate(ctx context.Context, id string) (*ValidationResult, error)
@@ -23,121 +23,121 @@ type Downloader interface {
 	GetSourceType() string
 }
 
-// DownloadRequest encapsulates all parameters for a download operation
+// DownloadRequest encapsulates all parameters for a download operation.
 type DownloadRequest struct {
+	Options   *DownloadOptions `json:"options,omitempty"`
+	Metadata  *Metadata        `json:"metadata,omitempty"`
 	ID        string           `json:"id"`
 	OutputDir string           `json:"output_dir"`
-	Options   *DownloadOptions `json:"options,omitempty"`
-	Metadata  *Metadata        `json:"metadata,omitempty"` // Pre-fetched metadata
 }
 
-// DownloadOptions provides configuration for download behavior
+// DownloadOptions provides configuration for download behavior.
 type DownloadOptions struct {
+	CustomFilters        map[string]string `json:"custom_filters,omitempty"`
+	MaxConcurrent        int               `json:"max_concurrent"`
 	IncludeRaw           bool              `json:"include_raw"`
 	ExcludeSupplementary bool              `json:"exclude_supplementary"`
-	MaxConcurrent        int               `json:"max_concurrent"`
 	Resume               bool              `json:"resume"`
 	SkipExisting         bool              `json:"skip_existing"`
 	NonInteractive       bool              `json:"non_interactive"`
-	CustomFilters        map[string]string `json:"custom_filters,omitempty"`
 }
 
-// ValidationResult contains the outcome of ID validation
+// ValidationResult contains the outcome of ID validation.
 type ValidationResult struct {
-	Valid      bool     `json:"valid"`
 	ID         string   `json:"id"`
 	SourceType string   `json:"source_type"`
 	Errors     []string `json:"errors,omitempty"`
 	Warnings   []string `json:"warnings,omitempty"`
+	Valid      bool     `json:"valid"`
 }
 
-// Metadata contains comprehensive information about a dataset
+// Metadata contains comprehensive information about a dataset.
 type Metadata struct {
-	Source       string         `json:"source"`
+	LastModified time.Time      `json:"last_modified"`
+	Created      time.Time      `json:"created,omitempty"`
+	Custom       map[string]any `json:"custom,omitempty"`
+	DOI          string         `json:"doi,omitempty"`
 	ID           string         `json:"id"`
 	Title        string         `json:"title"`
 	Description  string         `json:"description"`
-	Authors      []string       `json:"authors,omitempty"`
-	FileCount    int            `json:"file_count"`
-	TotalSize    int64          `json:"total_size"`
-	LastModified time.Time      `json:"last_modified"`
-	Created      time.Time      `json:"created,omitempty"`
+	Source       string         `json:"source"`
+	Version      string         `json:"version,omitempty"`
 	License      string         `json:"license,omitempty"`
-	DOI          string         `json:"doi,omitempty"`
+	Authors      []string       `json:"authors,omitempty"`
 	Tags         []string       `json:"tags,omitempty"`
 	Keywords     []string       `json:"keywords,omitempty"`
-	Version      string         `json:"version,omitempty"`
 	Collections  []Collection   `json:"collections,omitempty"`
-	Custom       map[string]any `json:"custom,omitempty"` // Source-specific fields
+	TotalSize    int64          `json:"total_size"`
+	FileCount    int            `json:"file_count"`
 }
 
-// Collection represents a hierarchical dataset collection
+// Collection represents a hierarchical dataset collection.
 type Collection struct {
-	Type          string   `json:"type"` // "geo_series", "figshare_collection"
+	Type          string   `json:"type"`
 	ID            string   `json:"id"`
 	Title         string   `json:"title"`
+	Samples       []string `json:"samples,omitempty"`
 	FileCount     int      `json:"file_count"`
 	EstimatedSize int64    `json:"estimated_size"`
 	UserConfirmed bool     `json:"user_confirmed"`
-	Samples       []string `json:"samples,omitempty"` // Preview items
 }
 
-// DownloadResult contains the outcome and metadata of a download operation
+// DownloadResult contains the outcome and metadata of a download operation.
 type DownloadResult struct {
-	Success         bool          `json:"success"`
-	Files           []FileInfo    `json:"files"`
 	Metadata        *Metadata     `json:"metadata"`
-	Collections     []Collection  `json:"collections,omitempty"`
-	Duration        time.Duration `json:"duration"`
-	BytesTotal      int64         `json:"bytes_total"`
-	BytesDownloaded int64         `json:"bytes_downloaded"`
 	Checksum        string        `json:"checksum,omitempty"`
 	ChecksumType    string        `json:"checksum_type,omitempty"`
 	WitnessFile     string        `json:"witness_file"`
+	Files           []FileInfo    `json:"files"`
+	Collections     []Collection  `json:"collections,omitempty"`
 	Errors          []string      `json:"errors,omitempty"`
 	Warnings        []string      `json:"warnings,omitempty"`
+	Duration        time.Duration `json:"duration"`
+	BytesTotal      int64         `json:"bytes_total"`
+	BytesDownloaded int64         `json:"bytes_downloaded"`
+	Success         bool          `json:"success"`
 }
 
-// FileInfo contains metadata about an individual downloaded file
+// FileInfo contains metadata about an individual downloaded file.
 type FileInfo struct {
-	Path         string    `json:"path"`          // Relative to output directory
-	OriginalName string    `json:"original_name"` // Name at source
-	Size         int64     `json:"size"`
+	DownloadTime time.Time `json:"download_time"`
+	Path         string    `json:"path"`
+	OriginalName string    `json:"original_name"`
 	Checksum     string    `json:"checksum,omitempty"`
 	ChecksumType string    `json:"checksum_type,omitempty"`
-	DownloadTime time.Time `json:"download_time"`
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
+	Size         int64     `json:"size"`
 }
 
-// WitnessFile represents the hapiq.json metadata file for provenance tracking
+// WitnessFile represents the hapiq.json metadata file for provenance tracking.
 type WitnessFile struct {
-	HapiqVersion  string           `json:"hapiq_version"`
 	DownloadTime  time.Time        `json:"download_time"`
-	Source        string           `json:"source"`
-	OriginalID    string           `json:"original_id"`
-	ResolvedURL   string           `json:"resolved_url,omitempty"`
 	Metadata      *Metadata        `json:"metadata"`
-	Files         []FileWitness    `json:"files"`
-	Collections   []Collection     `json:"collections,omitempty"`
 	DownloadStats *DownloadStats   `json:"download_stats"`
 	Verification  *Verification    `json:"verification,omitempty"`
 	Options       *DownloadOptions `json:"options,omitempty"`
+	HapiqVersion  string           `json:"hapiq_version"`
+	Source        string           `json:"source"`
+	OriginalID    string           `json:"original_id"`
+	ResolvedURL   string           `json:"resolved_url,omitempty"`
+	Files         []FileWitness    `json:"files"`
+	Collections   []Collection     `json:"collections,omitempty"`
 }
 
-// FileWitness contains detailed provenance information for each file
+// FileWitness contains detailed provenance information for each file.
 type FileWitness struct {
+	DownloadTime time.Time `json:"download_time"`
 	Path         string    `json:"path"`
 	OriginalName string    `json:"original_name"`
-	Size         int64     `json:"size"`
 	Checksum     string    `json:"checksum,omitempty"`
 	ChecksumType string    `json:"checksum_type,omitempty"`
-	DownloadTime time.Time `json:"download_time"`
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
+	Size         int64     `json:"size"`
 }
 
-// DownloadStats contains performance and operational statistics
+// DownloadStats contains performance and operational statistics.
 type DownloadStats struct {
 	Duration        time.Duration `json:"duration"`
 	BytesTotal      int64         `json:"bytes_total"`
@@ -151,26 +151,26 @@ type DownloadStats struct {
 	ResumedDownload bool          `json:"resumed_download"`
 }
 
-// Verification contains integrity verification information
+// Verification contains integrity verification information.
 type Verification struct {
-	Method     string    `json:"method"` // "sha256", "md5", "size"
+	VerifyTime time.Time `json:"verify_time"`
+	Method     string    `json:"method"`
 	Expected   string    `json:"expected,omitempty"`
 	Actual     string    `json:"actual,omitempty"`
-	Verified   bool      `json:"verified"`
-	VerifyTime time.Time `json:"verify_time"`
 	Errors     []string  `json:"errors,omitempty"`
+	Verified   bool      `json:"verified"`
 }
 
-// DirectoryStatus represents the state of the target download directory
+// DirectoryStatus represents the state of the target download directory.
 type DirectoryStatus struct {
 	TargetPath string   `json:"target_path"`
-	Exists     bool     `json:"exists"`
-	HasWitness bool     `json:"has_witness"`
 	Conflicts  []string `json:"conflicts,omitempty"`
 	FreeSpace  int64    `json:"free_space,omitempty"`
+	Exists     bool     `json:"exists"`
+	HasWitness bool     `json:"has_witness"`
 }
 
-// Action represents user choices for conflict resolution
+// Action represents user choices for conflict resolution.
 type Action int
 
 const (
@@ -198,18 +198,18 @@ func (a Action) String() string {
 	}
 }
 
-// ProgressCallback is called during download operations to report progress
+// ProgressCallback is called during download operations to report progress.
 type ProgressCallback func(bytesDownloaded, bytesTotal int64, filename string)
 
-// HierarchyTree represents the structure of a hierarchical dataset
+// HierarchyTree represents the structure of a hierarchical dataset.
 type HierarchyTree struct {
 	Name     string           `json:"name"`
-	Type     string           `json:"type"` // "directory", "file"
-	Size     int64            `json:"size,omitempty"`
+	Type     string           `json:"type"`
 	Children []*HierarchyTree `json:"children,omitempty"`
+	Size     int64            `json:"size,omitempty"`
 }
 
-// Error types for specific error conditions
+// Error types for specific error conditions.
 type DownloaderError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
@@ -221,10 +221,11 @@ func (e *DownloaderError) Error() string {
 	if e.Source != "" && e.ID != "" {
 		return e.Type + ": " + e.Message + " (source: " + e.Source + ", id: " + e.ID + ")"
 	}
+
 	return e.Type + ": " + e.Message
 }
 
-// Common error types
+// Common error types.
 var (
 	ErrInvalidID         = &DownloaderError{Type: "invalid_id", Message: "invalid identifier format"}
 	ErrNotFound          = &DownloaderError{Type: "not_found", Message: "dataset not found"}

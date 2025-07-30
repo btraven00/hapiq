@@ -11,31 +11,31 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// ValidationResult represents the result of a validation check
+// ValidationResult represents the result of a validation check.
 type ValidationResult struct {
-	Valid   bool
+	Details map[string]interface{}
 	Type    string
 	Message string
-	Details map[string]interface{}
+	Valid   bool
 }
 
-// URLValidator validates various types of URLs
+// URLValidator validates various types of URLs.
 type URLValidator struct{}
 
-// DOIValidator validates DOI identifiers
+// DOIValidator validates DOI identifiers.
 type DOIValidator struct{}
 
-// NewURLValidator creates a new URL validator
+// NewURLValidator creates a new URL validator.
 func NewURLValidator() *URLValidator {
 	return &URLValidator{}
 }
 
-// NewDOIValidator creates a new DOI validator
+// NewDOIValidator creates a new DOI validator.
 func NewDOIValidator() *DOIValidator {
 	return &DOIValidator{}
 }
 
-// ValidateURL validates a URL and determines its type
+// ValidateURL validates a URL and determines its type.
 func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	result := ValidationResult{
 		Details: make(map[string]interface{}),
@@ -46,6 +46,7 @@ func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	if err != nil {
 		result.Valid = false
 		result.Message = fmt.Sprintf("Invalid URL format: %v", err)
+
 		return result
 	}
 
@@ -53,6 +54,7 @@ func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	if u.Scheme == "" {
 		result.Valid = false
 		result.Message = "URL missing scheme (http/https)"
+
 		return result
 	}
 
@@ -60,6 +62,7 @@ func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	if u.Host == "" {
 		result.Valid = false
 		result.Message = "URL missing host"
+
 		return result
 	}
 
@@ -67,6 +70,7 @@ func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		result.Valid = false
 		result.Message = fmt.Sprintf("Unsupported URL scheme: %s", u.Scheme)
+
 		return result
 	}
 
@@ -80,7 +84,7 @@ func (v *URLValidator) ValidateURL(input string) ValidationResult {
 	return result
 }
 
-// classifyURLType determines the type of repository/service from URL
+// classifyURLType determines the type of repository/service from URL.
 func (v *URLValidator) classifyURLType(u *url.URL) string {
 	host := strings.ToLower(u.Host)
 	path := strings.ToLower(u.Path)
@@ -90,21 +94,25 @@ func (v *URLValidator) classifyURLType(u *url.URL) string {
 		if strings.Contains(path, "/record/") {
 			return "zenodo_record"
 		}
+
 		return "zenodo"
 	case strings.Contains(host, "figshare.com"):
 		if strings.Contains(path, "/articles/") {
 			return "figshare_article"
 		}
+
 		return "figshare"
 	case strings.Contains(host, "dryad.org"):
 		if strings.Contains(path, "/stash/dataset/") {
 			return "dryad_dataset"
 		}
+
 		return "dryad"
 	case strings.Contains(host, "github.com"):
 		if strings.Contains(path, "/releases/") {
 			return "github_release"
 		}
+
 		return "github"
 	case strings.Contains(host, "doi.org"):
 		return "doi_resolver"
@@ -119,7 +127,7 @@ func (v *URLValidator) classifyURLType(u *url.URL) string {
 	}
 }
 
-// ValidateDOI validates a DOI identifier
+// ValidateDOI validates a DOI identifier.
 func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 	result := ValidationResult{
 		Details: make(map[string]interface{}),
@@ -142,6 +150,7 @@ func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 		result.Valid = false
 		result.Message = "Invalid DOI format"
 		result.Details["pattern"] = "DOI must start with '10.' followed by registrant code and suffix"
+
 		return result
 	}
 
@@ -150,6 +159,7 @@ func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 	if len(parts) != 2 {
 		result.Valid = false
 		result.Message = "DOI missing suffix after '/'"
+
 		return result
 	}
 
@@ -162,6 +172,7 @@ func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 		result.Valid = false
 		result.Message = "Invalid DOI prefix format"
 		result.Details["prefix"] = prefix
+
 		return result
 	}
 
@@ -169,6 +180,7 @@ func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 	if strings.TrimSpace(suffix) == "" {
 		result.Valid = false
 		result.Message = "DOI suffix cannot be empty"
+
 		return result
 	}
 
@@ -182,7 +194,7 @@ func (v *DOIValidator) ValidateDOI(input string) ValidationResult {
 	return result
 }
 
-// classifyDOIType attempts to determine the type of DOI based on prefix patterns
+// classifyDOIType attempts to determine the type of DOI based on prefix patterns.
 func (v *DOIValidator) classifyDOIType(prefix, suffix string) string {
 	switch {
 	case strings.HasPrefix(prefix, "10.5281"):
@@ -208,13 +220,13 @@ func (v *DOIValidator) classifyDOIType(prefix, suffix string) string {
 	}
 }
 
-// ValidateIdentifier is a convenience function that attempts to validate
-// an input as either a URL or DOI
+// an input as either a URL or DOI.
 func ValidateIdentifier(input string) ValidationResult {
 	input = strings.TrimSpace(input)
 
 	// Try URL validation first
 	urlValidator := NewURLValidator()
+
 	urlResult := urlValidator.ValidateURL(input)
 	if urlResult.Valid {
 		return urlResult
@@ -222,6 +234,7 @@ func ValidateIdentifier(input string) ValidationResult {
 
 	// If URL validation fails, try DOI validation
 	doiValidator := NewDOIValidator()
+
 	doiResult := doiValidator.ValidateDOI(input)
 	if doiResult.Valid {
 		return doiResult
@@ -265,7 +278,7 @@ func ValidateIdentifier(input string) ValidationResult {
 	}
 }
 
-// IsDatasetRepository checks if a URL belongs to a known dataset repository
+// IsDatasetRepository checks if a URL belongs to a known dataset repository.
 func IsDatasetRepository(urlType string) bool {
 	datasetTypes := map[string]bool{
 		"zenodo":           true,
@@ -282,11 +295,11 @@ func IsDatasetRepository(urlType string) bool {
 		"dryad_doi":        true,
 		"accession":        true, // Accession numbers typically point to datasets
 	}
+
 	return datasetTypes[urlType]
 }
 
-// GetRepositoryScore returns a confidence score for how likely
-// the identifier points to a dataset repository
+// the identifier points to a dataset repository.
 func GetRepositoryScore(validationResult ValidationResult) float64 {
 	if !validationResult.Valid {
 		return 0.0

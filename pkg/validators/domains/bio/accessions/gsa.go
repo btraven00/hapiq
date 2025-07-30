@@ -11,31 +11,30 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// GSAValidator validates Genome Sequence Archive (GSA) identifiers and URLs
-// Supports the Chinese National Genomics Data Center (NGDC) GSA database
+// Supports the Chinese National Genomics Data Center (NGDC) GSA database.
 type GSAValidator struct {
 	*BaseAccessionValidator
 	metadataCache map[string]*GSAMetadata
 }
 
-// GSAMetadata contains metadata extracted from GSA APIs
+// GSAMetadata contains metadata extracted from GSA APIs.
 type GSAMetadata struct {
-	Title          string    `json:"title,omitempty"`
-	Organism       string    `json:"organism,omitempty"`
+	CachedAt       time.Time `json:"cached_at"`
+	LastUpdate     string    `json:"last_update,omitempty"`
 	Platform       string    `json:"platform,omitempty"`
 	LibraryLayout  string    `json:"library_layout,omitempty"`
 	LibrarySource  string    `json:"library_source,omitempty"`
 	StudyType      string    `json:"study_type,omitempty"`
-	DataSize       int64     `json:"data_size,omitempty"`
-	FileCount      int       `json:"file_count,omitempty"`
 	SubmissionDate string    `json:"submission_date,omitempty"`
-	LastUpdate     string    `json:"last_update,omitempty"`
+	Title          string    `json:"title,omitempty"`
 	Institution    string    `json:"institution,omitempty"`
 	Country        string    `json:"country,omitempty"`
-	CachedAt       time.Time `json:"cached_at"`
+	Organism       string    `json:"organism,omitempty"`
+	DataSize       int64     `json:"data_size,omitempty"`
+	FileCount      int       `json:"file_count,omitempty"`
 }
 
-// NewGSAValidator creates a new GSA validator
+// NewGSAValidator creates a new GSA validator.
 func NewGSAValidator() *GSAValidator {
 	base := NewBaseAccessionValidator(
 		"gsa",
@@ -54,7 +53,7 @@ func NewGSAValidator() *GSAValidator {
 	return validator
 }
 
-// initializeGSAPatterns sets up GSA-specific accession patterns
+// initializeGSAPatterns sets up GSA-specific accession patterns.
 func (v *GSAValidator) initializeGSAPatterns() {
 	// Filter global patterns for GSA-related types
 	gsaPatterns := []AccessionPattern{}
@@ -69,7 +68,7 @@ func (v *GSAValidator) initializeGSAPatterns() {
 	v.AddAccessionPatterns(gsaPatterns)
 }
 
-// CanValidate checks if this validator can handle the given input
+// CanValidate checks if this validator can handle the given input.
 func (v *GSAValidator) CanValidate(input string) bool {
 	// Use base implementation
 	if v.BaseAccessionValidator.CanValidate(input) {
@@ -84,7 +83,7 @@ func (v *GSAValidator) CanValidate(input string) bool {
 	return false
 }
 
-// Validate performs comprehensive GSA validation
+// Validate performs comprehensive GSA validation.
 func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.DomainValidationResult, error) {
 	start := time.Now()
 
@@ -99,11 +98,13 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 	}
 
 	accessionID := result.NormalizedID
+
 	pattern := v.findMatchingPattern(accessionID)
 	if pattern == nil {
 		result.Valid = false
 		result.Error = "no matching GSA pattern found"
 		result.ValidationTime = time.Since(start)
+
 		return result, nil
 	}
 
@@ -128,6 +129,7 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		if result.Metadata == nil {
 			result.Metadata = make(map[string]string)
 		}
+
 		result.Metadata["http_error"] = fmt.Sprintf("HTTP %d", httpResult.StatusCode)
 		result.Metadata["accessibility"] = "false"
 
@@ -139,6 +141,7 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		if result.Metadata == nil {
 			result.Metadata = make(map[string]string)
 		}
+
 		result.Metadata["accessibility"] = "true"
 	}
 
@@ -155,10 +158,11 @@ func (v *GSAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 	v.addAvailabilityTags(result, httpResult)
 
 	result.ValidationTime = time.Since(start)
+
 	return result, nil
 }
 
-// isGSARelatedURL checks if URL is GSA-related
+// isGSARelatedURL checks if URL is GSA-related.
 func (v *GSAValidator) isGSARelatedURL(input string) bool {
 	u, err := url.Parse(input)
 	if err != nil {
@@ -213,9 +217,10 @@ func (v *GSAValidator) isGSARelatedURL(input string) bool {
 	return false
 }
 
-// generateGSASpecificURLs creates comprehensive URL set for GSA accessions
+// generateGSASpecificURLs creates comprehensive URL set for GSA accessions.
 func (v *GSAValidator) generateGSASpecificURLs(result *domains.DomainValidationResult, accessionID string, pattern *AccessionPattern) {
 	var primary string
+
 	var alternates []string
 
 	switch pattern.Type {
@@ -237,7 +242,7 @@ func (v *GSAValidator) generateGSASpecificURLs(result *domains.DomainValidationR
 	result.AlternateURLs = alternates
 }
 
-// generateGSARunURLs creates URLs for GSA run accessions (CRR)
+// generateGSARunURLs creates URLs for GSA run accessions (CRR).
 func (v *GSAValidator) generateGSARunURLs(runID string) (string, []string) {
 	// Extract potential CRA from CRR for browse URLs
 	// GSA runs are usually CRR followed by numbers
@@ -268,7 +273,7 @@ func (v *GSAValidator) generateGSARunURLs(runID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateGSAExperimentURLs creates URLs for GSA experiment accessions (CRX)
+// generateGSAExperimentURLs creates URLs for GSA experiment accessions (CRX).
 func (v *GSAValidator) generateGSAExperimentURLs(expID string) (string, []string) {
 	baseURL := "https://ngdc.cncb.ac.cn/gsa"
 
@@ -282,7 +287,7 @@ func (v *GSAValidator) generateGSAExperimentURLs(expID string) (string, []string
 	return primary, alternates
 }
 
-// generateGSABioSampleURLs creates URLs for GSA biosample accessions (SAMC)
+// generateGSABioSampleURLs creates URLs for GSA biosample accessions (SAMC).
 func (v *GSAValidator) generateGSABioSampleURLs(sampleID string) (string, []string) {
 	primary := fmt.Sprintf("https://ngdc.cncb.ac.cn/biosample/browse/%s", sampleID)
 
@@ -294,7 +299,7 @@ func (v *GSAValidator) generateGSABioSampleURLs(sampleID string) (string, []stri
 	return primary, alternates
 }
 
-// generateGSAStudyURLs creates URLs for GSA study accessions (CRA)
+// generateGSAStudyURLs creates URLs for GSA study accessions (CRA).
 func (v *GSAValidator) generateGSAStudyURLs(studyID string) (string, []string) {
 	baseURL := "https://ngdc.cncb.ac.cn/gsa"
 
@@ -311,7 +316,7 @@ func (v *GSAValidator) generateGSAStudyURLs(studyID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateGSAProjectURLs creates URLs for GSA project accessions (PRJC)
+// generateGSAProjectURLs creates URLs for GSA project accessions (PRJC).
 func (v *GSAValidator) generateGSAProjectURLs(projectID string) (string, []string) {
 	primary := fmt.Sprintf("https://ngdc.cncb.ac.cn/bioproject/browse/%s", projectID)
 
@@ -323,7 +328,7 @@ func (v *GSAValidator) generateGSAProjectURLs(projectID string) (string, []strin
 	return primary, alternates
 }
 
-// fetchGSAMetadata attempts to fetch metadata from GSA APIs
+// fetchGSAMetadata attempts to fetch metadata from GSA APIs.
 func (v *GSAValidator) fetchGSAMetadata(ctx context.Context, accessionID string, accType AccessionType) *GSAMetadata {
 	// Check cache first
 	if cached, exists := v.metadataCache[accessionID]; exists {
@@ -336,16 +341,18 @@ func (v *GSAValidator) fetchGSAMetadata(ctx context.Context, accessionID string,
 	if metadata := v.fetchFromGSA(ctx, accessionID, accType); metadata != nil {
 		metadata.CachedAt = time.Now()
 		v.metadataCache[accessionID] = metadata
+
 		return metadata
 	}
 
 	return nil
 }
 
-// fetchFromGSA fetches metadata from GSA API
+// fetchFromGSA fetches metadata from GSA API.
 func (v *GSAValidator) fetchFromGSA(ctx context.Context, accessionID string, accType AccessionType) *GSAMetadata {
 	// Determine the appropriate GSA API endpoint
 	var apiURL string
+
 	switch accType {
 	case RunGSA:
 		// GSA uses POST requests for run info retrieval
@@ -367,7 +374,7 @@ func (v *GSAValidator) fetchFromGSA(ctx context.Context, accessionID string, acc
 	// GSA APIs often require POST requests with specific parameters
 	// This is a simplified implementation - actual implementation would need
 	// to handle the specific POST data requirements for each endpoint
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
 		return nil
 	}
@@ -389,57 +396,70 @@ func (v *GSAValidator) fetchFromGSA(ctx context.Context, accessionID string, acc
 	return metadata
 }
 
-// addGSAMetadata adds fetched metadata to the validation result
+// addGSAMetadata adds fetched metadata to the validation result.
 func (v *GSAValidator) addGSAMetadata(result *domains.DomainValidationResult, metadata *GSAMetadata) {
 	if metadata.Title != "" {
 		result.Metadata["title"] = metadata.Title
 	}
+
 	if metadata.Organism != "" {
 		result.Metadata["organism"] = metadata.Organism
 		result.Tags = append(result.Tags, "organism:"+strings.ToLower(metadata.Organism))
 	}
+
 	if metadata.Platform != "" {
 		result.Metadata["sequencing_platform"] = metadata.Platform
 		result.Tags = append(result.Tags, "platform:"+strings.ToLower(metadata.Platform))
 	}
+
 	if metadata.LibraryLayout != "" {
 		result.Metadata["library_layout"] = metadata.LibraryLayout
 	}
+
 	if metadata.LibrarySource != "" {
 		result.Metadata["library_source"] = metadata.LibrarySource
 	}
+
 	if metadata.StudyType != "" {
 		result.Metadata["study_type"] = metadata.StudyType
 	}
+
 	if metadata.DataSize > 0 {
 		result.Metadata["data_size_bytes"] = fmt.Sprintf("%d", metadata.DataSize)
 	}
+
 	if metadata.FileCount > 0 {
 		result.Metadata["file_count"] = fmt.Sprintf("%d", metadata.FileCount)
 	}
+
 	if metadata.SubmissionDate != "" {
 		result.Metadata["submission_date"] = metadata.SubmissionDate
 	}
+
 	if metadata.LastUpdate != "" {
 		result.Metadata["last_updated"] = metadata.LastUpdate
 	}
+
 	if metadata.Institution != "" {
 		result.Metadata["institution"] = metadata.Institution
 	}
+
 	if metadata.Country != "" {
 		result.Metadata["country"] = metadata.Country
 		result.Tags = append(result.Tags, "country:"+strings.ToLower(metadata.Country))
 	}
 }
 
-// addHTTPMetadata adds HTTP validation results to the domain result
+// addHTTPMetadata adds HTTP validation results to the domain result.
 func (v *GSAValidator) addHTTPMetadata(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) {
 	if httpResult.Accessible {
 		result.Metadata["http_status"] = fmt.Sprintf("%d", httpResult.StatusCode)
 		result.Metadata["content_type"] = httpResult.ContentType
+
 		if httpResult.LastModified != "" {
 			result.Metadata["last_modified"] = httpResult.LastModified
 		}
+
 		if httpResult.ContentLength > 0 {
 			result.Metadata["content_length"] = fmt.Sprintf("%d", httpResult.ContentLength)
 		}
@@ -455,7 +475,7 @@ func (v *GSAValidator) addHTTPMetadata(result *domains.DomainValidationResult, h
 	}
 }
 
-// enhanceGSAResult adds GSA-specific enhancements
+// enhanceGSAResult adds GSA-specific enhancements.
 func (v *GSAValidator) enhanceGSAResult(result *domains.DomainValidationResult, pattern *AccessionPattern, httpResult *HTTPValidationResult) {
 	// Add GSA-specific tags
 	result.Tags = append(result.Tags, "chinese_database", "ngdc", "asia_pacific")
@@ -469,6 +489,7 @@ func (v *GSAValidator) enhanceGSAResult(result *domains.DomainValidationResult, 
 		for _, level := range hierarchy {
 			levelNames = append(levelNames, string(level))
 		}
+
 		result.Metadata["hierarchy"] = strings.Join(levelNames, " > ")
 	}
 
@@ -499,7 +520,7 @@ func (v *GSAValidator) enhanceGSAResult(result *domains.DomainValidationResult, 
 	}
 }
 
-// calculateGSAConfidence determines confidence score for GSA validation
+// calculateGSAConfidence determines confidence score for GSA validation.
 func (v *GSAValidator) calculateGSAConfidence(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) float64 {
 	if !result.Valid {
 		return 0.0
@@ -527,6 +548,7 @@ func (v *GSAValidator) calculateGSAConfidence(result *domains.DomainValidationRe
 	if _, hasTitle := result.Metadata["title"]; hasTitle {
 		confidence += 0.05
 	}
+
 	if _, hasOrganism := result.Metadata["organism"]; hasOrganism {
 		confidence += 0.03
 	}
@@ -545,7 +567,7 @@ func (v *GSAValidator) calculateGSAConfidence(result *domains.DomainValidationRe
 
 	// Regional bonus for Chinese data
 	if country, exists := result.Metadata["country"]; exists {
-		if strings.ToLower(country) == "china" || strings.ToLower(country) == "中国" {
+		if strings.EqualFold(country, "china") || strings.EqualFold(country, "中国") {
 			confidence += 0.02
 		}
 	}
@@ -558,17 +580,17 @@ func (v *GSAValidator) calculateGSAConfidence(result *domains.DomainValidationRe
 	return confidence
 }
 
-// ClearCache clears the metadata cache
+// ClearCache clears the metadata cache.
 func (v *GSAValidator) ClearCache() {
 	v.metadataCache = make(map[string]*GSAMetadata)
 }
 
-// GetCacheSize returns the number of cached entries
+// GetCacheSize returns the number of cached entries.
 func (v *GSAValidator) GetCacheSize() int {
 	return len(v.metadataCache)
 }
 
-// GetSupportedAccessionTypes returns the types of accessions this validator supports
+// GetSupportedAccessionTypes returns the types of accessions this validator supports.
 func (v *GSAValidator) GetSupportedAccessionTypes() []AccessionType {
 	return []AccessionType{
 		ProjectGSA,
@@ -579,7 +601,7 @@ func (v *GSAValidator) GetSupportedAccessionTypes() []AccessionType {
 	}
 }
 
-// GetDownloadCapabilities returns information about GSA download capabilities
+// GetDownloadCapabilities returns information about GSA download capabilities.
 func (v *GSAValidator) GetDownloadCapabilities(accessionType AccessionType) map[string]interface{} {
 	capabilities := make(map[string]interface{})
 

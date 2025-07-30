@@ -10,9 +10,9 @@ func TestURLValidator_ValidateURL(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		wantValid bool
 		wantType  string
 		wantMsg   string
+		wantValid bool
 	}{
 		{
 			name:      "valid zenodo URL",
@@ -91,8 +91,8 @@ func TestDOIValidator_ValidateDOI(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		wantValid bool
 		wantType  string
+		wantValid bool
 	}{
 		{
 			name:      "valid zenodo DOI",
@@ -176,8 +176,8 @@ func TestValidateIdentifier(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		wantValid bool
 		wantType  string
+		wantValid bool
 	}{
 		{
 			name:      "valid URL",
@@ -367,7 +367,7 @@ func TestDOIValidator_classifyDOIType(t *testing.T) {
 	}
 }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkValidateURL(b *testing.B) {
 	validator := NewURLValidator()
 	url := "https://zenodo.org/record/123456"
@@ -397,7 +397,7 @@ func BenchmarkValidateIdentifier(b *testing.B) {
 	}
 }
 
-// Edge case tests
+// Edge case tests.
 func TestEdgeCases(t *testing.T) {
 	t.Run("DOI with special characters", func(t *testing.T) {
 		validator := NewDOIValidator()

@@ -4,7 +4,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// init registers all accession validators with the global registry
+// init registers all accession validators with the global registry.
 func init() {
 	// Register SRA validator
 	sraValidator := NewSRAValidator()
@@ -21,8 +21,7 @@ func init() {
 	}
 }
 
-// RegisterAccessionValidators manually registers all accession validators
-// This can be called explicitly if needed, e.g., for testing or custom registries
+// This can be called explicitly if needed, e.g., for testing or custom registries.
 func RegisterAccessionValidators(registry *domains.ValidatorRegistry) error {
 	validators := []domains.DomainValidator{
 		NewSRAValidator(),
@@ -38,8 +37,7 @@ func RegisterAccessionValidators(registry *domains.ValidatorRegistry) error {
 	return nil
 }
 
-// GetAllAccessionValidators returns instances of all accession validators
-// Useful for testing and introspection
+// Useful for testing and introspection.
 func GetAllAccessionValidators() []domains.DomainValidator {
 	return []domains.DomainValidator{
 		NewSRAValidator(),
@@ -47,7 +45,7 @@ func GetAllAccessionValidators() []domains.DomainValidator {
 	}
 }
 
-// GetAccessionValidatorByName returns a specific accession validator by name
+// GetAccessionValidatorByName returns a specific accession validator by name.
 func GetAccessionValidatorByName(name string) domains.DomainValidator {
 	switch name {
 	case "sra":
@@ -59,9 +57,10 @@ func GetAccessionValidatorByName(name string) domains.DomainValidator {
 	}
 }
 
-// GetSupportedAccessionTypes returns all accession types supported by registered validators
+// GetSupportedAccessionTypes returns all accession types supported by registered validators.
 func GetSupportedAccessionTypes() []AccessionType {
 	var allTypes []AccessionType
+
 	seen := make(map[AccessionType]bool)
 
 	// Collect types from all validators
@@ -87,7 +86,7 @@ func GetSupportedAccessionTypes() []AccessionType {
 	return allTypes
 }
 
-// GetAccessionStats returns statistics about supported accession patterns
+// GetAccessionStats returns statistics about supported accession patterns.
 func GetAccessionStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 

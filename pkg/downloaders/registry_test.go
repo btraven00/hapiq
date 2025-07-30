@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-// MockDownloader implements Downloader interface for testing
+// MockDownloader implements Downloader interface for testing.
 type MockDownloader struct {
-	sourceType string
 	validIDs   map[string]bool
 	metadata   map[string]*Metadata
+	sourceType string
 }
 
 func NewMockDownloader(sourceType string) *MockDownloader {
@@ -64,12 +64,12 @@ func (m *MockDownloader) Download(ctx context.Context, req *DownloadRequest) (*D
 	}, nil
 }
 
-// AddValidID adds a valid ID for testing
+// AddValidID adds a valid ID for testing.
 func (m *MockDownloader) AddValidID(id string) {
 	m.validIDs[id] = true
 }
 
-// AddMetadata adds metadata for testing
+// AddMetadata adds metadata for testing.
 func (m *MockDownloader) AddMetadata(id string, metadata *Metadata) {
 	m.metadata[id] = metadata
 }

@@ -15,13 +15,13 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators"
 )
 
-// TestIntegration_ValidatorPackage tests the validators package
+// TestIntegration_ValidatorPackage tests the validators package.
 func TestIntegration_ValidatorPackage(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         string
-		expectValid   bool
 		expectType    string
+		expectValid   bool
 		expectDataset bool
 	}{
 		{
@@ -109,7 +109,7 @@ func TestIntegration_ValidatorPackage(t *testing.T) {
 	}
 }
 
-// TestIntegration_CheckerPackage tests the checker package with mock server
+// TestIntegration_CheckerPackage tests the checker package with mock server.
 func TestIntegration_CheckerPackage(t *testing.T) {
 	// Create mock server
 	server := CreateMockServer()
@@ -162,7 +162,7 @@ func TestIntegration_CheckerPackage(t *testing.T) {
 	}
 }
 
-// TestIntegration_CLIBasicFunctionality tests basic CLI functionality
+// TestIntegration_CLIBasicFunctionality tests basic CLI functionality.
 func TestIntegration_CLIBasicFunctionality(t *testing.T) {
 	// Skip if no binary is available
 	binaryPath := findBinary(t)
@@ -172,9 +172,9 @@ func TestIntegration_CLIBasicFunctionality(t *testing.T) {
 
 	tests := []struct {
 		name       string
+		expectOut  string
 		args       []string
 		expectCode int
-		expectOut  string
 	}{
 		{
 			name:       "Help command",
@@ -223,7 +223,7 @@ func TestIntegration_CLIBasicFunctionality(t *testing.T) {
 	}
 }
 
-// TestIntegration_CLIJSONOutput tests JSON output format
+// TestIntegration_CLIJSONOutput tests JSON output format.
 func TestIntegration_CLIJSONOutput(t *testing.T) {
 	binaryPath := findBinary(t)
 	if binaryPath == "" {
@@ -258,7 +258,7 @@ func TestIntegration_CLIJSONOutput(t *testing.T) {
 	}
 }
 
-// TestIntegration_PerformanceConstraints tests performance requirements
+// TestIntegration_PerformanceConstraints tests performance requirements.
 func TestIntegration_PerformanceConstraints(t *testing.T) {
 	config := checker.Config{
 		Verbose:        false,
@@ -294,7 +294,7 @@ func TestIntegration_PerformanceConstraints(t *testing.T) {
 	}
 }
 
-// TestIntegration_ErrorHandling tests error handling scenarios
+// TestIntegration_ErrorHandling tests error handling scenarios.
 func TestIntegration_ErrorHandling(t *testing.T) {
 	config := checker.Config{
 		Verbose:        false,
@@ -334,7 +334,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	}
 }
 
-// TestIntegration_ConfigurationHandling tests different configuration options
+// TestIntegration_ConfigurationHandling tests different configuration options.
 func TestIntegration_ConfigurationHandling(t *testing.T) {
 	testCases := []checker.Config{
 		{
@@ -380,7 +380,7 @@ func TestIntegration_ConfigurationHandling(t *testing.T) {
 	}
 }
 
-// Helper function to find the binary for testing
+// Helper function to find the binary for testing.
 func findBinary(t *testing.T) string {
 	t.Helper()
 
@@ -416,7 +416,7 @@ func findBinary(t *testing.T) string {
 	return ""
 }
 
-// BenchmarkIntegration_Validation benchmarks the validation process
+// BenchmarkIntegration_Validation benchmarks the validation process.
 func BenchmarkIntegration_Validation(b *testing.B) {
 	testCases := []string{
 		"https://zenodo.org/record/123456",
@@ -433,7 +433,7 @@ func BenchmarkIntegration_Validation(b *testing.B) {
 	}
 }
 
-// BenchmarkIntegration_Checker benchmarks the checker process
+// BenchmarkIntegration_Checker benchmarks the checker process.
 func BenchmarkIntegration_Checker(b *testing.B) {
 	config := checker.Config{
 		Verbose:        false,

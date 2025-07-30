@@ -7,46 +7,46 @@ import (
 	"time"
 )
 
-// WorkerPool manages parallel processing of PDF extraction tasks
+// WorkerPool manages parallel processing of PDF extraction tasks.
 type WorkerPool struct {
-	numWorkers     int
+	ctx            context.Context
 	tasks          chan ExtractionTask
 	results        chan ExtractionTaskResult
 	progressChan   chan ProgressUpdate
-	wg             sync.WaitGroup
-	ctx            context.Context
 	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	numWorkers     int
 	totalTasks     int
 	completedTasks int
 	mu             sync.RWMutex
 }
 
-// ExtractionTask represents a single PDF extraction task
+// ExtractionTask represents a single PDF extraction task.
 type ExtractionTask struct {
 	ID       string
 	Filename string
 	Options  ExtractionOptions
 }
 
-// ExtractionTaskResult represents the result of a PDF extraction task
+// ExtractionTaskResult represents the result of a PDF extraction task.
 type ExtractionTaskResult struct {
-	Task   ExtractionTask
-	Result *ExtractionResult
 	Error  error
+	Result *ExtractionResult
+	Task   ExtractionTask
 }
 
-// ProgressUpdate provides progress information
+// ProgressUpdate provides progress information.
 type ProgressUpdate struct {
 	TaskID      string
 	Filename    string
 	Status      TaskStatus
+	Message     string
 	Completed   int
 	Total       int
 	ElapsedTime time.Duration
-	Message     string
 }
 
-// TaskStatus represents the status of a task
+// TaskStatus represents the status of a task.
 type TaskStatus string
 
 const (
@@ -56,7 +56,7 @@ const (
 	TaskStatusFailed     TaskStatus = "failed"
 )
 
-// NewWorkerPool creates a new worker pool with the specified number of workers
+// NewWorkerPool creates a new worker pool with the specified number of workers.
 func NewWorkerPool(numWorkers int) *WorkerPool {
 	if numWorkers <= 0 {
 		numWorkers = 4 // Default to 4 workers
@@ -74,7 +74,7 @@ func NewWorkerPool(numWorkers int) *WorkerPool {
 	}
 }
 
-// Start initializes and starts the worker pool
+// Start initializes and starts the worker pool.
 func (wp *WorkerPool) Start() {
 	for i := 0; i < wp.numWorkers; i++ {
 		wp.wg.Add(1)
@@ -82,7 +82,7 @@ func (wp *WorkerPool) Start() {
 	}
 }
 
-// worker is the main worker function that processes tasks
+// worker is the main worker function that processes tasks.
 func (wp *WorkerPool) worker(workerID int) {
 	defer wp.wg.Done()
 
@@ -102,7 +102,7 @@ func (wp *WorkerPool) worker(workerID int) {
 	}
 }
 
-// processTask processes a single extraction task
+// processTask processes a single extraction task.
 func (wp *WorkerPool) processTask(workerID int, task ExtractionTask, extractor *PDFExtractor) {
 	start := time.Now()
 
@@ -131,6 +131,7 @@ func (wp *WorkerPool) processTask(workerID int, task ExtractionTask, extractor *
 	// Send progress update: task completed
 	status := TaskStatusCompleted
 	message := fmt.Sprintf("Worker %d completed in %v", workerID, elapsed)
+
 	if err != nil {
 		status = TaskStatusFailed
 		message = fmt.Sprintf("Worker %d failed: %v", workerID, err)
@@ -154,7 +155,7 @@ func (wp *WorkerPool) processTask(workerID int, task ExtractionTask, extractor *
 	}
 }
 
-// sendProgress sends a progress update if the channel is not full
+// sendProgress sends a progress update if the channel is not full.
 func (wp *WorkerPool) sendProgress(update ProgressUpdate) {
 	select {
 	case wp.progressChan <- update:
@@ -164,7 +165,7 @@ func (wp *WorkerPool) sendProgress(update ProgressUpdate) {
 	}
 }
 
-// SubmitTask submits a task to the worker pool
+// SubmitTask submits a task to the worker pool.
 func (wp *WorkerPool) SubmitTask(task ExtractionTask) {
 	wp.mu.Lock()
 	wp.totalTasks++
@@ -182,28 +183,28 @@ func (wp *WorkerPool) SubmitTask(task ExtractionTask) {
 	case wp.tasks <- task:
 		// Task submitted successfully
 	case <-wp.ctx.Done():
-		// Context cancelled
+		// Context canceled
 	}
 }
 
-// SubmitBatch submits multiple tasks at once
+// SubmitBatch submits multiple tasks at once.
 func (wp *WorkerPool) SubmitBatch(tasks []ExtractionTask) {
 	for _, task := range tasks {
 		wp.SubmitTask(task)
 	}
 }
 
-// Results returns the results channel for reading results
+// Results returns the results channel for reading results.
 func (wp *WorkerPool) Results() <-chan ExtractionTaskResult {
 	return wp.results
 }
 
-// Progress returns the progress channel for reading progress updates
+// Progress returns the progress channel for reading progress updates.
 func (wp *WorkerPool) Progress() <-chan ProgressUpdate {
 	return wp.progressChan
 }
 
-// Wait waits for all submitted tasks to complete and closes the worker pool
+// Wait waits for all submitted tasks to complete and closes the worker pool.
 func (wp *WorkerPool) Wait() {
 	close(wp.tasks) // Signal no more tasks
 	wp.wg.Wait()    // Wait for all workers to finish
@@ -211,13 +212,13 @@ func (wp *WorkerPool) Wait() {
 	close(wp.progressChan)
 }
 
-// Shutdown gracefully shuts down the worker pool
+// Shutdown gracefully shuts down the worker pool.
 func (wp *WorkerPool) Shutdown() {
 	wp.cancel() // Cancel context to stop workers
 	wp.Wait()   // Wait for cleanup
 }
 
-// GetStats returns current processing statistics
+// GetStats returns current processing statistics.
 func (wp *WorkerPool) GetStats() WorkerPoolStats {
 	wp.mu.RLock()
 	defer wp.mu.RUnlock()
@@ -230,7 +231,7 @@ func (wp *WorkerPool) GetStats() WorkerPoolStats {
 	}
 }
 
-// WorkerPoolStats provides statistics about the worker pool
+// WorkerPoolStats provides statistics about the worker pool.
 type WorkerPoolStats struct {
 	TotalTasks     int `json:"total_tasks"`
 	CompletedTasks int `json:"completed_tasks"`
@@ -238,16 +239,16 @@ type WorkerPoolStats struct {
 	NumWorkers     int `json:"num_workers"`
 }
 
-// ProgressTracker tracks and reports progress for a batch of tasks
+// ProgressTracker tracks and reports progress for a batch of tasks.
 type ProgressTracker struct {
 	startTime    time.Time
 	lastUpdate   time.Time
-	updateCount  int
 	taskStatuses map[string]TaskStatus
+	updateCount  int
 	mu           sync.RWMutex
 }
 
-// NewProgressTracker creates a new progress tracker
+// NewProgressTracker creates a new progress tracker.
 func NewProgressTracker() *ProgressTracker {
 	return &ProgressTracker{
 		startTime:    time.Now(),
@@ -256,7 +257,7 @@ func NewProgressTracker() *ProgressTracker {
 	}
 }
 
-// Update updates the progress tracker with a new progress update
+// Update updates the progress tracker with a new progress update.
 func (pt *ProgressTracker) Update(update ProgressUpdate) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -266,7 +267,7 @@ func (pt *ProgressTracker) Update(update ProgressUpdate) {
 	pt.updateCount++
 }
 
-// GetSummary returns a summary of the current progress
+// GetSummary returns a summary of the current progress.
 func (pt *ProgressTracker) GetSummary() ProgressSummary {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
@@ -288,17 +289,17 @@ func (pt *ProgressTracker) GetSummary() ProgressSummary {
 	return summary
 }
 
-// ProgressSummary provides a summary of progress tracking
+// ProgressSummary provides a summary of progress tracking.
 type ProgressSummary struct {
 	StartTime    time.Time          `json:"start_time"`
 	LastUpdate   time.Time          `json:"last_update"`
+	StatusCounts map[TaskStatus]int `json:"status_counts"`
 	ElapsedTime  time.Duration      `json:"elapsed_time"`
 	UpdateCount  int                `json:"update_count"`
 	TotalTasks   int                `json:"total_tasks"`
-	StatusCounts map[TaskStatus]int `json:"status_counts"`
 }
 
-// PrintProgress prints a formatted progress report
+// PrintProgress prints a formatted progress report.
 func (pt *ProgressTracker) PrintProgress() {
 	summary := pt.GetSummary()
 
@@ -329,7 +330,7 @@ func (pt *ProgressTracker) PrintProgress() {
 	fmt.Printf(" [%v elapsed]", summary.ElapsedTime.Round(time.Second))
 }
 
-// EstimateCompletion estimates when all tasks will be completed
+// EstimateCompletion estimates when all tasks will be completed.
 func (pt *ProgressTracker) EstimateCompletion() time.Duration {
 	summary := pt.GetSummary()
 

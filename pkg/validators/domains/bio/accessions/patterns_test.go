@@ -10,9 +10,9 @@ func TestMatchAccession(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        string
-		expectMatch  bool
 		expectedType AccessionType
 		expectedDB   string
+		expectMatch  bool
 	}{
 		// SRA Run accessions
 		{
@@ -255,8 +255,8 @@ func TestMatchAllAccessions(t *testing.T) {
 	tests := []struct {
 		name          string
 		input         string
-		expectedCount int
 		expectedTypes []AccessionType
+		expectedCount int
 	}{
 		{
 			name:          "Unique SRR match",
@@ -303,8 +303,8 @@ func TestValidateAccessionFormat(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          string
-		expectedValid  bool
 		expectedIssues []string
+		expectedValid  bool
 	}{
 		{
 			name:           "Valid format",
@@ -729,7 +729,7 @@ func TestAccessionTypeConstants(t *testing.T) {
 	}
 }
 
-// Benchmark tests for performance analysis
+// Benchmark tests for performance analysis.
 func BenchmarkMatchAccession(b *testing.B) {
 	testCases := []string{
 		"SRR123456",

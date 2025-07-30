@@ -227,7 +227,7 @@ func TestFigshareDownloader_resolveSharingURL(t *testing.T) {
 	}
 }
 
-// mockSharingTransport redirects sharing URL requests to our test server
+// mockSharingTransport redirects sharing URL requests to our test server.
 type mockSharingTransport struct {
 	server *httptest.Server
 }
@@ -451,9 +451,9 @@ func TestFigshareDownloader_shouldDownloadFile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		file     FigshareFile
 		options  *downloaders.DownloadOptions
+		file     FigshareFile
+		name     string
 		expected bool
 	}{
 		{
@@ -622,7 +622,7 @@ func TestFigshareDownloader_determineDatasetType(t *testing.T) {
 	}
 }
 
-// mockFigshareTransport redirects Figshare API requests to our test server
+// mockFigshareTransport redirects Figshare API requests to our test server.
 type mockFigshareTransport struct {
 	server *httptest.Server
 }

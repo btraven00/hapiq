@@ -7,12 +7,12 @@ import (
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio/accessions"
 )
 
-// init registers all bioinformatics domain validators
+// init registers all bioinformatics domain validators.
 func init() {
 	registerBioValidators()
 }
 
-// registerBioValidators registers all validators in the bio domain
+// registerBioValidators registers all validators in the bio domain.
 func registerBioValidators() {
 	validators := []domains.DomainValidator{
 		NewGEOValidator(),
@@ -31,12 +31,14 @@ func registerBioValidators() {
 	}
 }
 
-// GetRegisteredValidators returns the list of registered bio validators
+// GetRegisteredValidators returns the list of registered bio validators.
 func GetRegisteredValidators() []string {
 	bioValidators := domains.DefaultRegistry.GetByDomain("bioinformatics")
 	names := make([]string, 0, len(bioValidators))
+
 	for _, validator := range bioValidators {
 		names = append(names, validator.Name())
 	}
+
 	return names
 }

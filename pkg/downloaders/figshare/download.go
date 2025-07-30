@@ -13,7 +13,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
-// downloadArticle downloads a single Figshare article with all its files
+// downloadArticle downloads a single Figshare article with all its files.
 func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("📄 Downloading Figshare Article: %s\n", id)
@@ -21,6 +21,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 
 	// Get article details with files
 	var article FigshareArticle
+
 	endpoint := fmt.Sprintf("articles/%s", id)
 	if err := d.apiRequest(ctx, endpoint, &article); err != nil {
 		return fmt.Errorf("failed to fetch article details: %w", err)
@@ -39,6 +40,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 	// Initialize progress tracker
 	totalFiles := 0
 	totalSize := int64(0)
+
 	for _, file := range article.Files {
 		if options == nil || d.shouldDownloadFile(file, options) {
 			totalFiles++
@@ -58,6 +60,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 			if d.verbose {
 				fmt.Printf("🚫 Filtering out file: %s\n", file.Name)
 			}
+
 			continue
 		}
 
@@ -68,9 +71,11 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing file: %s\n", file.Name)
 				}
+
 				if progressTracker != nil {
 					progressTracker.SkipFile(file.Name, "file already exists")
 				}
+
 				continue
 			}
 		}
@@ -87,9 +92,11 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 		fileInfo, err := d.downloadFileWithProgress(ctx, file.DownloadURL, targetPath, file.Name, file.Size, progressTracker)
 		if err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", file.Name, err))
+
 			if progressTracker != nil {
 				progressTracker.FailFile(file.Name, err)
 			}
+
 			continue
 		}
 
@@ -110,6 +117,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 		if err != nil {
 			relPath = fileInfo.Path
 		}
+
 		fileInfo.Path = relPath
 
 		result.Files = append(result.Files, *fileInfo)
@@ -118,7 +126,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 	return nil
 }
 
-// downloadCollection downloads a Figshare collection with all its articles
+// downloadCollection downloads a Figshare collection with all its articles.
 func (d *FigshareDownloader) downloadCollection(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("📚 Downloading Figshare Collection: %s\n", id)
@@ -126,6 +134,7 @@ func (d *FigshareDownloader) downloadCollection(ctx context.Context, id, targetD
 
 	// Get collection details
 	var collection FigshareCollection
+
 	endpoint := fmt.Sprintf("collections/%s", id)
 	if err := d.apiRequest(ctx, endpoint, &collection); err != nil {
 		return fmt.Errorf("failed to fetch collection details: %w", err)
@@ -164,6 +173,7 @@ func (d *FigshareDownloader) downloadCollection(ctx context.Context, id, targetD
 		if len(articleDirName) > 100 { // Limit directory name length
 			articleDirName = articleDirName[:100]
 		}
+
 		articleDir := filepath.Join(articlesDir, articleDirName)
 
 		if err := common.EnsureDirectory(articleDir); err != nil {
@@ -182,7 +192,7 @@ func (d *FigshareDownloader) downloadCollection(ctx context.Context, id, targetD
 	return nil
 }
 
-// downloadProject downloads a Figshare project with all its articles
+// downloadProject downloads a Figshare project with all its articles.
 func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	if d.verbose {
 		fmt.Printf("🎯 Downloading Figshare Project: %s\n", id)
@@ -190,6 +200,7 @@ func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir 
 
 	// Get project details
 	var project FigshareProject
+
 	endpoint := fmt.Sprintf("projects/%s", id)
 	if err := d.apiRequest(ctx, endpoint, &project); err != nil {
 		return fmt.Errorf("failed to fetch project details: %w", err)
@@ -228,6 +239,7 @@ func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir 
 		if len(articleDirName) > 100 { // Limit directory name length
 			articleDirName = articleDirName[:100]
 		}
+
 		articleDir := filepath.Join(articlesDir, articleDirName)
 
 		if err := common.EnsureDirectory(articleDir); err != nil {
@@ -246,7 +258,7 @@ func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir 
 	return nil
 }
 
-// saveArticleMetadata saves article metadata to a JSON file
+// saveArticleMetadata saves article metadata to a JSON file.
 func (d *FigshareDownloader) saveArticleMetadata(article FigshareArticle, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "article_metadata.json")
 
@@ -258,10 +270,11 @@ func (d *FigshareDownloader) saveArticleMetadata(article FigshareArticle, target
 
 	encoder := common.NewJSONEncoder(file)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(article)
 }
 
-// saveCollectionMetadata saves collection metadata to a JSON file
+// saveCollectionMetadata saves collection metadata to a JSON file.
 func (d *FigshareDownloader) saveCollectionMetadata(collection FigshareCollection, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "collection_metadata.json")
 
@@ -273,10 +286,11 @@ func (d *FigshareDownloader) saveCollectionMetadata(collection FigshareCollectio
 
 	encoder := common.NewJSONEncoder(file)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(collection)
 }
 
-// saveProjectMetadata saves project metadata to a JSON file
+// saveProjectMetadata saves project metadata to a JSON file.
 func (d *FigshareDownloader) saveProjectMetadata(project FigshareProject, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "project_metadata.json")
 
@@ -288,12 +302,14 @@ func (d *FigshareDownloader) saveProjectMetadata(project FigshareProject, target
 
 	encoder := common.NewJSONEncoder(file)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(project)
 }
 
-// getArticleFiles retrieves the file list for an article
+// getArticleFiles retrieves the file list for an article.
 func (d *FigshareDownloader) getArticleFiles(ctx context.Context, articleID int) ([]FigshareFile, error) {
 	var files []FigshareFile
+
 	endpoint := fmt.Sprintf("articles/%d/files", articleID)
 
 	if err := d.apiRequest(ctx, endpoint, &files); err != nil {
@@ -303,7 +319,7 @@ func (d *FigshareDownloader) getArticleFiles(ctx context.Context, articleID int)
 	return files, nil
 }
 
-// downloadFileWithProgress downloads a file with progress tracking
+// downloadFileWithProgress downloads a file with progress tracking.
 func (d *FigshareDownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
 	// Use the existing downloadFile method if no progress tracking needed
 	if tracker == nil {
@@ -314,7 +330,7 @@ func (d *FigshareDownloader) downloadFileWithProgress(ctx context.Context, url, 
 	return d.downloadFileWithProgressTracking(ctx, url, targetPath, filename, size, tracker)
 }
 
-// estimateDownloadSize calculates the total size of files to be downloaded
+// estimateDownloadSize calculates the total size of files to be downloaded.
 func (d *FigshareDownloader) estimateDownloadSize(files []FigshareFile, options *downloaders.DownloadOptions) int64 {
 	var totalSize int64
 
@@ -327,7 +343,7 @@ func (d *FigshareDownloader) estimateDownloadSize(files []FigshareFile, options 
 	return totalSize
 }
 
-// sanitizeArticleTitle creates a safe directory name from article title
+// sanitizeArticleTitle creates a safe directory name from article title.
 func (d *FigshareDownloader) sanitizeArticleTitle(title string) string {
 	// Remove/replace problematic characters
 	sanitized := strings.ReplaceAll(title, "/", "_")

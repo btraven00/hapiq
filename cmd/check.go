@@ -7,8 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/btraven00/hapiq/internal/checker"
 	"github.com/spf13/cobra"
+
+	"github.com/btraven00/hapiq/internal/checker"
 )
 
 var (
@@ -17,7 +18,7 @@ var (
 	inputFile    string
 )
 
-// checkCmd represents the check command
+// checkCmd represents the check command.
 var checkCmd = &cobra.Command{
 	Use:   "check [<url-or-identifier>]",
 	Short: "Check and validate a dataset URL or identifier",
@@ -39,6 +40,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	if inputFile == "" && len(args) == 0 {
 		return fmt.Errorf("either provide a URL/identifier as argument or use -i flag with input file")
 	}
+
 	if inputFile != "" && len(args) > 0 {
 		return fmt.Errorf("cannot use both input file (-i) and command line argument")
 	}
@@ -126,15 +128,18 @@ func processBatchFile(c *checker.Checker, filename string) error {
 			if !quiet {
 				fmt.Printf("Line %d: Skipping empty after cleanup: %s\n", lineNumber, line)
 			}
+
 			continue
 		}
 
 		processedCount++
 		if !quiet {
 			fmt.Printf("\n[%d/%d] Processing: %s", processedCount, lineNumber, cleanLine)
+
 			if cleanLine != line {
 				fmt.Printf(" (normalized from: %s)", line)
 			}
+
 			fmt.Println()
 		}
 
@@ -142,14 +147,18 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		result, err := c.Check(cleanLine)
 		if err != nil {
 			errorCount++
+
 			fmt.Fprintf(os.Stderr, "Error checking %s: %v\n", cleanLine, err)
+
 			continue
 		}
 
 		// Output results
 		if err := c.OutputResult(result); err != nil {
 			errorCount++
+
 			fmt.Fprintf(os.Stderr, "Error outputting result for %s: %v\n", cleanLine, err)
+
 			continue
 		}
 	}
@@ -165,7 +174,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 	return nil
 }
 
-// cleanupIdentifier removes unwanted characters and normalizes DOIs/URLs
+// cleanupIdentifier removes unwanted characters and normalizes DOIs/URLs.
 func cleanupIdentifier(identifier string) string {
 	if identifier == "" {
 		return ""
@@ -216,6 +225,7 @@ func cleanupIdentifier(identifier string) string {
 		if len(parts) >= 2 {
 			// Check if any part contains special characters that should be preserved
 			hasSpecialChars := false
+
 			for _, part := range parts {
 				if regexp.MustCompile(`[©®™]`).MatchString(part) {
 					hasSpecialChars = true
@@ -255,7 +265,7 @@ func cleanupIdentifier(identifier string) string {
 	return cleaned
 }
 
-// containsValidIdentifier checks if a string contains a valid identifier
+// containsValidIdentifier checks if a string contains a valid identifier.
 func containsValidIdentifier(s string) bool {
 	// Check for URLs
 	if strings.Contains(s, "http://") || strings.Contains(s, "https://") {
@@ -269,10 +279,11 @@ func containsValidIdentifier(s string) bool {
 	if regexp.MustCompile(`(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
 		return true
 	}
+
 	return false
 }
 
-// isValidIdentifierStart checks if a string starts like a valid identifier
+// isValidIdentifierStart checks if a string starts like a valid identifier.
 func isValidIdentifierStart(s string) bool {
 	// Check for URLs
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
@@ -286,14 +297,14 @@ func isValidIdentifierStart(s string) bool {
 	if regexp.MustCompile(`^(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
 		return true
 	}
+
 	return false
 }
 
-// extractURL extracts a clean URL from text that may contain trailing description
+// extractURL extracts a clean URL from text that may contain trailing description.
 func extractURL(text string) string {
 	// Find the URL part before any obvious descriptive text
 	// Look for patterns that indicate the end of a URL
-
 	// Special handling for URLs with brackets in the path
 	// If we have brackets without spaces, they're likely part of the path and should truncate the URL
 	if strings.Contains(text, "[") {
@@ -326,7 +337,7 @@ func extractURL(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// extractDOI extracts a clean DOI from text that may contain trailing description
+// extractDOI extracts a clean DOI from text that may contain trailing description.
 func extractDOI(text string) string {
 	// For DOIs with internal spaces, handle them specially
 	if strings.HasPrefix(text, "10.") && strings.Contains(text, " ") {

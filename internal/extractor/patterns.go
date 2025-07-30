@@ -4,7 +4,7 @@ import (
 	"regexp"
 )
 
-// getExtractionPatterns returns patterns for extracting identifiers that can be validated by domain validators
+// getExtractionPatterns returns patterns for extracting identifiers that can be validated by domain validators.
 func getExtractionPatterns() []ExtractionPattern {
 	return []ExtractionPattern{
 		// High-confidence patterns for known repositories
@@ -241,7 +241,7 @@ func getExtractionPatterns() []ExtractionPattern {
 	}
 }
 
-// getDefaultSectionRegexes returns patterns for detecting document sections
+// getDefaultSectionRegexes returns patterns for detecting document sections.
 func getDefaultSectionRegexes() []*regexp.Regexp {
 	return []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*(?:abstract|summary)\s*$`),
@@ -255,7 +255,7 @@ func getDefaultSectionRegexes() []*regexp.Regexp {
 	}
 }
 
-// getDefaultCleaners returns patterns for cleaning extracted text
+// getDefaultCleaners returns patterns for cleaning extracted text.
 func getDefaultCleaners() []*regexp.Regexp {
 	return []*regexp.Regexp{
 		regexp.MustCompile(`\s+`),                                    // Multiple whitespace

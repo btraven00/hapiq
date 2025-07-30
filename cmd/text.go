@@ -19,7 +19,7 @@ var (
 	extractHeaders bool
 )
 
-// textCmd represents the text command
+// textCmd represents the text command.
 var textCmd = &cobra.Command{
 	Use:   "text [pdf-file]",
 	Short: "Convert PDF to structured text with Markdown formatting",
@@ -72,9 +72,10 @@ func runText(cmd *cobra.Command, args []string) error {
 
 	// Output to file or stdout
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(text), 0644); err != nil {
+		if err := os.WriteFile(outputFile, []byte(text), 0o644); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
+
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Converted text written to %s\n", outputFile)
 		}
@@ -85,21 +86,19 @@ func runText(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// PDFConverter handles PDF to Markdown conversion
+// PDFConverter handles PDF to Markdown conversion.
 type PDFConverter struct {
-	preserveLayout bool
-	includePages   bool
-	extractHeaders bool
-
-	// Regex patterns for text processing
+	whitespaceRegex *regexp.Regexp
+	paragraphRegex  *regexp.Regexp
 	headerPatterns  []*regexp.Regexp
 	bulletPatterns  []*regexp.Regexp
 	numberPatterns  []*regexp.Regexp
-	whitespaceRegex *regexp.Regexp
-	paragraphRegex  *regexp.Regexp
+	preserveLayout  bool
+	includePages    bool
+	extractHeaders  bool
 }
 
-// NewPDFConverter creates a new PDF converter with specified options
+// NewPDFConverter creates a new PDF converter with specified options.
 func NewPDFConverter(preserveLayout, includePages, extractHeaders bool) *PDFConverter {
 	return &PDFConverter{
 		preserveLayout: preserveLayout,
@@ -150,11 +149,13 @@ func convertPDFToMarkdown(filename string) (string, error) {
 	// Add metadata if available
 	if response.Meta != nil && len(response.Meta) > 0 {
 		result.WriteString("## Document Metadata\n\n")
+
 		for key, value := range response.Meta {
 			if value != "" {
 				result.WriteString(fmt.Sprintf("- **%s**: %s\n", strings.Title(key), value))
 			}
 		}
+
 		result.WriteString("\n")
 	}
 
@@ -165,13 +166,14 @@ func convertPDFToMarkdown(filename string) (string, error) {
 	return result.String(), nil
 }
 
-// processPageText processes raw page text into structured Markdown
+// processPageText processes raw page text into structured Markdown.
 func (c *PDFConverter) processPageText(text string) string {
 	// Clean up the text
 	cleaned := c.cleanText(text)
 
 	// Split into lines for processing
 	lines := strings.Split(cleaned, "\n")
+
 	var result strings.Builder
 
 	inParagraph := false
@@ -186,8 +188,10 @@ func (c *PDFConverter) processPageText(text string) string {
 				result.WriteString("\n")
 			} else if inParagraph {
 				result.WriteString("\n\n")
+
 				inParagraph = false
 			}
+
 			continue
 		}
 
@@ -195,13 +199,16 @@ func (c *PDFConverter) processPageText(text string) string {
 		if c.extractHeaders && c.isHeader(line) {
 			if inParagraph {
 				result.WriteString("\n")
+
 				inParagraph = false
 			}
 
 			headerLevel := c.determineHeaderLevel(line)
 			cleanHeader := c.cleanHeaderText(line)
 			result.WriteString(fmt.Sprintf("%s %s\n\n", strings.Repeat("#", headerLevel), cleanHeader))
+
 			lastWasHeader = true
+
 			continue
 		}
 
@@ -209,11 +216,13 @@ func (c *PDFConverter) processPageText(text string) string {
 		if c.isListItem(line) {
 			if inParagraph {
 				result.WriteString("\n")
+
 				inParagraph = false
 			}
 
 			formattedItem := c.formatListItem(line)
 			result.WriteString(formattedItem + "\n")
+
 			continue
 		}
 
@@ -229,6 +238,7 @@ func (c *PDFConverter) processPageText(text string) string {
 			result.WriteString(" " + line)
 		} else {
 			result.WriteString(line)
+
 			inParagraph = true
 		}
 
@@ -244,8 +254,10 @@ func (c *PDFConverter) processPageText(text string) string {
 		}
 
 		result.WriteString("\n")
+
 		if inParagraph {
 			result.WriteString("\n")
+
 			inParagraph = false
 		}
 	}
@@ -253,10 +265,11 @@ func (c *PDFConverter) processPageText(text string) string {
 	return result.String()
 }
 
-// cleanText performs basic text cleaning and normalization
+// cleanText performs basic text cleaning and normalization.
 func (c *PDFConverter) cleanText(text string) string {
 	// Normalize whitespace but preserve line structure
 	lines := strings.Split(text, "\n")
+
 	var cleanedLines []string
 
 	for _, line := range lines {
@@ -291,7 +304,7 @@ func (c *PDFConverter) cleanText(text string) string {
 	return strings.TrimSpace(result)
 }
 
-// isHeader determines if a line is likely a header
+// isHeader determines if a line is likely a header.
 func (c *PDFConverter) isHeader(line string) bool {
 	if len(line) < 3 || len(line) > 120 {
 		return false
@@ -301,7 +314,6 @@ func (c *PDFConverter) isHeader(line string) bool {
 	if strings.Contains(line, "  ") || // Multiple spaces suggest body text
 		strings.HasSuffix(line, ".") || // Sentences usually end with periods
 		strings.Contains(line, ",") { // Headers rarely contain commas
-
 		// Exception: numbered sections can have periods
 		if !regexp.MustCompile(`^\d+(\.\d+)*\.?\s+`).MatchString(line) {
 			return false
@@ -319,6 +331,7 @@ func (c *PDFConverter) isHeader(line string) bool {
 	if len(words) >= 2 && len(words) <= 15 {
 		// Check if it looks like a title (most words capitalized)
 		capitalizedCount := 0
+
 		for _, word := range words {
 			if len(word) > 0 && word[0] >= 'A' && word[0] <= 'Z' {
 				capitalizedCount++
@@ -329,6 +342,7 @@ func (c *PDFConverter) isHeader(line string) bool {
 		if len(words) <= 4 {
 			threshold = 0.5
 		}
+
 		if float64(capitalizedCount)/float64(len(words)) > threshold {
 			return true
 		}
@@ -337,15 +351,17 @@ func (c *PDFConverter) isHeader(line string) bool {
 	return false
 }
 
-// determineHeaderLevel determines the appropriate Markdown header level
+// determineHeaderLevel determines the appropriate Markdown header level.
 func (c *PDFConverter) determineHeaderLevel(line string) int {
 	// Check for numbered sections
 	if regexp.MustCompile(`^\d+\.\s+`).MatchString(line) {
 		return 2 // ## for main sections
 	}
+
 	if regexp.MustCompile(`^\d+\.\d+\.\s+`).MatchString(line) {
 		return 3 // ### for subsections
 	}
+
 	if regexp.MustCompile(`^\d+\.\d+\.\d+\.\s+`).MatchString(line) {
 		return 4 // #### for sub-subsections
 	}
@@ -359,7 +375,7 @@ func (c *PDFConverter) determineHeaderLevel(line string) int {
 	return 3
 }
 
-// cleanHeaderText removes section numbers and cleans header text
+// cleanHeaderText removes section numbers and cleans header text.
 func (c *PDFConverter) cleanHeaderText(line string) string {
 	// Remove leading numbers and dots
 	cleaned := regexp.MustCompile(`^\d+(\.\d+)*\.?\s*`).ReplaceAllString(line, "")
@@ -372,22 +388,24 @@ func (c *PDFConverter) cleanHeaderText(line string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-// isListItem determines if a line is a list item
+// isListItem determines if a line is a list item.
 func (c *PDFConverter) isListItem(line string) bool {
 	for _, pattern := range c.bulletPatterns {
 		if pattern.MatchString(line) {
 			return true
 		}
 	}
+
 	for _, pattern := range c.numberPatterns {
 		if pattern.MatchString(line) {
 			return true
 		}
 	}
+
 	return false
 }
 
-// formatListItem formats a line as a Markdown list item
+// formatListItem formats a line as a Markdown list item.
 func (c *PDFConverter) formatListItem(line string) string {
 	// Convert various bullet types to Markdown
 	for _, pattern := range c.bulletPatterns {
@@ -411,13 +429,14 @@ func (c *PDFConverter) formatListItem(line string) string {
 	return "- " + line
 }
 
-// processDocumentText processes the entire document text extracted by docconv
+// processDocumentText processes the entire document text extracted by docconv.
 func (c *PDFConverter) processDocumentText(text string) string {
 	// Clean up the text first
 	cleaned := c.cleanText(text)
 
 	// Split into paragraphs for processing
 	paragraphs := c.paragraphRegex.Split(cleaned, -1)
+
 	var result strings.Builder
 
 	for i, paragraph := range paragraphs {
@@ -438,9 +457,10 @@ func (c *PDFConverter) processDocumentText(text string) string {
 	return result.String()
 }
 
-// processParagraph processes a single paragraph of text
+// processParagraph processes a single paragraph of text.
 func (c *PDFConverter) processParagraph(paragraph string) string {
 	lines := strings.Split(strings.TrimSpace(paragraph), "\n")
+
 	var result strings.Builder
 
 	inParagraph := false
@@ -454,8 +474,10 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 				result.WriteString("\n")
 			} else if inParagraph {
 				result.WriteString("\n\n")
+
 				inParagraph = false
 			}
+
 			continue
 		}
 
@@ -463,13 +485,16 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 		if c.extractHeaders && c.isHeader(line) {
 			if inParagraph {
 				result.WriteString("\n")
+
 				inParagraph = false
 			}
 
 			headerLevel := c.determineHeaderLevel(line)
 			cleanHeader := c.cleanHeaderText(line)
 			result.WriteString(fmt.Sprintf("%s %s\n\n", strings.Repeat("#", headerLevel), cleanHeader))
+
 			lastWasHeader = true
+
 			continue
 		}
 
@@ -477,11 +502,13 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 		if c.isListItem(line) {
 			if inParagraph {
 				result.WriteString("\n")
+
 				inParagraph = false
 			}
 
 			formattedItem := c.formatListItem(line)
 			result.WriteString(formattedItem + "\n")
+
 			continue
 		}
 
@@ -497,6 +524,7 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 			result.WriteString(" " + line)
 		} else {
 			result.WriteString(line)
+
 			inParagraph = true
 		}
 
@@ -512,8 +540,10 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 		}
 
 		result.WriteString("\n")
+
 		if inParagraph {
 			result.WriteString("\n")
+
 			inParagraph = false
 		}
 	}
@@ -521,7 +551,7 @@ func (c *PDFConverter) processParagraph(paragraph string) string {
 	return result.String()
 }
 
-// addBasicSpacing applies sophisticated word segmentation for proper tokenization
+// addBasicSpacing applies sophisticated word segmentation for proper tokenization.
 func (c *PDFConverter) addBasicSpacing(text string) string {
 	// First apply basic pattern-based separation
 	result := c.applyBasicPatterns(text)
@@ -535,12 +565,12 @@ func (c *PDFConverter) addBasicSpacing(text string) string {
 	return strings.TrimSpace(result)
 }
 
-// AddBasicSpacing is a public wrapper for addBasicSpacing for external testing
+// AddBasicSpacing is a public wrapper for addBasicSpacing for external testing.
 func (c *PDFConverter) AddBasicSpacing(text string) string {
 	return c.addBasicSpacing(text)
 }
 
-// applyBasicPatterns applies simple regex patterns for obvious word boundaries
+// applyBasicPatterns applies simple regex patterns for obvious word boundaries.
 func (c *PDFConverter) applyBasicPatterns(text string) string {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`([a-z])([A-Z])`),           // lowercase followed by uppercase
@@ -563,9 +593,10 @@ func (c *PDFConverter) applyBasicPatterns(text string) string {
 	return result
 }
 
-// segmentWords uses dictionary-based segmentation for concatenated words
+// segmentWords uses dictionary-based segmentation for concatenated words.
 func (c *PDFConverter) segmentWords(text string) string {
 	words := strings.Fields(text)
+
 	var result []string
 
 	for _, word := range words {
@@ -583,7 +614,7 @@ func (c *PDFConverter) segmentWords(text string) string {
 
 		// Apply word segmentation to long concatenated strings
 		segmented := c.dynamicWordSegmentation(strings.ToLower(word))
-		if segmented != strings.ToLower(word) && !strings.Contains(segmented, "  ") {
+		if !strings.EqualFold(segmented, word) && !strings.Contains(segmented, "  ") {
 			// Preserve original case as much as possible
 			segmented = c.preserveCase(word, segmented)
 			result = append(result, segmented)
@@ -595,7 +626,7 @@ func (c *PDFConverter) segmentWords(text string) string {
 	return strings.Join(result, " ")
 }
 
-// dynamicWordSegmentation uses dynamic programming to find optimal word boundaries
+// dynamicWordSegmentation uses dynamic programming to find optimal word boundaries.
 func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 	if len(text) == 0 {
 		return text
@@ -648,13 +679,16 @@ func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 	}
 
 	var words []string
+
 	pos := n
 	for pos > 0 {
 		start := parent[pos]
+
 		word := text[start:pos]
 		if len(word) > 0 {
 			words = append([]string{word}, words...)
 		}
+
 		pos = start
 	}
 
@@ -662,6 +696,7 @@ func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 
 	// Don't return segmentation with too many single characters
 	singleCharCount := 0
+
 	for _, word := range words {
 		if len(word) == 1 {
 			singleCharCount++
@@ -675,7 +710,7 @@ func (c *PDFConverter) dynamicWordSegmentation(text string) string {
 	return segmented
 }
 
-// preserveCase attempts to preserve the original case when applying segmentation
+// preserveCase attempts to preserve the original case when applying segmentation.
 func (c *PDFConverter) preserveCase(original, segmented string) string {
 	if len(original) == 0 || len(segmented) == 0 {
 		return segmented
@@ -692,7 +727,7 @@ func (c *PDFConverter) preserveCase(original, segmented string) string {
 	return result
 }
 
-// isValidWord checks if a word is valid using multiple criteria
+// isValidWord checks if a word is valid using multiple criteria.
 func (c *PDFConverter) isValidWord(word string, dictionary map[string]bool) bool {
 	if len(word) < 1 {
 		return false
@@ -717,7 +752,7 @@ func (c *PDFConverter) isValidWord(word string, dictionary map[string]bool) bool
 	return c.isReasonableWord(word)
 }
 
-// getWordScore assigns scores to words for optimal segmentation
+// getWordScore assigns scores to words for optimal segmentation.
 func (c *PDFConverter) getWordScore(word string, dictionary map[string]bool) int {
 	if len(word) == 0 {
 		return -100
@@ -747,7 +782,7 @@ func (c *PDFConverter) getWordScore(word string, dictionary map[string]bool) int
 	return -2
 }
 
-// isScientificTerm checks for scientific and academic terminology
+// isScientificTerm checks for scientific and academic terminology.
 func (c *PDFConverter) isScientificTerm(word string) bool {
 	scientificTerms := map[string]bool{
 		"supplementary": true, "information": true, "version": true, "material": true,
@@ -767,7 +802,7 @@ func (c *PDFConverter) isScientificTerm(word string) bool {
 	return scientificTerms[word]
 }
 
-// isReasonableWord uses heuristics to determine if a word is reasonable
+// isReasonableWord uses heuristics to determine if a word is reasonable.
 func (c *PDFConverter) isReasonableWord(word string) bool {
 	if len(word) < 2 || len(word) > 20 {
 		return false
@@ -775,6 +810,7 @@ func (c *PDFConverter) isReasonableWord(word string) bool {
 
 	// Check for reasonable vowel/consonant distribution
 	vowels := 0
+
 	for _, r := range word {
 		if strings.ContainsRune("aeiouAEIOU", r) {
 			vowels++
@@ -786,6 +822,7 @@ func (c *PDFConverter) isReasonableWord(word string) bool {
 	// More lenient vowel ratio for shorter words
 	minRatio := 0.15
 	maxRatio := 0.75
+
 	if len(word) <= 4 {
 		minRatio = 0.1
 		maxRatio = 0.8
@@ -794,7 +831,7 @@ func (c *PDFConverter) isReasonableWord(word string) bool {
 	return vowelRatio >= minRatio && vowelRatio <= maxRatio
 }
 
-// getCommonWords returns a dictionary of common English words
+// getCommonWords returns a dictionary of common English words.
 func (c *PDFConverter) getCommonWords() map[string]bool {
 	return map[string]bool{
 		// Articles and determiners

@@ -18,17 +18,17 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
-// GEODownloader implements the Downloader interface for GEO datasets
+// GEODownloader implements the Downloader interface for GEO datasets.
 type GEODownloader struct {
 	client     *http.Client
 	baseURL    string
 	ftpBaseURL string
+	apiKey     string
 	timeout    time.Duration
 	verbose    bool
-	apiKey     string // NCBI API key for increased rate limits
 }
 
-// NewGEODownloader creates a new GEO downloader
+// NewGEODownloader creates a new GEO downloader.
 func NewGEODownloader(options ...Option) *GEODownloader {
 	d := &GEODownloader{
 		client:     &http.Client{Timeout: 30 * time.Second},
@@ -46,10 +46,10 @@ func NewGEODownloader(options ...Option) *GEODownloader {
 	return d
 }
 
-// Option defines configuration options for GEODownloader
+// Option defines configuration options for GEODownloader.
 type Option func(*GEODownloader)
 
-// WithTimeout sets the HTTP timeout
+// WithTimeout sets the HTTP timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *GEODownloader) {
 		d.timeout = timeout
@@ -57,33 +57,33 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithVerbose enables verbose logging
+// WithVerbose enables verbose logging.
 func WithVerbose(verbose bool) Option {
 	return func(d *GEODownloader) {
 		d.verbose = verbose
 	}
 }
 
-// WithHTTPClient sets a custom HTTP client
+// WithHTTPClient sets a custom HTTP client.
 func WithHTTPClient(client *http.Client) Option {
 	return func(d *GEODownloader) {
 		d.client = client
 	}
 }
 
-// WithAPIKey sets the NCBI API key for increased rate limits (10 req/sec instead of 3)
+// WithAPIKey sets the NCBI API key for increased rate limits (10 req/sec instead of 3).
 func WithAPIKey(apiKey string) Option {
 	return func(d *GEODownloader) {
 		d.apiKey = apiKey
 	}
 }
 
-// GetSourceType returns the source type identifier
+// GetSourceType returns the source type identifier.
 func (d *GEODownloader) GetSourceType() string {
 	return "geo"
 }
 
-// Validate checks if the ID is a valid GEO accession
+// Validate checks if the ID is a valid GEO accession.
 func (d *GEODownloader) Validate(ctx context.Context, id string) (*downloaders.ValidationResult, error) {
 	result := &downloaders.ValidationResult{
 		ID:         id,
@@ -110,6 +110,7 @@ func (d *GEODownloader) Validate(ctx context.Context, id string) (*downloaders.V
 	// Extract type and number
 	geoType := cleanID[:3]
 	numberStr := cleanID[3:]
+
 	number, err := strconv.Atoi(numberStr)
 	if err != nil {
 		result.Errors = append(result.Errors, "invalid accession number")
@@ -133,10 +134,11 @@ func (d *GEODownloader) Validate(ctx context.Context, id string) (*downloaders.V
 	}
 
 	result.Valid = true
+
 	return result, nil
 }
 
-// GetMetadata retrieves metadata for a GEO dataset
+// GetMetadata retrieves metadata for a GEO dataset.
 func (d *GEODownloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	cleanID := d.cleanGEOID(id)
 
@@ -145,6 +147,7 @@ func (d *GEODownloader) GetMetadata(ctx context.Context, id string) (*downloader
 	if err != nil {
 		return nil, err
 	}
+
 	if !validation.Valid {
 		return nil, &downloaders.DownloaderError{
 			Type:    "invalid_id",
@@ -175,7 +178,7 @@ func (d *GEODownloader) GetMetadata(ctx context.Context, id string) (*downloader
 	}
 }
 
-// Download performs the actual download operation
+// Download performs the actual download operation.
 func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
 	startTime := time.Now()
 
@@ -189,11 +192,13 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	// Clean and validate ID
 	cleanID := d.cleanGEOID(req.ID)
+
 	validation, err := d.Validate(ctx, cleanID)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		return result, nil
 	}
+
 	if !validation.Valid {
 		result.Errors = append(result.Errors, strings.Join(validation.Errors, "; "))
 		return result, nil
@@ -208,10 +213,12 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 			return result, nil
 		}
 	}
+
 	result.Metadata = metadata
 
 	// Check directory and handle conflicts
 	dirChecker := common.NewDirectoryChecker(req.OutputDir)
+
 	dirStatus, err := dirChecker.CheckAndPrepare(cleanID)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("directory check failed: %v", err))
@@ -219,6 +226,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	}
 
 	nonInteractive := req.Options != nil && req.Options.NonInteractive
+
 	action, err := common.HandleDirectoryConflicts(dirStatus, nonInteractive)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("conflict resolution failed: %v", err))
@@ -232,6 +240,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	case downloaders.ActionSkip:
 		result.Warnings = append(result.Warnings, "download skipped due to existing directory")
 		result.Success = true
+
 		return result, nil
 	case downloaders.ActionOverwrite:
 		if err := os.RemoveAll(dirStatus.TargetPath); err != nil {
@@ -257,10 +266,12 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 				result.Errors = append(result.Errors, fmt.Sprintf("collection confirmation failed: %v", err))
 				return result, nil
 			}
+
 			if !confirmed {
-				result.Warnings = append(result.Warnings, "download cancelled by user")
+				result.Warnings = append(result.Warnings, "download canceled by user")
 				return result, nil
 			}
+
 			collection.UserConfirmed = true
 			metadata.Collections[0] = collection
 		}
@@ -268,6 +279,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	// Perform the actual download based on type
 	var downloadErr error
+
 	switch geoType {
 	case "GSE":
 		downloadErr = d.downloadSeries(ctx, cleanID, targetDir, req.Options, result)
@@ -338,16 +350,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	// Convert FileInfo to FileWitness
 	for i, file := range result.Files {
-		witness.Files[i] = downloaders.FileWitness{
-			Path:         file.Path,
-			OriginalName: file.OriginalName,
-			Size:         file.Size,
-			Checksum:     file.Checksum,
-			ChecksumType: file.ChecksumType,
-			DownloadTime: file.DownloadTime,
-			SourceURL:    file.SourceURL,
-			ContentType:  file.ContentType,
-		}
+		witness.Files[i] = downloaders.FileWitness(file)
 	}
 
 	// Write witness file
@@ -360,7 +363,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	return result, nil
 }
 
-// cleanGEOID normalizes GEO identifiers
+// cleanGEOID normalizes GEO identifiers.
 func (d *GEODownloader) cleanGEOID(id string) string {
 	// Remove whitespace
 	cleaned := strings.TrimSpace(id)
@@ -386,6 +389,7 @@ func (d *GEODownloader) cleanGEOID(id string) string {
 
 	// Remove any remaining non-alphanumeric characters except the accession format
 	accessionPattern := regexp.MustCompile(`(GSE|GSM|GPL|GDS)\d+`)
+
 	matches := accessionPattern.FindStringSubmatch(cleaned)
 	if len(matches) > 0 {
 		return matches[0]
@@ -395,12 +399,12 @@ func (d *GEODownloader) cleanGEOID(id string) string {
 	return ""
 }
 
-// buildGEOURL constructs the GEO URL for an accession
+// buildGEOURL constructs the GEO URL for an accession.
 func (d *GEODownloader) buildGEOURL(id string) string {
 	return fmt.Sprintf("%s/query/acc.cgi?acc=%s", d.baseURL, id)
 }
 
-// confirmCollection asks user for confirmation when downloading large collections
+// confirmCollection asks user for confirmation when downloading large collections.
 func (d *GEODownloader) confirmCollection(ctx context.Context, collection *downloaders.Collection) (bool, error) {
 	fmt.Printf("🔍 Detected %s collection:\n", collection.Type)
 	fmt.Printf("   Title: %s\n", collection.Title)
@@ -409,12 +413,14 @@ func (d *GEODownloader) confirmCollection(ctx context.Context, collection *downl
 
 	if len(collection.Samples) > 0 {
 		fmt.Printf("   Structure preview:\n")
+
 		maxShow := 5
 		for i, sample := range collection.Samples {
 			if i >= maxShow {
 				fmt.Printf("     ... and %d more\n", len(collection.Samples)-maxShow)
 				break
 			}
+
 			fmt.Printf("     %s\n", sample)
 		}
 	}
@@ -422,14 +428,14 @@ func (d *GEODownloader) confirmCollection(ctx context.Context, collection *downl
 	return common.AskUserConfirmation("Continue with download?")
 }
 
-// downloadFile downloads a single file with progress tracking
+// downloadFile downloads a single file with progress tracking.
 func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string) (*downloaders.FileInfo, error) {
 	return d.downloadFileWithProgress(ctx, url, targetPath, filepath.Base(targetPath), -1, nil)
 }
 
-// downloadFileWithProgress downloads a file with optional progress tracking
+// downloadFileWithProgress downloads a file with optional progress tracking.
 func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -457,6 +463,7 @@ func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targe
 	defer file.Close()
 
 	downloadTime := time.Now()
+
 	var copiedSize int64
 
 	// Use progress reader if tracker is available and size is known

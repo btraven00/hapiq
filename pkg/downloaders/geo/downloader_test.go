@@ -31,9 +31,9 @@ func TestGEODownloader_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
 		id          string
+		description string
 		expectValid bool
 		expectError bool
-		description string
 	}{
 		{
 			name:        "valid GSE ID",
@@ -269,7 +269,6 @@ func TestGEODownloader_GetMetadata_MockEUtils(t *testing.T) {
 
 	ctx := context.Background()
 	metadata, err := downloader.getSeriesMetadata(ctx, "GSE123456")
-
 	if err != nil {
 		t.Fatalf("Expected successful metadata retrieval, got error: %v", err)
 	}
@@ -314,7 +313,7 @@ func TestGEODownloader_GetMetadata_MockEUtils(t *testing.T) {
 	}
 }
 
-// mockEUtilsTransport redirects E-utilities requests to our test server
+// mockEUtilsTransport redirects E-utilities requests to our test server.
 type mockEUtilsTransport struct {
 	server *httptest.Server
 }
@@ -336,8 +335,8 @@ func TestGEODownloader_parseEUtilsDate(t *testing.T) {
 
 	tests := []struct {
 		input       string
-		expectError bool
 		description string
+		expectError bool
 	}{
 		{"2020/01/15", false, "E-utilities format should parse"},
 		{"2020-01-15", false, "ISO format should parse"},
@@ -527,8 +526,8 @@ func TestGEODownloader_shouldDownloadFile(t *testing.T) {
 	downloader := NewGEODownloader()
 
 	tests := []struct {
-		filename string
 		options  *downloaders.DownloadOptions
+		filename string
 		expected bool
 	}{
 		{"test.txt", nil, true},
@@ -581,7 +580,7 @@ func TestGEODownloader_isRetryableError(t *testing.T) {
 	}
 }
 
-// testError implements error interface for testing
+// testError implements error interface for testing.
 type testError struct {
 	msg string
 }

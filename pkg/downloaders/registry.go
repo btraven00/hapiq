@@ -9,14 +9,14 @@ import (
 	"sync"
 )
 
-// Registry manages the collection of available downloaders
+// Registry manages the collection of available downloaders.
 type Registry struct {
-	mu          sync.RWMutex
 	downloaders map[string]Downloader
-	aliases     map[string]string // Allow multiple names for same downloader
+	aliases     map[string]string
+	mu          sync.RWMutex
 }
 
-// NewRegistry creates a new downloader registry
+// NewRegistry creates a new downloader registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		downloaders: make(map[string]Downloader),
@@ -24,7 +24,7 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register adds a downloader to the registry
+// Register adds a downloader to the registry.
 func (r *Registry) Register(downloader Downloader) error {
 	if downloader == nil {
 		return fmt.Errorf("downloader cannot be nil")
@@ -44,10 +44,11 @@ func (r *Registry) Register(downloader Downloader) error {
 	}
 
 	r.downloaders[sourceType] = downloader
+
 	return nil
 }
 
-// RegisterAlias creates an alias for an existing downloader
+// RegisterAlias creates an alias for an existing downloader.
 func (r *Registry) RegisterAlias(alias, sourceType string) error {
 	if alias == "" || sourceType == "" {
 		return fmt.Errorf("alias and source type cannot be empty")
@@ -72,10 +73,11 @@ func (r *Registry) RegisterAlias(alias, sourceType string) error {
 	}
 
 	r.aliases[alias] = sourceType
+
 	return nil
 }
 
-// Get retrieves a downloader by source type or alias
+// Get retrieves a downloader by source type or alias.
 func (r *Registry) Get(sourceType string) (Downloader, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -98,7 +100,7 @@ func (r *Registry) Get(sourceType string) (Downloader, error) {
 	return nil, fmt.Errorf("no downloader registered for source type '%s'", sourceType)
 }
 
-// List returns all registered source types
+// List returns all registered source types.
 func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -107,10 +109,11 @@ func (r *Registry) List() []string {
 	for sourceType := range r.downloaders {
 		types = append(types, sourceType)
 	}
+
 	return types
 }
 
-// ListWithAliases returns all registered source types and their aliases
+// ListWithAliases returns all registered source types and their aliases.
 func (r *Registry) ListWithAliases() map[string][]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -132,7 +135,7 @@ func (r *Registry) ListWithAliases() map[string][]string {
 	return result
 }
 
-// Validate checks if an ID is valid for any registered downloader
+// Validate checks if an ID is valid for any registered downloader.
 func (r *Registry) Validate(ctx context.Context, sourceType, id string) (*ValidationResult, error) {
 	downloader, err := r.Get(sourceType)
 	if err != nil {
@@ -142,7 +145,7 @@ func (r *Registry) Validate(ctx context.Context, sourceType, id string) (*Valida
 	return downloader.Validate(ctx, id)
 }
 
-// GetMetadata retrieves metadata for a dataset using the appropriate downloader
+// GetMetadata retrieves metadata for a dataset using the appropriate downloader.
 func (r *Registry) GetMetadata(ctx context.Context, sourceType, id string) (*Metadata, error) {
 	downloader, err := r.Get(sourceType)
 	if err != nil {
@@ -152,7 +155,7 @@ func (r *Registry) GetMetadata(ctx context.Context, sourceType, id string) (*Met
 	return downloader.GetMetadata(ctx, id)
 }
 
-// Download performs a download using the appropriate downloader
+// Download performs a download using the appropriate downloader.
 func (r *Registry) Download(ctx context.Context, sourceType string, req *DownloadRequest) (*DownloadResult, error) {
 	downloader, err := r.Get(sourceType)
 	if err != nil {
@@ -162,12 +165,13 @@ func (r *Registry) Download(ctx context.Context, sourceType string, req *Downloa
 	return downloader.Download(ctx, req)
 }
 
-// AutoDetect attempts to determine the source type from an ID
+// AutoDetect attempts to determine the source type from an ID.
 func (r *Registry) AutoDetect(ctx context.Context, id string) (string, *ValidationResult, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var lastErr error
+
 	var candidates []string
 
 	// Try each downloader to see which one accepts the ID
@@ -192,13 +196,16 @@ func (r *Registry) AutoDetect(ctx context.Context, id string) (string, *Validati
 	// If no exact match, but we have candidates, return the first one with a warning
 	if len(candidates) > 0 {
 		downloader := r.downloaders[candidates[0]]
+
 		result, err := downloader.Validate(ctx, id)
 		if err != nil {
 			return "", nil, err
 		}
+
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("auto-detected as %s, but other possibilities exist: %v",
 				candidates[0], candidates[1:]))
+
 		return candidates[0], result, nil
 	}
 
@@ -209,45 +216,45 @@ func (r *Registry) AutoDetect(ctx context.Context, id string) (string, *Validati
 	return "", nil, fmt.Errorf("no downloader could handle ID '%s'", id)
 }
 
-// DefaultRegistry is the global registry instance
+// DefaultRegistry is the global registry instance.
 var DefaultRegistry = NewRegistry()
 
-// Register adds a downloader to the default registry
+// Register adds a downloader to the default registry.
 func Register(downloader Downloader) error {
 	return DefaultRegistry.Register(downloader)
 }
 
-// RegisterAlias creates an alias in the default registry
+// RegisterAlias creates an alias in the default registry.
 func RegisterAlias(alias, sourceType string) error {
 	return DefaultRegistry.RegisterAlias(alias, sourceType)
 }
 
-// Get retrieves a downloader from the default registry
+// Get retrieves a downloader from the default registry.
 func Get(sourceType string) (Downloader, error) {
 	return DefaultRegistry.Get(sourceType)
 }
 
-// List returns all source types from the default registry
+// List returns all source types from the default registry.
 func List() []string {
 	return DefaultRegistry.List()
 }
 
-// Validate validates an ID using the default registry
+// Validate validates an ID using the default registry.
 func Validate(ctx context.Context, sourceType, id string) (*ValidationResult, error) {
 	return DefaultRegistry.Validate(ctx, sourceType, id)
 }
 
-// GetMetadata retrieves metadata using the default registry
+// GetMetadata retrieves metadata using the default registry.
 func GetMetadata(ctx context.Context, sourceType, id string) (*Metadata, error) {
 	return DefaultRegistry.GetMetadata(ctx, sourceType, id)
 }
 
-// Download performs a download using the default registry
+// Download performs a download using the default registry.
 func Download(ctx context.Context, sourceType string, req *DownloadRequest) (*DownloadResult, error) {
 	return DefaultRegistry.Download(ctx, sourceType, req)
 }
 
-// AutoDetect attempts to auto-detect source type using the default registry
+// AutoDetect attempts to auto-detect source type using the default registry.
 func AutoDetect(ctx context.Context, id string) (string, *ValidationResult, error) {
 	return DefaultRegistry.AutoDetect(ctx, id)
 }

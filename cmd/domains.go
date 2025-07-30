@@ -8,8 +8,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/btraven00/hapiq/pkg/validators/domains"
 	"github.com/spf13/cobra"
+
+	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 	listJSON     bool
 )
 
-// listCmd represents the list command
+// listCmd represents the list command.
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List and explore domain-specific validators",
@@ -70,6 +71,7 @@ func outputDomainsJSON() error {
 
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
+
 	return encoder.Encode(output)
 }
 
@@ -114,12 +116,15 @@ func showDomainValidators(domain string) error {
 			patterns := validator.GetPatterns()
 			if len(patterns) > 0 {
 				fmt.Printf("   Patterns:\n")
+
 				for _, pattern := range patterns {
 					fmt.Printf("   • %s: %s\n", pattern.Type, pattern.Pattern)
 					fmt.Printf("     %s\n", pattern.Description)
+
 					if len(pattern.Examples) > 0 {
 						fmt.Printf("     Examples: %s\n", strings.Join(pattern.Examples, ", "))
 					}
+
 					fmt.Println()
 				}
 			}
@@ -134,6 +139,7 @@ func showAllValidators() error {
 	if len(info) == 0 {
 		fmt.Println("No domain validators are currently registered.")
 		fmt.Println("\nTo see how to add validators, run: hapiq domains --help")
+
 		return nil
 	}
 
@@ -141,11 +147,13 @@ func showAllValidators() error {
 
 	// Group by domain
 	domainGroups := make(map[string][]domains.ValidatorInfo)
+
 	for _, validator := range info {
 		domain := validator.Domain
 		if domainGroups[domain] == nil {
 			domainGroups[domain] = make([]domains.ValidatorInfo, 0)
 		}
+
 		domainGroups[domain] = append(domainGroups[domain], validator)
 	}
 
@@ -154,6 +162,7 @@ func showAllValidators() error {
 	for domain := range domainGroups {
 		domainList = append(domainList, domain)
 	}
+
 	sort.Strings(domainList)
 
 	for _, domain := range domainList {
@@ -171,6 +180,7 @@ func showAllValidators() error {
 			if len(desc) > 60 {
 				desc = desc[:57] + "..."
 			}
+
 			fmt.Fprintf(w, "   %s\t%d\t%s\n", validator.Name, validator.Priority, desc)
 		}
 
@@ -179,17 +189,21 @@ func showAllValidators() error {
 
 		if showPatterns {
 			fmt.Printf("   Supported Patterns:\n")
+
 			for _, validator := range validators {
 				if len(validator.Patterns) > 0 {
 					fmt.Printf("   • %s:\n", validator.Name)
+
 					for _, pattern := range validator.Patterns {
 						fmt.Printf("     - %s patterns: %s\n", pattern.Type, pattern.Pattern)
+
 						if len(pattern.Examples) > 0 && len(pattern.Examples[0]) < 50 {
 							fmt.Printf("       Example: %s\n", pattern.Examples[0])
 						}
 					}
 				}
 			}
+
 			fmt.Println()
 		}
 	}
@@ -218,6 +232,7 @@ func getDomainDescription(domain string) string {
 	if desc, exists := descriptions[domain]; exists {
 		return desc
 	}
+
 	return "Specialized scientific database validators"
 }
 

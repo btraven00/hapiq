@@ -6,11 +6,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -25,7 +26,7 @@ var (
 	customFilters        map[string]string
 )
 
-// downloadCmd represents the download command
+// downloadCmd represents the download command.
 var downloadCmd = &cobra.Command{
 	Use:   "download <source> <id>",
 	Short: "Download datasets from scientific data repositories",
@@ -55,7 +56,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -86,15 +87,18 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	if !validationResult.Valid {
 		fmt.Printf("❌ Validation failed for %s ID '%s':\n", sourceType, id)
+
 		for _, errMsg := range validationResult.Errors {
 			fmt.Printf("   Error: %s\n", errMsg)
 		}
+
 		return fmt.Errorf("invalid %s ID: %s", sourceType, id)
 	}
 
 	// Show validation warnings
 	if len(validationResult.Warnings) > 0 {
 		fmt.Printf("⚠️  Validation warnings for %s ID '%s':\n", sourceType, id)
+
 		for _, warning := range validationResult.Warnings {
 			fmt.Printf("   Warning: %s\n", warning)
 		}
@@ -119,20 +123,26 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	fmt.Printf("   Source: %s\n", metadata.Source)
 	fmt.Printf("   ID: %s\n", metadata.ID)
 	fmt.Printf("   Title: %s\n", metadata.Title)
+
 	if metadata.Description != "" {
 		fmt.Printf("   Description: %s\n", truncateString(metadata.Description, 100))
 	}
+
 	if len(metadata.Authors) > 0 {
 		fmt.Printf("   Authors: %s\n", metadata.Authors[0])
+
 		if len(metadata.Authors) > 1 {
 			fmt.Printf("            (+%d more)\n", len(metadata.Authors)-1)
 		}
 	}
+
 	fmt.Printf("   Files: %d\n", metadata.FileCount)
 	fmt.Printf("   Total size: %s\n", common.FormatBytes(metadata.TotalSize))
+
 	if metadata.DOI != "" {
 		fmt.Printf("   DOI: %s\n", metadata.DOI)
 	}
+
 	if metadata.License != "" {
 		fmt.Printf("   License: %s\n", metadata.License)
 	}
@@ -140,6 +150,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	// Show collections if present
 	if len(metadata.Collections) > 0 {
 		fmt.Printf("\n📦 Collections:\n")
+
 		for _, collection := range metadata.Collections {
 			fmt.Printf("   %s: %s (%d files, %s)\n",
 				collection.Type,
@@ -179,6 +190,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	// Display results
 	fmt.Printf("\n📋 Download Results:\n")
+
 	if result.Success {
 		fmt.Printf("   Status: ✅ Success\n")
 	} else {
@@ -208,6 +220,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	// Show warnings if any
 	if len(result.Warnings) > 0 {
 		fmt.Printf("\n⚠️  Warnings:\n")
+
 		for _, warning := range result.Warnings {
 			fmt.Printf("   %s\n", warning)
 		}
@@ -216,6 +229,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	// Show errors if any
 	if len(result.Errors) > 0 {
 		fmt.Printf("\n❌ Errors:\n")
+
 		for _, error := range result.Errors {
 			fmt.Printf("   %s\n", error)
 		}
@@ -224,8 +238,10 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	// Output detailed file list in verbose mode
 	if !quiet && len(result.Files) > 0 {
 		fmt.Printf("\n📁 Downloaded Files:\n")
+
 		for _, file := range result.Files {
 			fmt.Printf("   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
+
 			if file.Checksum != "" {
 				fmt.Printf("      %s: %s\n", file.ChecksumType, file.Checksum)
 			}
@@ -236,6 +252,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	if output == "json" {
 		encoder := &jsonEncoder{}
 		encoder.SetIndent("", "  ")
+
 		if err := encoder.Encode(result); err != nil {
 			return fmt.Errorf("failed to encode JSON output: %w", err)
 		}
@@ -246,10 +263,11 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\n🎉 Download completed successfully!\n")
+
 	return nil
 }
 
-// initializeDownloaders registers all available downloaders
+// initializeDownloaders registers all available downloaders.
 func initializeDownloaders() error {
 	// Get NCBI API key from environment variable if available
 	apiKey := os.Getenv("NCBI_API_KEY")
@@ -264,6 +282,7 @@ func initializeDownloaders() error {
 		if !quiet {
 			fmt.Printf("Using NCBI API key for increased rate limits\n")
 		}
+
 		geoOptions = append(geoOptions, geo.WithAPIKey(apiKey))
 	} else if !quiet {
 		fmt.Printf("No NCBI API key found. Set NCBI_API_KEY environment variable for higher rate limits\n")
@@ -291,15 +310,16 @@ func initializeDownloaders() error {
 	return nil
 }
 
-// truncateString truncates a string to the specified length
+// truncateString truncates a string to the specified length.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+
 	return s[:maxLen-3] + "..."
 }
 
-// jsonEncoder is a simple JSON encoder interface
+// jsonEncoder is a simple JSON encoder interface.
 type jsonEncoder struct{}
 
 func (e *jsonEncoder) SetIndent(prefix, indent string) {}

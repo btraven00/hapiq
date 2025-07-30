@@ -18,19 +18,19 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
-// DirectoryChecker handles directory validation and conflict resolution
+// DirectoryChecker handles directory validation and conflict resolution.
 type DirectoryChecker struct {
 	OutputDir string
 }
 
-// NewDirectoryChecker creates a new directory checker
+// NewDirectoryChecker creates a new directory checker.
 func NewDirectoryChecker(outputDir string) *DirectoryChecker {
 	return &DirectoryChecker{
 		OutputDir: outputDir,
 	}
 }
 
-// CheckAndPrepare validates the target directory and detects conflicts
+// CheckAndPrepare validates the target directory and detects conflicts.
 func (dc *DirectoryChecker) CheckAndPrepare(id string) (*downloaders.DirectoryStatus, error) {
 	targetDir := filepath.Join(dc.OutputDir, SanitizeFilename(id))
 
@@ -56,6 +56,7 @@ func (dc *DirectoryChecker) CheckAndPrepare(id string) (*downloaders.DirectorySt
 		if err != nil {
 			return status, fmt.Errorf("failed to scan for conflicts: %w", err)
 		}
+
 		status.Conflicts = conflicts
 	}
 
@@ -65,17 +66,18 @@ func (dc *DirectoryChecker) CheckAndPrepare(id string) (*downloaders.DirectorySt
 		// Don't fail on this, just log a warning
 		freeSpace = -1
 	}
+
 	status.FreeSpace = freeSpace
 
 	return status, nil
 }
 
-// CreateDirectory creates the target directory with proper permissions
+// CreateDirectory creates the target directory with proper permissions.
 func (dc *DirectoryChecker) CreateDirectory(path string) error {
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0o755)
 }
 
-// scanForConflicts identifies existing files that might conflict
+// scanForConflicts identifies existing files that might conflict.
 func (dc *DirectoryChecker) scanForConflicts(targetDir string) ([]string, error) {
 	var conflicts []string
 
@@ -99,6 +101,7 @@ func (dc *DirectoryChecker) scanForConflicts(targetDir string) ([]string, error)
 		if err != nil {
 			relPath = path
 		}
+
 		conflicts = append(conflicts, relPath)
 
 		// Limit the number of conflicts we report
@@ -112,9 +115,10 @@ func (dc *DirectoryChecker) scanForConflicts(targetDir string) ([]string, error)
 	return conflicts, err
 }
 
-// getFreeSpace returns available disk space in bytes
+// getFreeSpace returns available disk space in bytes.
 func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
 	var stat syscall.Statfs_t
+
 	err := syscall.Statfs(path, &stat)
 	if err != nil {
 		return 0, err
@@ -124,7 +128,7 @@ func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
 	return int64(stat.Bavail) * int64(stat.Bsize), nil
 }
 
-// HandleDirectoryConflicts presents options to the user for conflict resolution
+// HandleDirectoryConflicts presents options to the user for conflict resolution.
 func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractive bool) (downloaders.Action, error) {
 	if !status.Exists {
 		return downloaders.ActionProceed, nil
@@ -135,6 +139,7 @@ func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractiv
 		if status.HasWitness {
 			return downloaders.ActionMerge, nil
 		}
+
 		return downloaders.ActionSkip, nil
 	}
 
@@ -151,12 +156,14 @@ func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractiv
 
 	if len(status.Conflicts) > 0 {
 		fmt.Printf("   Conflicting files: %d\n", len(status.Conflicts))
+
 		maxShow := 3
 		for i, conflict := range status.Conflicts {
 			if i >= maxShow {
 				fmt.Printf("     ... and %d more\n", len(status.Conflicts)-maxShow)
 				break
 			}
+
 			fmt.Printf("     %s\n", conflict)
 		}
 	}
@@ -171,21 +178,25 @@ func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractiv
 	return promptUserChoice(options)
 }
 
-// promptUserChoice presents options to the user and returns their choice
+// promptUserChoice presents options to the user and returns their choice.
 func promptUserChoice(options []string) (downloaders.Action, error) {
 	fmt.Printf("\nChoose an action:\n")
+
 	for i, option := range options {
 		fmt.Printf("  %d) %s\n", i+1, option)
 	}
+
 	fmt.Printf("Enter choice [1-%d]: ", len(options))
 
 	reader := bufio.NewReader(os.Stdin)
+
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return downloaders.ActionAbort, fmt.Errorf("failed to read input: %w", err)
 	}
 
 	input = strings.TrimSpace(input)
+
 	choice, err := strconv.Atoi(input)
 	if err != nil || choice < 1 || choice > len(options) {
 		fmt.Printf("Invalid choice. Please enter a number between 1 and %d.\n", len(options))
@@ -202,7 +213,7 @@ func promptUserChoice(options []string) (downloaders.Action, error) {
 	return actions[choice-1], nil
 }
 
-// SanitizeFilename removes invalid characters from filenames
+// SanitizeFilename removes invalid characters from filenames.
 func SanitizeFilename(filename string) string {
 	// Replace invalid characters with underscores
 	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f]`)
@@ -224,12 +235,12 @@ func SanitizeFilename(filename string) string {
 	return sanitized
 }
 
-// EnsureDirectory creates a directory if it doesn't exist
+// EnsureDirectory creates a directory if it doesn't exist.
 func EnsureDirectory(path string) error {
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0o755)
 }
 
-// CalculateFileChecksum computes SHA256 checksum for a file
+// CalculateFileChecksum computes SHA256 checksum for a file.
 func CalculateFileChecksum(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -245,7 +256,7 @@ func CalculateFileChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// WriteWitnessFile creates a hapiq.json file with download metadata
+// WriteWitnessFile creates a hapiq.json file with download metadata.
 func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
@@ -265,7 +276,7 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 	return nil
 }
 
-// LoadWitnessFile reads and parses a hapiq.json file
+// LoadWitnessFile reads and parses a hapiq.json file.
 func LoadWitnessFile(targetDir string) (*downloaders.WitnessFile, error) {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
@@ -276,6 +287,7 @@ func LoadWitnessFile(targetDir string) (*downloaders.WitnessFile, error) {
 	defer file.Close()
 
 	var witness downloaders.WitnessFile
+
 	decoder := NewJSONDecoder(file)
 
 	if err := decoder.Decode(&witness); err != nil {
@@ -285,7 +297,7 @@ func LoadWitnessFile(targetDir string) (*downloaders.WitnessFile, error) {
 	return &witness, nil
 }
 
-// FormatBytes converts bytes to human-readable format
+// FormatBytes converts bytes to human-readable format.
 func FormatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -299,10 +311,11 @@ func FormatBytes(bytes int64) string {
 	}
 
 	units := []string{"KB", "MB", "GB", "TB", "PB"}
+
 	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), units[exp])
 }
 
-// EstimateDownloadTime estimates download time based on file size and average speed
+// EstimateDownloadTime estimates download time based on file size and average speed.
 func EstimateDownloadTime(totalBytes int64, averageSpeedBps float64) string {
 	if averageSpeedBps <= 0 {
 		return "unknown"
@@ -319,16 +332,18 @@ func EstimateDownloadTime(totalBytes int64, averageSpeedBps float64) string {
 	}
 }
 
-// AskUserConfirmation prompts the user for yes/no confirmation
+// AskUserConfirmation prompts the user for yes/no confirmation.
 func AskUserConfirmation(message string) (bool, error) {
 	fmt.Printf("%s [y/N]: ", message)
 
 	reader := bufio.NewReader(os.Stdin)
+
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return false, fmt.Errorf("failed to read input: %w", err)
 	}
 
 	input = strings.ToLower(strings.TrimSpace(input))
+
 	return input == "y" || input == "yes", nil
 }

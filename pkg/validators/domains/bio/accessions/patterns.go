@@ -5,20 +5,20 @@ import (
 	"strings"
 )
 
-// AccessionType represents the type of biological database accession
+// AccessionType represents the type of biological database accession.
 type AccessionType string
 
 const (
-	// Project level accessions
+	// Project level accessions.
 	ProjectBioProject AccessionType = "bioproject"  // PRJNA, PRJEB, PRJDB
 	ProjectGSA        AccessionType = "gsa_project" // PRJC
 	ProjectGEO        AccessionType = "geo_series"  // GSE
 
-	// Study level accessions
+	// Study level accessions.
 	StudySRA AccessionType = "sra_study" // SRP, ERP, DRP
 	StudyGSA AccessionType = "gsa_study" // CRA
 
-	// Sample level accessions
+	// Sample level accessions.
 	BioSampleNCBI AccessionType = "biosample_ncbi" // SAMN
 	BioSampleEBI  AccessionType = "biosample_ebi"  // SAME
 	BioSampleDDBJ AccessionType = "biosample_ddbj" // SAMD
@@ -26,29 +26,29 @@ const (
 	SampleSRA     AccessionType = "sra_sample"     // SRS, ERS, DRS
 	SampleGEO     AccessionType = "geo_sample"     // GSM
 
-	// Experiment level accessions
+	// Experiment level accessions.
 	ExperimentSRA AccessionType = "sra_experiment" // SRX, ERX, DRX
 	ExperimentGSA AccessionType = "gsa_experiment" // CRX
 
-	// Run level accessions
+	// Run level accessions.
 	RunSRA AccessionType = "sra_run" // SRR, ERR, DRR
 	RunGSA AccessionType = "gsa_run" // CRR
 
-	// Unknown or invalid
+	// Unknown or invalid.
 	Unknown AccessionType = "unknown"
 )
 
-// AccessionPattern defines a regex pattern for matching accession IDs
+// AccessionPattern defines a regex pattern for matching accession IDs.
 type AccessionPattern struct {
-	Type        AccessionType
 	Regex       *regexp.Regexp
+	Type        AccessionType
 	Description string
-	Examples    []string
 	Database    string
-	Priority    int // Higher priority patterns are checked first
+	Examples    []string
+	Priority    int
 }
 
-// AccessionDatabase represents information about a biological database
+// AccessionDatabase represents information about a biological database.
 type AccessionDatabase struct {
 	Name        string
 	FullName    string
@@ -57,7 +57,7 @@ type AccessionDatabase struct {
 	Region      string // "international", "europe", "asia", "usa"
 }
 
-// Known biological databases
+// Known biological databases.
 var KnownDatabases = map[string]AccessionDatabase{
 	"sra": {
 		Name:        "SRA",
@@ -103,7 +103,7 @@ var KnownDatabases = map[string]AccessionDatabase{
 	},
 }
 
-// Initialize all accession patterns based on iSeq patterns
+// Initialize all accession patterns based on iSeq patterns.
 var AccessionPatterns []AccessionPattern
 
 func init() {
@@ -262,8 +262,7 @@ func init() {
 	}
 }
 
-// MatchAccession attempts to match an input string against known accession patterns
-// Returns the matched pattern and whether a match was found
+// Returns the matched pattern and whether a match was found.
 func MatchAccession(input string) (*AccessionPattern, bool) {
 	normalized := strings.TrimSpace(strings.ToUpper(input))
 
@@ -278,10 +277,10 @@ func MatchAccession(input string) (*AccessionPattern, bool) {
 	return nil, false
 }
 
-// MatchAllAccessions returns all patterns that match the input
-// Useful for ambiguous cases or validation
+// Useful for ambiguous cases or validation.
 func MatchAllAccessions(input string) []*AccessionPattern {
 	normalized := strings.TrimSpace(strings.ToUpper(input))
+
 	var matches []*AccessionPattern
 
 	for i := range AccessionPatterns {
@@ -294,13 +293,14 @@ func MatchAllAccessions(input string) []*AccessionPattern {
 	return matches
 }
 
-// ValidateAccessionFormat performs basic format validation
+// ValidateAccessionFormat performs basic format validation.
 func ValidateAccessionFormat(input string) (bool, []string) {
 	if input == "" {
 		return false, []string{"empty input"}
 	}
 
 	normalized := strings.TrimSpace(input)
+
 	var issues []string
 
 	// Check for common formatting issues
@@ -329,9 +329,10 @@ func ValidateAccessionFormat(input string) (bool, []string) {
 	return len(issues) == 0, issues
 }
 
-// ExtractAccessionFromText attempts to find accession IDs within a text string
+// ExtractAccessionFromText attempts to find accession IDs within a text string.
 func ExtractAccessionFromText(text string) []string {
 	var found []string
+
 	seen := make(map[string]bool)
 
 	// Look for patterns that might be accessions
@@ -350,8 +351,7 @@ func ExtractAccessionFromText(text string) []string {
 	return found
 }
 
-// GetAccessionHierarchy returns the hierarchical relationship for an accession type
-// Returns slice from most general to most specific
+// Returns slice from most general to most specific.
 func GetAccessionHierarchy(accType AccessionType) []AccessionType {
 	switch accType {
 	case RunSRA:
@@ -377,7 +377,7 @@ func GetAccessionHierarchy(accType AccessionType) []AccessionType {
 	}
 }
 
-// IsDataLevel returns true if the accession represents actual data (not just metadata)
+// IsDataLevel returns true if the accession represents actual data (not just metadata).
 func IsDataLevel(accType AccessionType) bool {
 	dataLevels := map[AccessionType]bool{
 		RunSRA:        true,
@@ -387,10 +387,11 @@ func IsDataLevel(accType AccessionType) bool {
 		SampleGEO:     true,
 		SampleSRA:     true,
 	}
+
 	return dataLevels[accType]
 }
 
-// GetPreferredDatabase returns the primary database for an accession type
+// GetPreferredDatabase returns the primary database for an accession type.
 func GetPreferredDatabase(accType AccessionType) string {
 	switch accType {
 	case ProjectBioProject, StudySRA, SampleSRA, ExperimentSRA, RunSRA:
@@ -406,7 +407,7 @@ func GetPreferredDatabase(accType AccessionType) string {
 	}
 }
 
-// GetRegionalMirrors returns database mirrors for different regions
+// GetRegionalMirrors returns database mirrors for different regions.
 func GetRegionalMirrors(database string) []AccessionDatabase {
 	var mirrors []AccessionDatabase
 

@@ -68,7 +68,7 @@ lint: ## Run golangci-lint (pass ARGS="--fix" to auto-fix issues)
 	@if [ -f scripts/lint.sh ]; then \
 		./scripts/lint.sh $(ARGS); \
 	else \
-		@if command -v golangci-lint >/dev/null 2>&1; then \
+		if command -v golangci-lint >/dev/null 2>&1; then \
 			golangci-lint run --timeout=5m $(ARGS); \
 		else \
 			echo "golangci-lint not found. Install it with 'make install-lint'"; \

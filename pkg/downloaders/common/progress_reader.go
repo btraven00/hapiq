@@ -9,20 +9,20 @@ import (
 	"time"
 )
 
-// ProgressReader wraps an io.Reader to track read progress
+// ProgressReader wraps an io.Reader to track read progress.
 type ProgressReader struct {
+	lastUpdate   time.Time
 	reader       io.Reader
+	tracker      *ProgressTracker
+	filename     string
 	total        int64
 	current      int64
-	filename     string
-	tracker      *ProgressTracker
-	lastUpdate   time.Time
 	updateFreq   time.Duration
 	mu           sync.RWMutex
 	showProgress bool
 }
 
-// NewProgressReader creates a new progress-tracking reader
+// NewProgressReader creates a new progress-tracking reader.
 func NewProgressReader(reader io.Reader, total int64, filename string, tracker *ProgressTracker, showProgress bool) *ProgressReader {
 	return &ProgressReader{
 		reader:       reader,
@@ -35,7 +35,7 @@ func NewProgressReader(reader io.Reader, total int64, filename string, tracker *
 	}
 }
 
-// Read implements io.Reader interface with progress tracking
+// Read implements io.Reader interface with progress tracking.
 func (pr *ProgressReader) Read(p []byte) (int, error) {
 	n, err := pr.reader.Read(p)
 
@@ -59,7 +59,7 @@ func (pr *ProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// showLiveProgress displays a real-time progress bar
+// showLiveProgress displays a real-time progress bar.
 func (pr *ProgressReader) showLiveProgress(current, total int64) {
 	if total <= 0 {
 		return
@@ -73,6 +73,7 @@ func (pr *ProgressReader) showLiveProgress(current, total int64) {
 	// Create progress bar
 	barWidth := 30
 	filled := int(percentage / 100 * float64(barWidth))
+
 	if filled > barWidth {
 		filled = barWidth
 	}
@@ -81,13 +82,16 @@ func (pr *ProgressReader) showLiveProgress(current, total int64) {
 	for i := 0; i < filled; i++ {
 		bar += "█"
 	}
+
 	for i := filled; i < barWidth; i++ {
 		bar += "░"
 	}
 
 	// Calculate speed and ETA
 	elapsed := time.Since(pr.lastUpdate)
+
 	var speed float64
+
 	var eta string
 
 	if elapsed.Seconds() > 0 && current > 0 {
@@ -139,31 +143,35 @@ func (pr *ProgressReader) showLiveProgress(current, total int64) {
 	}
 }
 
-// Close completes the progress tracking
+// Close completes the progress tracking.
 func (pr *ProgressReader) Close() error {
 	if pr.showProgress {
 		fmt.Println() // Ensure we end on a new line
 	}
+
 	if pr.tracker != nil {
 		pr.tracker.CompleteFile(pr.filename)
 	}
+
 	return nil
 }
 
-// GetProgress returns current progress information
+// GetProgress returns current progress information.
 func (pr *ProgressReader) GetProgress() (current, total int64, percentage float64) {
 	pr.mu.RLock()
 	defer pr.mu.RUnlock()
 
 	current = pr.current
 	total = pr.total
+
 	if total > 0 {
 		percentage = float64(current) / float64(total) * 100
 	}
+
 	return
 }
 
-// formatDuration formats a duration for display
+// formatDuration formats a duration for display.
 func formatDuration(d time.Duration) string {
 	if d < 0 {
 		return "unknown"
@@ -182,17 +190,17 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-// MultiFileProgressDisplay manages progress display for multiple concurrent downloads
+// MultiFileProgressDisplay manages progress display for multiple concurrent downloads.
 type MultiFileProgressDisplay struct {
-	files      map[string]*ProgressReader
-	mu         sync.RWMutex
-	updateFreq time.Duration
 	lastUpdate time.Time
-	isActive   bool
+	files      map[string]*ProgressReader
 	stopChan   chan struct{}
+	updateFreq time.Duration
+	mu         sync.RWMutex
+	isActive   bool
 }
 
-// NewMultiFileProgressDisplay creates a new multi-file progress display
+// NewMultiFileProgressDisplay creates a new multi-file progress display.
 func NewMultiFileProgressDisplay() *MultiFileProgressDisplay {
 	return &MultiFileProgressDisplay{
 		files:      make(map[string]*ProgressReader),
@@ -201,34 +209,35 @@ func NewMultiFileProgressDisplay() *MultiFileProgressDisplay {
 	}
 }
 
-// AddFile adds a file to the progress display
+// AddFile adds a file to the progress display.
 func (mpd *MultiFileProgressDisplay) AddFile(filename string, reader *ProgressReader) {
 	mpd.mu.Lock()
 	defer mpd.mu.Unlock()
 	mpd.files[filename] = reader
 }
 
-// RemoveFile removes a file from the progress display
+// RemoveFile removes a file from the progress display.
 func (mpd *MultiFileProgressDisplay) RemoveFile(filename string) {
 	mpd.mu.Lock()
 	defer mpd.mu.Unlock()
 	delete(mpd.files, filename)
 }
 
-// Start begins the progress display loop
+// Start begins the progress display loop.
 func (mpd *MultiFileProgressDisplay) Start() {
 	mpd.mu.Lock()
 	if mpd.isActive {
 		mpd.mu.Unlock()
 		return
 	}
+
 	mpd.isActive = true
 	mpd.mu.Unlock()
 
 	go mpd.displayLoop()
 }
 
-// Stop ends the progress display loop
+// Stop ends the progress display loop.
 func (mpd *MultiFileProgressDisplay) Stop() {
 	mpd.mu.Lock()
 	defer mpd.mu.Unlock()
@@ -239,7 +248,7 @@ func (mpd *MultiFileProgressDisplay) Stop() {
 	}
 }
 
-// displayLoop runs the progress display update loop
+// displayLoop runs the progress display update loop.
 func (mpd *MultiFileProgressDisplay) displayLoop() {
 	ticker := time.NewTicker(mpd.updateFreq)
 	defer ticker.Stop()
@@ -254,9 +263,10 @@ func (mpd *MultiFileProgressDisplay) displayLoop() {
 	}
 }
 
-// updateDisplay updates the multi-file progress display
+// updateDisplay updates the multi-file progress display.
 func (mpd *MultiFileProgressDisplay) updateDisplay() {
 	mpd.mu.RLock()
+
 	activeFiles := make(map[string]*ProgressReader)
 	for k, v := range mpd.files {
 		activeFiles[k] = v

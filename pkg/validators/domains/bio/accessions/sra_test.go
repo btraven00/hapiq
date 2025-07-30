@@ -206,8 +206,8 @@ func TestSRAValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
-		expectValid bool
 		expectType  AccessionType
+		expectValid bool
 		expectURLs  bool
 		expectError bool
 	}{
@@ -479,7 +479,6 @@ func TestSRAValidator_HTTPValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := validator.ValidateHTTPAccess(ctx, tt.url)
-
 			if err != nil {
 				t.Errorf("ValidateHTTPAccess() unexpected error: %v", err)
 				return
@@ -542,7 +541,6 @@ func TestSRAValidator_SpecificAccessionTypes(t *testing.T) {
 	for accType, accession := range accessionTests {
 		t.Run(string(accType), func(t *testing.T) {
 			result, err := validator.Validate(ctx, accession)
-
 			if err != nil {
 				t.Errorf("Validate() error = %v", err)
 				return
@@ -603,7 +601,7 @@ func containsAccessionID(url, accessionID string) bool {
 			strings.Contains(url, strings.ToLower(accessionID)))
 }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkSRAValidator_CanValidate(b *testing.B) {
 	validator := NewSRAValidator()
 	testInputs := []string{
@@ -683,7 +681,6 @@ func TestSRAValidator_EdgeCases(t *testing.T) {
 	for _, tt := range edgeCases {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := validator.Validate(ctx, tt.input)
-
 			if err != nil {
 				t.Errorf("Validate() unexpected error: %v", err)
 				return
@@ -705,7 +702,6 @@ func TestSRAValidator_Timeout(t *testing.T) {
 
 	// This should handle the timeout gracefully
 	result, err := validator.Validate(ctx, "SRR123456")
-
 	// Should not error, but HTTP validation might fail due to timeout
 	if err != nil {
 		t.Errorf("Validate() should handle timeout gracefully, got error: %v", err)

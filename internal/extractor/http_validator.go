@@ -11,33 +11,33 @@ import (
 	"time"
 )
 
-// HTTPValidator handles HTTP validation of URLs with browser spoofing
+// HTTPValidator handles HTTP validation of URLs with browser spoofing.
 type HTTPValidator struct {
 	client    *http.Client
 	userAgent string
 }
 
-// HTTPValidationResult contains detailed HTTP validation information
+// HTTPValidationResult contains detailed HTTP validation information.
 type HTTPValidationResult struct {
-	URL           string            `json:"url"`
-	FinalURL      string            `json:"final_url,omitempty"` // After redirects
-	StatusCode    int               `json:"status_code"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	FinalURL      string            `json:"final_url,omitempty"`
+	RequestMethod string            `json:"request_method"`
 	ContentType   string            `json:"content_type,omitempty"`
-	ContentLength int64             `json:"content_length,omitempty"`
 	LastModified  string            `json:"last_modified,omitempty"`
 	ETag          string            `json:"etag,omitempty"`
 	Server        string            `json:"server,omitempty"`
+	URL           string            `json:"url"`
 	RedirectChain []string          `json:"redirect_chain,omitempty"`
 	ResponseTime  time.Duration     `json:"response_time"`
-	Accessible    bool              `json:"accessible"`
-	Error         string            `json:"error,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	IsDataset     bool              `json:"is_dataset"`
+	ContentLength int64             `json:"content_length,omitempty"`
 	DatasetScore  float64           `json:"dataset_score"`
-	RequestMethod string            `json:"request_method"`
+	StatusCode    int               `json:"status_code"`
+	Accessible    bool              `json:"accessible"`
+	IsDataset     bool              `json:"is_dataset"`
 }
 
-// NewHTTPValidator creates a new HTTP validator with browser-like configuration
+// NewHTTPValidator creates a new HTTP validator with browser-like configuration.
 func NewHTTPValidator(timeout time.Duration) *HTTPValidator {
 	if timeout == 0 {
 		timeout = 15 * time.Second
@@ -72,7 +72,7 @@ func NewHTTPValidator(timeout time.Duration) *HTTPValidator {
 	}
 }
 
-// ValidateURL validates a URL using HEAD first, then GET if necessary
+// ValidateURL validates a URL using HEAD first, then GET if necessary.
 func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTTPValidationResult, error) {
 	start := time.Now()
 
@@ -87,6 +87,7 @@ func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTT
 	if err != nil {
 		result.Error = fmt.Sprintf("invalid URL: %v", err)
 		result.ResponseTime = time.Since(start)
+
 		return result, nil
 	}
 
@@ -98,6 +99,7 @@ func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTT
 		result.ResponseTime = time.Since(start)
 		result.Accessible = result.StatusCode >= 200 && result.StatusCode < 400
 		v.analyzeDatasetLikelihood(result)
+
 		return result, nil
 	}
 
@@ -110,6 +112,7 @@ func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTT
 		result.ResponseTime = time.Since(start)
 		result.Accessible = result.StatusCode >= 200 && result.StatusCode < 400
 		v.analyzeDatasetLikelihood(result)
+
 		return result, nil
 	}
 
@@ -118,6 +121,7 @@ func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTT
 	if simpleErr != nil {
 		result.Error = fmt.Sprintf("all requests failed - HEAD: %v, GET: %v", headErr, simpleErr)
 		result.ResponseTime = time.Since(start)
+
 		return result, nil
 	}
 
@@ -126,12 +130,13 @@ func (v *HTTPValidator) ValidateURL(ctx context.Context, targetURL string) (*HTT
 	result.ResponseTime = time.Since(start)
 	result.Accessible = result.StatusCode >= 200 && result.StatusCode < 400
 	v.analyzeDatasetLikelihood(result)
+
 	return result, nil
 }
 
-// performRequest executes an HTTP request with browser spoofing
+// performRequest executes an HTTP request with browser spoofing.
 func (v *HTTPValidator) performRequest(ctx context.Context, method, url string) (*HTTPValidationResult, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +146,7 @@ func (v *HTTPValidator) performRequest(ctx context.Context, method, url string) 
 
 	// Track redirects
 	var redirectChain []string
+
 	originalURL := url
 
 	resp, err := v.client.Do(req)
@@ -169,9 +175,9 @@ func (v *HTTPValidator) performRequest(ctx context.Context, method, url string) 
 	return result, nil
 }
 
-// performRequestWithRange tries to get headers without downloading full content
+// performRequestWithRange tries to get headers without downloading full content.
 func (v *HTTPValidator) performRequestWithRange(ctx context.Context, url string) (*HTTPValidationResult, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +207,7 @@ func (v *HTTPValidator) performRequestWithRange(ctx context.Context, url string)
 	return result, nil
 }
 
-// addBrowserHeaders adds realistic browser headers to avoid detection
+// addBrowserHeaders adds realistic browser headers to avoid detection.
 func (v *HTTPValidator) addBrowserHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", v.userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
@@ -217,7 +223,7 @@ func (v *HTTPValidator) addBrowserHeaders(req *http.Request) {
 	req.Header.Set("Cache-Control", "max-age=0")
 }
 
-// extractHeaders extracts useful headers from the response
+// extractHeaders extracts useful headers from the response.
 func (v *HTTPValidator) extractHeaders(resp *http.Response, result *HTTPValidationResult) {
 	// Primary headers
 	result.ContentType = resp.Header.Get("Content-Type")
@@ -247,12 +253,13 @@ func (v *HTTPValidator) extractHeaders(resp *http.Response, result *HTTPValidati
 	}
 }
 
-// analyzeDatasetLikelihood determines if the URL likely points to a dataset
+// analyzeDatasetLikelihood determines if the URL likely points to a dataset.
 func (v *HTTPValidator) analyzeDatasetLikelihood(result *HTTPValidationResult) {
 	score := 0.0
 
 	// Check content type for dataset indicators
 	contentType := strings.ToLower(result.ContentType)
+
 	switch {
 	case strings.Contains(contentType, "text/csv"):
 		score += 0.9
@@ -332,7 +339,7 @@ func (v *HTTPValidator) analyzeDatasetLikelihood(result *HTTPValidationResult) {
 	result.IsDataset = score >= 0.5
 }
 
-// getRandomUserAgent returns a realistic browser user agent
+// getRandomUserAgent returns a realistic browser user agent.
 func getRandomUserAgent() string {
 	userAgents := []string{
 		// Chrome on Windows
@@ -356,7 +363,7 @@ func getRandomUserAgent() string {
 	return userAgents[int(time.Now().UnixNano())%len(userAgents)]
 }
 
-// ValidateLinkBatch validates multiple URLs concurrently
+// ValidateLinkBatch validates multiple URLs concurrently.
 func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, maxConcurrency int) map[string]*HTTPValidationResult {
 	if maxConcurrency <= 0 {
 		maxConcurrency = 5 // Conservative default to avoid overwhelming servers
@@ -365,8 +372,8 @@ func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, ma
 	results := make(map[string]*HTTPValidationResult)
 	urlChan := make(chan string, len(urls))
 	resultChan := make(chan struct {
-		url    string
 		result *HTTPValidationResult
+		url    string
 	}, len(urls))
 
 	// Start workers
@@ -375,8 +382,8 @@ func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, ma
 			for url := range urlChan {
 				result, _ := v.ValidateURL(ctx, url)
 				resultChan <- struct {
-					url    string
 					result *HTTPValidationResult
+					url    string
 				}{url, result}
 			}
 		}()
@@ -386,6 +393,7 @@ func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, ma
 	for _, url := range urls {
 		urlChan <- url
 	}
+
 	close(urlChan)
 
 	// Collect results
@@ -397,14 +405,15 @@ func (v *HTTPValidator) ValidateLinkBatch(ctx context.Context, urls []string, ma
 	return results
 }
 
-// IsHealthyResponse checks if the HTTP response indicates a healthy endpoint
+// IsHealthyResponse checks if the HTTP response indicates a healthy endpoint.
 func IsHealthyResponse(statusCode int) bool {
 	return statusCode >= 200 && statusCode < 400
 }
 
-// GetContentTypeCategory categorizes content types for analysis
+// GetContentTypeCategory categorizes content types for analysis.
 func GetContentTypeCategory(contentType string) string {
 	contentType = strings.ToLower(contentType)
+
 	switch {
 	case strings.Contains(contentType, "csv"):
 		return "structured_data"

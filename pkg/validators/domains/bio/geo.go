@@ -11,13 +11,13 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// GEOValidator validates Gene Expression Omnibus (GEO) identifiers and URLs
+// GEOValidator validates Gene Expression Omnibus (GEO) identifiers and URLs.
 type GEOValidator struct {
 	*BioDomainValidator
 	idRegexes map[string]*regexp.Regexp
 }
 
-// NewGEOValidator creates a new GEO validator
+// NewGEOValidator creates a new GEO validator.
 func NewGEOValidator() *GEOValidator {
 	base := NewBioDomainValidator(
 		"geo",
@@ -36,7 +36,7 @@ func NewGEOValidator() *GEOValidator {
 	return validator
 }
 
-// initializePatterns sets up regex patterns and URL patterns for GEO
+// initializePatterns sets up regex patterns and URL patterns for GEO.
 func (v *GEOValidator) initializePatterns() {
 	// GEO ID patterns
 	patterns := map[string]string{
@@ -107,7 +107,7 @@ func (v *GEOValidator) initializePatterns() {
 	)
 }
 
-// CanValidate checks if this validator can handle the given input
+// CanValidate checks if this validator can handle the given input.
 func (v *GEOValidator) CanValidate(input string) bool {
 	input = strings.TrimSpace(input)
 
@@ -131,7 +131,7 @@ func (v *GEOValidator) CanValidate(input string) bool {
 	return false
 }
 
-// Validate performs GEO-specific validation
+// Validate performs GEO-specific validation.
 func (v *GEOValidator) Validate(ctx context.Context, input string) (*domains.DomainValidationResult, error) {
 	start := time.Now()
 	input = strings.TrimSpace(input)
@@ -150,6 +150,7 @@ func (v *GEOValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		result.Valid = false
 		result.Error = "no valid GEO identifier found in input"
 		result.ValidationTime = time.Since(start)
+
 		return result, nil
 	}
 
@@ -175,10 +176,11 @@ func (v *GEOValidator) Validate(ctx context.Context, input string) (*domains.Dom
 	result.Likelihood = v.CalculateBioLikelihood(result, nil)
 
 	result.ValidationTime = time.Since(start)
+
 	return result, nil
 }
 
-// extractGEOID extracts a GEO ID from various input formats
+// extractGEOID extracts a GEO ID from various input formats.
 func (v *GEOValidator) extractGEOID(input string) string {
 	// Direct ID match
 	for _, regex := range v.idRegexes {
@@ -201,6 +203,7 @@ func (v *GEOValidator) extractGEOID(input string) string {
 
 	// Try to find GEO ID pattern anywhere in the string
 	geoPattern := regexp.MustCompile(`\b(G[SCM][ESLP]?\d+(?:\.\d+)?)\b`)
+
 	matches := geoPattern.FindStringSubmatch(input)
 	if len(matches) > 1 {
 		candidate := matches[1]
@@ -214,7 +217,7 @@ func (v *GEOValidator) extractGEOID(input string) string {
 	return ""
 }
 
-// isGEOURL checks if the input is a GEO-related URL
+// isGEOURL checks if the input is a GEO-related URL.
 func (v *GEOValidator) isGEOURL(input string) bool {
 	u, err := url.Parse(input)
 	if err != nil {
@@ -246,7 +249,7 @@ func (v *GEOValidator) isGEOURL(input string) bool {
 	return false
 }
 
-// classifyGEOID determines the type and characteristics of a GEO ID
+// classifyGEOID determines the type and characteristics of a GEO ID.
 func (v *GEOValidator) classifyGEOID(geoID string, result *domains.DomainValidationResult) {
 	switch {
 	case strings.HasPrefix(geoID, "GSE"):
@@ -299,7 +302,7 @@ func (v *GEOValidator) classifyGEOID(geoID string, result *domains.DomainValidat
 	result.Tags = append(result.Tags, "ncbi", "geo", "gene_expression")
 }
 
-// generateGEOURLs creates relevant URLs for the GEO ID
+// generateGEOURLs creates relevant URLs for the GEO ID.
 func (v *GEOValidator) generateGEOURLs(geoID string, result *domains.DomainValidationResult) {
 	baseURL := "https://www.ncbi.nlm.nih.gov/geo"
 
@@ -334,6 +337,7 @@ func (v *GEOValidator) generateGEOURLs(geoID string, result *domains.DomainValid
 			// For samples, we can't directly determine the series, but we can provide the pattern
 			seriesID = "GSExxx" // Placeholder
 		}
+
 		ftpURL := fmt.Sprintf("ftp://ftp.ncbi.nlm.nih.gov/geo/series/%snnn/%s/",
 			seriesID[:len(seriesID)-3], seriesID)
 		alternates = append(alternates, ftpURL)
@@ -342,14 +346,16 @@ func (v *GEOValidator) generateGEOURLs(geoID string, result *domains.DomainValid
 	result.AlternateURLs = alternates
 }
 
-// addHTTPMetadata adds HTTP validation results to the domain result
+// addHTTPMetadata adds HTTP validation results to the domain result.
 func (v *GEOValidator) addHTTPMetadata(httpResult *HTTPValidationResult, result *domains.DomainValidationResult) {
 	if httpResult.Accessible {
 		result.Metadata["http_status"] = fmt.Sprintf("%d", httpResult.StatusCode)
 		result.Metadata["content_type"] = httpResult.ContentType
+
 		if httpResult.LastModified != "" {
 			result.Metadata["last_modified"] = httpResult.LastModified
 		}
+
 		if httpResult.ContentLength > 0 {
 			result.Metadata["content_length"] = fmt.Sprintf("%d", httpResult.ContentLength)
 		}
@@ -359,7 +365,7 @@ func (v *GEOValidator) addHTTPMetadata(httpResult *HTTPValidationResult, result 
 	}
 }
 
-// calculateConfidence determines how confident we are in the validation
+// calculateConfidence determines how confident we are in the validation.
 func (v *GEOValidator) calculateConfidence(result *domains.DomainValidationResult) float64 {
 	if !result.Valid {
 		return 0.0

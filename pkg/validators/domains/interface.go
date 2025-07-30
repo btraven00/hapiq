@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// DomainValidator defines the interface for domain-specific validators
+// DomainValidator defines the interface for domain-specific validators.
 type DomainValidator interface {
 	// Name returns the unique name of this validator (e.g., "geo", "sra", "pubchem")
 	Name() string
@@ -29,40 +29,27 @@ type DomainValidator interface {
 	Priority() int
 }
 
-// DomainValidationResult represents the result of domain-specific validation
+// DomainValidationResult represents the result of domain-specific validation.
 type DomainValidationResult struct {
-	// Basic validation info
-	Valid         bool   `json:"valid"`
-	Input         string `json:"input"`
-	ValidatorName string `json:"validator_name"`
-	Domain        string `json:"domain"`
-
-	// Normalized identifier and URLs
-	NormalizedID  string   `json:"normalized_id,omitempty"`
-	PrimaryURL    string   `json:"primary_url,omitempty"`
-	AlternateURLs []string `json:"alternate_urls,omitempty"`
-
-	// Classification
-	DatasetType string `json:"dataset_type"`
-	Subtype     string `json:"subtype,omitempty"`
-
-	// Confidence and likelihood
-	Confidence float64 `json:"confidence"` // How confident we are in the validation
-	Likelihood float64 `json:"likelihood"` // How likely this is a valid dataset
-
-	// Metadata extracted from the identifier
-	Metadata map[string]string `json:"metadata,omitempty"`
-	Tags     []string          `json:"tags,omitempty"`
-
-	// Error information
-	Error    string   `json:"error,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
-
-	// Timing
-	ValidationTime time.Duration `json:"validation_time"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Subtype        string            `json:"subtype,omitempty"`
+	Input          string            `json:"input"`
+	Domain         string            `json:"domain"`
+	NormalizedID   string            `json:"normalized_id,omitempty"`
+	PrimaryURL     string            `json:"primary_url,omitempty"`
+	Error          string            `json:"error,omitempty"`
+	ValidatorName  string            `json:"validator_name"`
+	DatasetType    string            `json:"dataset_type"`
+	Tags           []string          `json:"tags,omitempty"`
+	AlternateURLs  []string          `json:"alternate_urls,omitempty"`
+	Warnings       []string          `json:"warnings,omitempty"`
+	Confidence     float64           `json:"confidence"`
+	Likelihood     float64           `json:"likelihood"`
+	ValidationTime time.Duration     `json:"validation_time"`
+	Valid          bool              `json:"valid"`
 }
 
-// Pattern represents a pattern this validator can recognize
+// Pattern represents a pattern this validator can recognize.
 type Pattern struct {
 	Type        PatternType `json:"type"`
 	Pattern     string      `json:"pattern"`
@@ -70,7 +57,7 @@ type Pattern struct {
 	Examples    []string    `json:"examples"`
 }
 
-// PatternType defines the type of pattern
+// PatternType defines the type of pattern.
 type PatternType string
 
 const (
@@ -79,14 +66,14 @@ const (
 	PatternTypeGlob  PatternType = "glob"
 )
 
-// ValidatorRegistry manages domain-specific validators
+// ValidatorRegistry manages domain-specific validators.
 type ValidatorRegistry struct {
 	validators map[string]DomainValidator
 	domains    map[string][]DomainValidator
 	sorted     []DomainValidator // Sorted by priority
 }
 
-// NewValidatorRegistry creates a new validator registry
+// NewValidatorRegistry creates a new validator registry.
 func NewValidatorRegistry() *ValidatorRegistry {
 	return &ValidatorRegistry{
 		validators: make(map[string]DomainValidator),
@@ -95,7 +82,7 @@ func NewValidatorRegistry() *ValidatorRegistry {
 	}
 }
 
-// Register adds a validator to the registry
+// Register adds a validator to the registry.
 func (r *ValidatorRegistry) Register(validator DomainValidator) error {
 	name := validator.Name()
 	domain := validator.Domain()
@@ -115,6 +102,7 @@ func (r *ValidatorRegistry) Register(validator DomainValidator) error {
 	if r.domains[domain] == nil {
 		r.domains[domain] = make([]DomainValidator, 0)
 	}
+
 	r.domains[domain] = append(r.domains[domain], validator)
 
 	// Rebuild sorted list
@@ -123,7 +111,7 @@ func (r *ValidatorRegistry) Register(validator DomainValidator) error {
 	return nil
 }
 
-// Unregister removes a validator from the registry
+// Unregister removes a validator from the registry.
 func (r *ValidatorRegistry) Unregister(name string) error {
 	validator, exists := r.validators[name]
 	if !exists {
@@ -157,23 +145,23 @@ func (r *ValidatorRegistry) Unregister(name string) error {
 	return nil
 }
 
-// Get retrieves a validator by name
+// Get retrieves a validator by name.
 func (r *ValidatorRegistry) Get(name string) (DomainValidator, bool) {
 	validator, exists := r.validators[name]
 	return validator, exists
 }
 
-// GetByDomain returns all validators for a specific domain
+// GetByDomain returns all validators for a specific domain.
 func (r *ValidatorRegistry) GetByDomain(domain string) []DomainValidator {
 	return r.domains[domain]
 }
 
-// GetAll returns all registered validators sorted by priority
+// GetAll returns all registered validators sorted by priority.
 func (r *ValidatorRegistry) GetAll() []DomainValidator {
 	return r.sorted
 }
 
-// FindValidators returns validators that can handle the given input
+// FindValidators returns validators that can handle the given input.
 func (r *ValidatorRegistry) FindValidators(input string) []DomainValidator {
 	var candidates []DomainValidator
 
@@ -186,7 +174,7 @@ func (r *ValidatorRegistry) FindValidators(input string) []DomainValidator {
 	return candidates
 }
 
-// ValidateWithBest attempts validation with the best matching validator
+// ValidateWithBest attempts validation with the best matching validator.
 func (r *ValidatorRegistry) ValidateWithBest(ctx context.Context, input string) (*DomainValidationResult, error) {
 	candidates := r.FindValidators(input)
 	if len(candidates) == 0 {
@@ -200,7 +188,7 @@ func (r *ValidatorRegistry) ValidateWithBest(ctx context.Context, input string) 
 	return candidates[0].Validate(ctx, input)
 }
 
-// ValidateWithAll attempts validation with all matching validators
+// ValidateWithAll attempts validation with all matching validators.
 func (r *ValidatorRegistry) ValidateWithAll(ctx context.Context, input string) ([]*DomainValidationResult, error) {
 	candidates := r.FindValidators(input)
 	if len(candidates) == 0 {
@@ -224,22 +212,24 @@ func (r *ValidatorRegistry) ValidateWithAll(ctx context.Context, input string) (
 				Error:         err.Error(),
 			}
 		}
+
 		results = append(results, result)
 	}
 
 	return results, nil
 }
 
-// ListDomains returns all registered domains
+// ListDomains returns all registered domains.
 func (r *ValidatorRegistry) ListDomains() []string {
 	domains := make([]string, 0, len(r.domains))
 	for domain := range r.domains {
 		domains = append(domains, domain)
 	}
+
 	return domains
 }
 
-// ListValidators returns metadata about all registered validators
+// ListValidators returns metadata about all registered validators.
 func (r *ValidatorRegistry) ListValidators() []ValidatorInfo {
 	info := make([]ValidatorInfo, 0, len(r.validators))
 
@@ -256,7 +246,7 @@ func (r *ValidatorRegistry) ListValidators() []ValidatorInfo {
 	return info
 }
 
-// rebuildSorted rebuilds the priority-sorted validator list
+// rebuildSorted rebuilds the priority-sorted validator list.
 func (r *ValidatorRegistry) rebuildSorted() {
 	r.sorted = make([]DomainValidator, 0, len(r.validators))
 
@@ -278,16 +268,16 @@ func (r *ValidatorRegistry) rebuildSorted() {
 	}
 }
 
-// ValidatorInfo contains metadata about a validator
+// ValidatorInfo contains metadata about a validator.
 type ValidatorInfo struct {
 	Name        string    `json:"name"`
 	Domain      string    `json:"domain"`
 	Description string    `json:"description"`
-	Priority    int       `json:"priority"`
 	Patterns    []Pattern `json:"patterns"`
+	Priority    int       `json:"priority"`
 }
 
-// RegistryError represents errors from the validator registry
+// RegistryError represents errors from the validator registry.
 type RegistryError struct {
 	Type    ErrorType `json:"type"`
 	Message string    `json:"message"`
@@ -297,7 +287,7 @@ func (e *RegistryError) Error() string {
 	return e.Message
 }
 
-// ErrorType defines types of registry errors
+// ErrorType defines types of registry errors.
 type ErrorType string
 
 const (
@@ -306,20 +296,20 @@ const (
 	ErrorTypeNoValidator ErrorType = "no_validator"
 )
 
-// DefaultRegistry is the global registry instance
+// DefaultRegistry is the global registry instance.
 var DefaultRegistry = NewValidatorRegistry()
 
-// Register registers a validator with the default registry
+// Register registers a validator with the default registry.
 func Register(validator DomainValidator) error {
 	return DefaultRegistry.Register(validator)
 }
 
-// Validate validates input using the default registry
+// Validate validates input using the default registry.
 func Validate(ctx context.Context, input string) (*DomainValidationResult, error) {
 	return DefaultRegistry.ValidateWithBest(ctx, input)
 }
 
-// FindValidators finds validators using the default registry
+// FindValidators finds validators using the default registry.
 func FindValidators(input string) []DomainValidator {
 	return DefaultRegistry.FindValidators(input)
 }

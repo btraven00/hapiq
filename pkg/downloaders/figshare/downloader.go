@@ -20,7 +20,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
-// FigshareDownloader implements the Downloader interface for Figshare datasets
+// FigshareDownloader implements the Downloader interface for Figshare datasets.
 type FigshareDownloader struct {
 	client  *http.Client
 	baseURL string
@@ -29,7 +29,7 @@ type FigshareDownloader struct {
 	verbose bool
 }
 
-// NewFigshareDownloader creates a new Figshare downloader
+// NewFigshareDownloader creates a new Figshare downloader.
 func NewFigshareDownloader(options ...Option) *FigshareDownloader {
 	d := &FigshareDownloader{
 		client:  &http.Client{Timeout: 30 * time.Second},
@@ -46,10 +46,10 @@ func NewFigshareDownloader(options ...Option) *FigshareDownloader {
 	return d
 }
 
-// Option defines configuration options for FigshareDownloader
+// Option defines configuration options for FigshareDownloader.
 type Option func(*FigshareDownloader)
 
-// WithTimeout sets the HTTP timeout
+// WithTimeout sets the HTTP timeout.
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *FigshareDownloader) {
 		d.timeout = timeout
@@ -57,26 +57,26 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithVerbose enables verbose logging
+// WithVerbose enables verbose logging.
 func WithVerbose(verbose bool) Option {
 	return func(d *FigshareDownloader) {
 		d.verbose = verbose
 	}
 }
 
-// WithHTTPClient sets a custom HTTP client
+// WithHTTPClient sets a custom HTTP client.
 func WithHTTPClient(client *http.Client) Option {
 	return func(d *FigshareDownloader) {
 		d.client = client
 	}
 }
 
-// GetSourceType returns the source type identifier
+// GetSourceType returns the source type identifier.
 func (d *FigshareDownloader) GetSourceType() string {
 	return "figshare"
 }
 
-// Validate checks if the ID is a valid Figshare identifier
+// Validate checks if the ID is a valid Figshare identifier.
 func (d *FigshareDownloader) Validate(ctx context.Context, id string) (*downloaders.ValidationResult, error) {
 	result := &downloaders.ValidationResult{
 		ID:         id,
@@ -117,10 +117,11 @@ func (d *FigshareDownloader) Validate(ctx context.Context, id string) (*download
 	}
 
 	result.Valid = true
+
 	return result, nil
 }
 
-// GetMetadata retrieves metadata for a Figshare dataset
+// GetMetadata retrieves metadata for a Figshare dataset.
 func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	cleanID := d.cleanFigshareID(id)
 
@@ -129,6 +130,7 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 	if err != nil {
 		return nil, err
 	}
+
 	if !validation.Valid {
 		return nil, &downloaders.DownloaderError{
 			Type:    "invalid_id",
@@ -142,7 +144,6 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 
 	metadata, err := d.getArticleMetadata(ctx, cleanID)
 	if err == nil {
-
 		return metadata, nil
 	}
 
@@ -150,7 +151,6 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 
 	metadata, err = d.getCollectionMetadata(ctx, cleanID)
 	if err == nil {
-
 		return metadata, nil
 	}
 
@@ -158,7 +158,6 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 
 	metadata, err = d.getProjectMetadata(ctx, cleanID)
 	if err == nil {
-
 		return metadata, nil
 	}
 
@@ -170,7 +169,7 @@ func (d *FigshareDownloader) GetMetadata(ctx context.Context, id string) (*downl
 	}
 }
 
-// Download performs the actual download operation
+// Download performs the actual download operation.
 func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
 	startTime := time.Now()
 
@@ -184,11 +183,13 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 
 	// Clean and validate ID
 	cleanID := d.cleanFigshareID(req.ID)
+
 	validation, err := d.Validate(ctx, cleanID)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		return result, nil
 	}
+
 	if !validation.Valid {
 		result.Errors = append(result.Errors, strings.Join(validation.Errors, "; "))
 		return result, nil
@@ -203,10 +204,12 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 			return result, nil
 		}
 	}
+
 	result.Metadata = metadata
 
 	// Check directory and handle conflicts
 	dirChecker := common.NewDirectoryChecker(req.OutputDir)
+
 	dirStatus, err := dirChecker.CheckAndPrepare(cleanID)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("directory check failed: %v", err))
@@ -214,6 +217,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 	}
 
 	nonInteractive := req.Options != nil && req.Options.NonInteractive
+
 	action, err := common.HandleDirectoryConflicts(dirStatus, nonInteractive)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("conflict resolution failed: %v", err))
@@ -227,6 +231,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 	case downloaders.ActionSkip:
 		result.Warnings = append(result.Warnings, "download skipped due to existing directory")
 		result.Success = true
+
 		return result, nil
 	case downloaders.ActionOverwrite:
 		if err := os.RemoveAll(dirStatus.TargetPath); err != nil {
@@ -251,10 +256,12 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 				result.Errors = append(result.Errors, fmt.Sprintf("collection confirmation failed: %v", err))
 				return result, nil
 			}
+
 			if !confirmed {
-				result.Warnings = append(result.Warnings, "download cancelled by user")
+				result.Warnings = append(result.Warnings, "download canceled by user")
 				return result, nil
 			}
+
 			collection.UserConfirmed = true
 			metadata.Collections[0] = collection
 		}
@@ -262,6 +269,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 
 	// Determine dataset type and download accordingly
 	datasetType := d.determineDatasetType(metadata)
+
 	var downloadErr error
 
 	switch datasetType {
@@ -332,16 +340,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 
 	// Convert FileInfo to FileWitness
 	for i, file := range result.Files {
-		witness.Files[i] = downloaders.FileWitness{
-			Path:         file.Path,
-			OriginalName: file.OriginalName,
-			Size:         file.Size,
-			Checksum:     file.Checksum,
-			ChecksumType: file.ChecksumType,
-			DownloadTime: file.DownloadTime,
-			SourceURL:    file.SourceURL,
-			ContentType:  file.ContentType,
-		}
+		witness.Files[i] = downloaders.FileWitness(file)
 	}
 
 	// Write witness file
@@ -354,7 +353,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 	return result, nil
 }
 
-// cleanFigshareID normalizes Figshare identifiers
+// cleanFigshareID normalizes Figshare identifiers.
 func (d *FigshareDownloader) cleanFigshareID(id string) string {
 	// Remove whitespace
 	cleaned := strings.TrimSpace(id)
@@ -400,6 +399,7 @@ func (d *FigshareDownloader) cleanFigshareID(id string) string {
 
 	// Remove any non-numeric characters
 	re := regexp.MustCompile(`\d+`)
+
 	matches := re.FindStringSubmatch(cleaned)
 	if len(matches) > 0 {
 		cleaned = matches[0]
@@ -408,12 +408,12 @@ func (d *FigshareDownloader) cleanFigshareID(id string) string {
 	return cleaned
 }
 
-// isSharingURL checks if the URL is a figshare sharing URL
+// isSharingURL checks if the URL is a figshare sharing URL.
 func (d *FigshareDownloader) isSharingURL(url string) bool {
 	return strings.Contains(strings.ToLower(url), "figshare.com/s/")
 }
 
-// resolveSharingURL resolves a figshare sharing URL to get the actual article ID
+// resolveSharingURL resolves a figshare sharing URL to get the actual article ID.
 func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error) {
 	if d.verbose {
 		fmt.Printf("🔗 Resolving sharing URL: %s\n", sharingURL)
@@ -426,7 +426,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 	}
 
 	// Make HTTP request to the sharing URL
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -464,6 +464,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from API endpoint: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -473,6 +474,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from download URL: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -482,6 +484,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from 'Download all' link: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -491,6 +494,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from download link: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -500,6 +504,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from DOI: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -509,6 +514,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from URL: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -518,6 +524,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from Apollo PrivateLink: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -527,6 +534,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from citation: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
@@ -536,14 +544,17 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 		if d.verbose {
 			fmt.Printf("✅ Resolved article ID from Apollo state: %s\n", matches[1])
 		}
+
 		return matches[1], nil
 	}
 
 	// Method 9: Try to find the largest numeric ID as it's likely the article ID
 	largestIDPattern := regexp.MustCompile(`\b(\d{6,8})\b`)
+
 	allMatches := largestIDPattern.FindAllStringSubmatch(bodyStr, -1)
 	if len(allMatches) > 0 {
 		var largestID int64
+
 		var bestMatch string
 
 		for _, match := range allMatches {
@@ -560,6 +571,7 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 			if d.verbose {
 				fmt.Printf("✅ Resolved article ID from largest ID pattern: %s\n", bestMatch)
 			}
+
 			return bestMatch, nil
 		}
 	}
@@ -575,26 +587,28 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 	return "", fmt.Errorf("could not extract article ID from sharing URL")
 }
 
-// buildFigshareURL constructs the Figshare URL for an ID
+// buildFigshareURL constructs the Figshare URL for an ID.
 func (d *FigshareDownloader) buildFigshareURL(id string) string {
 	return fmt.Sprintf("%s/articles/%s", d.baseURL, id)
 }
 
-// determineDatasetType determines if the dataset is an article, collection, or project
+// determineDatasetType determines if the dataset is an article, collection, or project.
 func (d *FigshareDownloader) determineDatasetType(metadata *downloaders.Metadata) string {
 	if len(metadata.Collections) > 0 {
 		collectionType := metadata.Collections[0].Type
 		if strings.Contains(collectionType, "collection") {
 			return "collection"
 		}
+
 		if strings.Contains(collectionType, "project") {
 			return "project"
 		}
 	}
+
 	return "article"
 }
 
-// confirmCollection asks user for confirmation when downloading large collections
+// confirmCollection asks user for confirmation when downloading large collections.
 func (d *FigshareDownloader) confirmCollection(ctx context.Context, collection *downloaders.Collection) (bool, error) {
 	fmt.Printf("🔍 Detected %s:\n", collection.Type)
 	fmt.Printf("   Title: %s\n", collection.Title)
@@ -603,12 +617,14 @@ func (d *FigshareDownloader) confirmCollection(ctx context.Context, collection *
 
 	if len(collection.Samples) > 0 {
 		fmt.Printf("   Structure preview:\n")
+
 		maxShow := 5
 		for i, sample := range collection.Samples {
 			if i >= maxShow {
 				fmt.Printf("     ... and %d more\n", len(collection.Samples)-maxShow)
 				break
 			}
+
 			fmt.Printf("     %s\n", sample)
 		}
 	}
@@ -616,9 +632,9 @@ func (d *FigshareDownloader) confirmCollection(ctx context.Context, collection *
 	return common.AskUserConfirmation("Continue with download?")
 }
 
-// downloadFile downloads a single file with progress tracking
+// downloadFile downloads a single file with progress tracking.
 func (d *FigshareDownloader) downloadFile(ctx context.Context, url, targetPath string) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -642,6 +658,7 @@ func (d *FigshareDownloader) downloadFile(ctx context.Context, url, targetPath s
 
 	// Copy with progress tracking
 	downloadTime := time.Now()
+
 	size, err := io.Copy(file, resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy data: %w", err)
@@ -666,9 +683,9 @@ func (d *FigshareDownloader) downloadFile(ctx context.Context, url, targetPath s
 	}, nil
 }
 
-// downloadFileWithProgressTracking downloads a file with real-time progress tracking
+// downloadFileWithProgressTracking downloads a file with real-time progress tracking.
 func (d *FigshareDownloader) downloadFileWithProgressTracking(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -696,6 +713,7 @@ func (d *FigshareDownloader) downloadFileWithProgressTracking(ctx context.Contex
 
 	// Copy with progress tracking
 	downloadTime := time.Now()
+
 	copiedSize, err := io.Copy(file, progressReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy data: %w", err)
@@ -720,11 +738,11 @@ func (d *FigshareDownloader) downloadFileWithProgressTracking(ctx context.Contex
 	}, nil
 }
 
-// apiRequest makes a request to the Figshare API
+// apiRequest makes a request to the Figshare API.
 func (d *FigshareDownloader) apiRequest(ctx context.Context, endpoint string, result interface{}) error {
 	url := fmt.Sprintf("%s/%s", d.apiURL, endpoint)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -733,13 +751,11 @@ func (d *FigshareDownloader) apiRequest(ctx context.Context, endpoint string, re
 
 	resp, err := d.client.Do(req)
 	if err != nil {
-
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-
 		return fmt.Errorf("API request failed: HTTP %d", resp.StatusCode)
 	}
 

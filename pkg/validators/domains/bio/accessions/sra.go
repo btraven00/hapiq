@@ -11,28 +11,27 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
-// SRAValidator validates Sequence Read Archive (SRA) identifiers and URLs
-// Supports NCBI SRA, EBI ENA, and DDBJ databases
+// Supports NCBI SRA, EBI ENA, and DDBJ databases.
 type SRAValidator struct {
 	*BaseAccessionValidator
 	metadataCache map[string]*SRAMetadata
 }
 
-// SRAMetadata contains metadata extracted from SRA APIs
+// SRAMetadata contains metadata extracted from SRA APIs.
 type SRAMetadata struct {
+	CachedAt        time.Time `json:"cached_at"`
 	Title           string    `json:"title,omitempty"`
 	Organism        string    `json:"organism,omitempty"`
 	Platform        string    `json:"platform,omitempty"`
 	LibraryStrategy string    `json:"library_strategy,omitempty"`
 	LibrarySource   string    `json:"library_source,omitempty"`
 	StudyType       string    `json:"study_type,omitempty"`
-	DataSize        int64     `json:"data_size,omitempty"`
 	SubmissionDate  string    `json:"submission_date,omitempty"`
 	LastUpdate      string    `json:"last_update,omitempty"`
-	CachedAt        time.Time `json:"cached_at"`
+	DataSize        int64     `json:"data_size,omitempty"`
 }
 
-// NewSRAValidator creates a new SRA validator
+// NewSRAValidator creates a new SRA validator.
 func NewSRAValidator() *SRAValidator {
 	base := NewBaseAccessionValidator(
 		"sra",
@@ -51,7 +50,7 @@ func NewSRAValidator() *SRAValidator {
 	return validator
 }
 
-// initializeSRAPatterns sets up SRA-specific accession patterns
+// initializeSRAPatterns sets up SRA-specific accession patterns.
 func (v *SRAValidator) initializeSRAPatterns() {
 	// Filter global patterns for SRA-related types
 	sraPatterns := []AccessionPattern{}
@@ -66,7 +65,7 @@ func (v *SRAValidator) initializeSRAPatterns() {
 	v.AddAccessionPatterns(sraPatterns)
 }
 
-// CanValidate checks if this validator can handle the given input
+// CanValidate checks if this validator can handle the given input.
 func (v *SRAValidator) CanValidate(input string) bool {
 	// Use base implementation
 	if v.BaseAccessionValidator.CanValidate(input) {
@@ -81,7 +80,7 @@ func (v *SRAValidator) CanValidate(input string) bool {
 	return false
 }
 
-// Validate performs comprehensive SRA validation
+// Validate performs comprehensive SRA validation.
 func (v *SRAValidator) Validate(ctx context.Context, input string) (*domains.DomainValidationResult, error) {
 	start := time.Now()
 
@@ -96,11 +95,13 @@ func (v *SRAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 	}
 
 	accessionID := result.NormalizedID
+
 	pattern := v.findMatchingPattern(accessionID)
 	if pattern == nil {
 		result.Valid = false
 		result.Error = "no matching SRA pattern found"
 		result.ValidationTime = time.Since(start)
+
 		return result, nil
 	}
 
@@ -120,6 +121,7 @@ func (v *SRAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		if result.Metadata == nil {
 			result.Metadata = make(map[string]string)
 		}
+
 		result.Metadata["http_error"] = fmt.Sprintf("HTTP %d", httpResult.StatusCode)
 		result.Metadata["accessibility"] = "false"
 
@@ -131,6 +133,7 @@ func (v *SRAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 		if result.Metadata == nil {
 			result.Metadata = make(map[string]string)
 		}
+
 		result.Metadata["accessibility"] = "true"
 	}
 
@@ -152,10 +155,11 @@ func (v *SRAValidator) Validate(ctx context.Context, input string) (*domains.Dom
 	v.addAvailabilityTags(result, httpResult)
 
 	result.ValidationTime = time.Since(start)
+
 	return result, nil
 }
 
-// isSRARelatedURL checks if URL is SRA-related
+// isSRARelatedURL checks if URL is SRA-related.
 func (v *SRAValidator) isSRARelatedURL(input string) bool {
 	u, err := url.Parse(input)
 	if err != nil {
@@ -207,9 +211,10 @@ func (v *SRAValidator) isSRARelatedURL(input string) bool {
 	return false
 }
 
-// generateSRASpecificURLs creates comprehensive URL set for SRA accessions
+// generateSRASpecificURLs creates comprehensive URL set for SRA accessions.
 func (v *SRAValidator) generateSRASpecificURLs(result *domains.DomainValidationResult, accessionID string, pattern *AccessionPattern) {
 	var primary string
+
 	var alternates []string
 
 	switch pattern.Type {
@@ -231,7 +236,7 @@ func (v *SRAValidator) generateSRASpecificURLs(result *domains.DomainValidationR
 	result.AlternateURLs = alternates
 }
 
-// generateRunURLs creates URLs for SRA run accessions
+// generateRunURLs creates URLs for SRA run accessions.
 func (v *SRAValidator) generateRunURLs(runID string) (string, []string) {
 	// Primary: NCBI SRA run page
 	primary := fmt.Sprintf("https://www.ncbi.nlm.nih.gov/sra/%s", runID)
@@ -257,7 +262,7 @@ func (v *SRAValidator) generateRunURLs(runID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateExperimentURLs creates URLs for SRA experiment accessions
+// generateExperimentURLs creates URLs for SRA experiment accessions.
 func (v *SRAValidator) generateExperimentURLs(expID string) (string, []string) {
 	primary := fmt.Sprintf("https://www.ncbi.nlm.nih.gov/sra?term=%s", expID)
 
@@ -270,7 +275,7 @@ func (v *SRAValidator) generateExperimentURLs(expID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateSampleURLs creates URLs for SRA sample accessions
+// generateSampleURLs creates URLs for SRA sample accessions.
 func (v *SRAValidator) generateSampleURLs(sampleID string) (string, []string) {
 	primary := fmt.Sprintf("https://www.ncbi.nlm.nih.gov/sra?term=%s", sampleID)
 
@@ -282,7 +287,7 @@ func (v *SRAValidator) generateSampleURLs(sampleID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateStudyURLs creates URLs for SRA study accessions
+// generateStudyURLs creates URLs for SRA study accessions.
 func (v *SRAValidator) generateStudyURLs(studyID string) (string, []string) {
 	primary := fmt.Sprintf("https://www.ncbi.nlm.nih.gov/sra?term=%s", studyID)
 
@@ -294,7 +299,7 @@ func (v *SRAValidator) generateStudyURLs(studyID string) (string, []string) {
 	return primary, alternates
 }
 
-// generateProjectURLs creates URLs for BioProject accessions
+// generateProjectURLs creates URLs for BioProject accessions.
 func (v *SRAValidator) generateProjectURLs(projectID string) (string, []string) {
 	primary := fmt.Sprintf("https://www.ncbi.nlm.nih.gov/bioproject/%s", projectID)
 
@@ -314,7 +319,7 @@ func (v *SRAValidator) generateProjectURLs(projectID string) (string, []string) 
 	return primary, alternates
 }
 
-// fetchSRAMetadata attempts to fetch metadata from SRA APIs
+// fetchSRAMetadata attempts to fetch metadata from SRA APIs.
 func (v *SRAValidator) fetchSRAMetadata(ctx context.Context, accessionID string, accType AccessionType) *SRAMetadata {
 	// Check cache first
 	if cached, exists := v.metadataCache[accessionID]; exists {
@@ -327,6 +332,7 @@ func (v *SRAValidator) fetchSRAMetadata(ctx context.Context, accessionID string,
 	if metadata := v.fetchFromENA(ctx, accessionID, accType); metadata != nil {
 		metadata.CachedAt = time.Now()
 		v.metadataCache[accessionID] = metadata
+
 		return metadata
 	}
 
@@ -334,16 +340,18 @@ func (v *SRAValidator) fetchSRAMetadata(ctx context.Context, accessionID string,
 	if metadata := v.fetchFromNCBI(ctx, accessionID, accType); metadata != nil {
 		metadata.CachedAt = time.Now()
 		v.metadataCache[accessionID] = metadata
+
 		return metadata
 	}
 
 	return nil
 }
 
-// fetchFromENA fetches metadata from ENA API
+// fetchFromENA fetches metadata from ENA API.
 func (v *SRAValidator) fetchFromENA(ctx context.Context, accessionID string, accType AccessionType) *SRAMetadata {
 	// Determine the appropriate ENA API endpoint
 	var apiURL string
+
 	switch accType {
 	case RunSRA:
 		apiURL = fmt.Sprintf("https://www.ebi.ac.uk/ena/portal/api/filereport?accession=%s&result=read_run&fields=run_accession,scientific_name,instrument_platform,library_strategy,library_source,base_count,first_created,last_updated", accessionID)
@@ -359,7 +367,7 @@ func (v *SRAValidator) fetchFromENA(ctx context.Context, accessionID string, acc
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
 		return nil
 	}
@@ -381,55 +389,65 @@ func (v *SRAValidator) fetchFromENA(ctx context.Context, accessionID string, acc
 	return metadata
 }
 
-// fetchFromNCBI fetches metadata from NCBI APIs
+// fetchFromNCBI fetches metadata from NCBI APIs.
 func (v *SRAValidator) fetchFromNCBI(ctx context.Context, accessionID string, accType AccessionType) *SRAMetadata {
 	// Implementation would use NCBI E-utilities
 	// This is a placeholder for the actual implementation
 	return nil
 }
 
-// addSRAMetadata adds fetched metadata to the validation result
+// addSRAMetadata adds fetched metadata to the validation result.
 func (v *SRAValidator) addSRAMetadata(result *domains.DomainValidationResult, metadata *SRAMetadata) {
 	if metadata.Title != "" {
 		result.Metadata["title"] = metadata.Title
 	}
+
 	if metadata.Organism != "" {
 		result.Metadata["organism"] = metadata.Organism
 		result.Tags = append(result.Tags, "organism:"+strings.ToLower(metadata.Organism))
 	}
+
 	if metadata.Platform != "" {
 		result.Metadata["sequencing_platform"] = metadata.Platform
 		result.Tags = append(result.Tags, "platform:"+strings.ToLower(metadata.Platform))
 	}
+
 	if metadata.LibraryStrategy != "" {
 		result.Metadata["library_strategy"] = metadata.LibraryStrategy
 		result.Tags = append(result.Tags, "strategy:"+strings.ToLower(metadata.LibraryStrategy))
 	}
+
 	if metadata.LibrarySource != "" {
 		result.Metadata["library_source"] = metadata.LibrarySource
 	}
+
 	if metadata.StudyType != "" {
 		result.Metadata["study_type"] = metadata.StudyType
 	}
+
 	if metadata.DataSize > 0 {
 		result.Metadata["data_size_bytes"] = fmt.Sprintf("%d", metadata.DataSize)
 	}
+
 	if metadata.SubmissionDate != "" {
 		result.Metadata["submission_date"] = metadata.SubmissionDate
 	}
+
 	if metadata.LastUpdate != "" {
 		result.Metadata["last_updated"] = metadata.LastUpdate
 	}
 }
 
-// addHTTPMetadata adds HTTP validation results to the domain result
+// addHTTPMetadata adds HTTP validation results to the domain result.
 func (v *SRAValidator) addHTTPMetadata(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) {
 	if httpResult.Accessible {
 		result.Metadata["http_status"] = fmt.Sprintf("%d", httpResult.StatusCode)
 		result.Metadata["content_type"] = httpResult.ContentType
+
 		if httpResult.LastModified != "" {
 			result.Metadata["last_modified"] = httpResult.LastModified
 		}
+
 		if httpResult.ContentLength > 0 {
 			result.Metadata["content_length"] = fmt.Sprintf("%d", httpResult.ContentLength)
 		}
@@ -439,7 +457,7 @@ func (v *SRAValidator) addHTTPMetadata(result *domains.DomainValidationResult, h
 	}
 }
 
-// enhanceSRAResult adds SRA-specific enhancements
+// enhanceSRAResult adds SRA-specific enhancements.
 func (v *SRAValidator) enhanceSRAResult(result *domains.DomainValidationResult, pattern *AccessionPattern, httpResult *HTTPValidationResult) {
 	// Add SRA-specific tags
 	result.Tags = append(result.Tags, "sequence_archive", "high_throughput_sequencing")
@@ -453,6 +471,7 @@ func (v *SRAValidator) enhanceSRAResult(result *domains.DomainValidationResult, 
 		for _, level := range hierarchy {
 			levelNames = append(levelNames, string(level))
 		}
+
 		result.Metadata["hierarchy"] = strings.Join(levelNames, " > ")
 	}
 
@@ -471,7 +490,7 @@ func (v *SRAValidator) enhanceSRAResult(result *domains.DomainValidationResult, 
 	}
 }
 
-// calculateSRAConfidence determines confidence score for SRA validation
+// calculateSRAConfidence determines confidence score for SRA validation.
 func (v *SRAValidator) calculateSRAConfidence(result *domains.DomainValidationResult, httpResult *HTTPValidationResult) float64 {
 	if !result.Valid {
 		return 0.0
@@ -496,6 +515,7 @@ func (v *SRAValidator) calculateSRAConfidence(result *domains.DomainValidationRe
 	if _, hasTitle := result.Metadata["title"]; hasTitle {
 		confidence += 0.05
 	}
+
 	if _, hasOrganism := result.Metadata["organism"]; hasOrganism {
 		confidence += 0.03
 	}
@@ -518,17 +538,17 @@ func (v *SRAValidator) calculateSRAConfidence(result *domains.DomainValidationRe
 	return confidence
 }
 
-// ClearCache clears the metadata cache
+// ClearCache clears the metadata cache.
 func (v *SRAValidator) ClearCache() {
 	v.metadataCache = make(map[string]*SRAMetadata)
 }
 
-// GetCacheSize returns the number of cached entries
+// GetCacheSize returns the number of cached entries.
 func (v *SRAValidator) GetCacheSize() int {
 	return len(v.metadataCache)
 }
 
-// GetSupportedAccessionTypes returns the types of accessions this validator supports
+// GetSupportedAccessionTypes returns the types of accessions this validator supports.
 func (v *SRAValidator) GetSupportedAccessionTypes() []AccessionType {
 	return []AccessionType{
 		ProjectBioProject,

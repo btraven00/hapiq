@@ -11,35 +11,35 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
-// ProgressTracker manages progress tracking for downloads
+// ProgressTracker manages progress tracking for downloads.
 type ProgressTracker struct {
-	mu              sync.RWMutex
+	startTime       time.Time
+	lastUpdateTime  time.Time
+	files           map[string]*FileProgress
+	callback        downloaders.ProgressCallback
 	totalBytes      int64
 	downloadedBytes int64
 	totalFiles      int
 	downloadedFiles int
 	failedFiles     int
 	skippedFiles    int
-	startTime       time.Time
-	lastUpdateTime  time.Time
-	files           map[string]*FileProgress
-	callback        downloaders.ProgressCallback
+	mu              sync.RWMutex
 	verbose         bool
 }
 
-// FileProgress tracks progress for individual files
+// FileProgress tracks progress for individual files.
 type FileProgress struct {
+	StartTime      time.Time
+	LastUpdateTime time.Time
+	Error          error
 	Filename       string
 	Size           int64
 	Downloaded     int64
-	StartTime      time.Time
-	LastUpdateTime time.Time
-	Speed          float64 // bytes per second
+	Speed          float64
 	Status         FileStatus
-	Error          error
 }
 
-// FileStatus represents the status of a file download
+// FileStatus represents the status of a file download.
 type FileStatus int
 
 const (
@@ -67,7 +67,7 @@ func (s FileStatus) String() string {
 	}
 }
 
-// NewProgressTracker creates a new progress tracker
+// NewProgressTracker creates a new progress tracker.
 func NewProgressTracker(totalFiles int, totalBytes int64, callback downloaders.ProgressCallback, verbose bool) *ProgressTracker {
 	return &ProgressTracker{
 		totalBytes:     totalBytes,
@@ -80,7 +80,7 @@ func NewProgressTracker(totalFiles int, totalBytes int64, callback downloaders.P
 	}
 }
 
-// StartFile registers a new file for progress tracking
+// StartFile registers a new file for progress tracking.
 func (pt *ProgressTracker) StartFile(filename string, size int64) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -99,7 +99,7 @@ func (pt *ProgressTracker) StartFile(filename string, size int64) {
 	}
 }
 
-// UpdateFile updates progress for a specific file
+// UpdateFile updates progress for a specific file.
 func (pt *ProgressTracker) UpdateFile(filename string, downloaded int64) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -137,7 +137,7 @@ func (pt *ProgressTracker) UpdateFile(filename string, downloaded int64) {
 	}
 }
 
-// CompleteFile marks a file as completed
+// CompleteFile marks a file as completed.
 func (pt *ProgressTracker) CompleteFile(filename string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -158,7 +158,7 @@ func (pt *ProgressTracker) CompleteFile(filename string) {
 	}
 }
 
-// FailFile marks a file as failed
+// FailFile marks a file as failed.
 func (pt *ProgressTracker) FailFile(filename string, err error) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -174,8 +174,8 @@ func (pt *ProgressTracker) FailFile(filename string, err error) {
 	}
 }
 
-// SkipFile marks a file as skipped
-func (pt *ProgressTracker) SkipFile(filename string, reason string) {
+// SkipFile marks a file as skipped.
+func (pt *ProgressTracker) SkipFile(filename, reason string) {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
 
@@ -189,13 +189,15 @@ func (pt *ProgressTracker) SkipFile(filename string, reason string) {
 	}
 }
 
-// GetStats returns current download statistics
+// GetStats returns current download statistics.
 func (pt *ProgressTracker) GetStats() *downloaders.DownloadStats {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
 
 	duration := time.Since(pt.startTime)
+
 	var averageSpeed float64
+
 	if duration.Seconds() > 0 {
 		averageSpeed = float64(pt.downloadedBytes) / duration.Seconds()
 	}
@@ -214,7 +216,7 @@ func (pt *ProgressTracker) GetStats() *downloaders.DownloadStats {
 	}
 }
 
-// PrintSummary prints a final summary of the download operation
+// PrintSummary prints a final summary of the download operation.
 func (pt *ProgressTracker) PrintSummary() {
 	pt.mu.RLock()
 	defer pt.mu.RUnlock()
@@ -237,6 +239,7 @@ func (pt *ProgressTracker) PrintSummary() {
 	// Show failed files if any
 	if stats.FilesFailed > 0 {
 		fmt.Printf("\n❌ Failed files:\n")
+
 		for filename, fileProgress := range pt.files {
 			if fileProgress.Status == StatusFailed {
 				fmt.Printf("   %s: %v\n", filename, fileProgress.Error)
@@ -245,7 +248,7 @@ func (pt *ProgressTracker) PrintSummary() {
 	}
 }
 
-// printProgress prints current progress (internal method)
+// printProgress prints current progress (internal method).
 func (pt *ProgressTracker) printProgress() {
 	var percentage float64
 	if pt.totalBytes > 0 {
@@ -253,12 +256,15 @@ func (pt *ProgressTracker) printProgress() {
 	}
 
 	duration := time.Since(pt.startTime)
+
 	var speed float64
+
 	if duration.Seconds() > 0 {
 		speed = float64(pt.downloadedBytes) / duration.Seconds()
 	}
 
 	var eta string
+
 	if speed > 0 && pt.totalBytes > pt.downloadedBytes {
 		remainingBytes := pt.totalBytes - pt.downloadedBytes
 		eta = fmt.Sprintf(" (ETA: %s)", EstimateDownloadTime(remainingBytes, speed))
@@ -272,7 +278,7 @@ func (pt *ProgressTracker) printProgress() {
 		eta)
 }
 
-// ProgressBar creates a simple text progress bar
+// ProgressBar creates a simple text progress bar.
 func ProgressBar(current, total int64, width int) string {
 	if total == 0 {
 		return strings.Repeat("?", width)
@@ -286,20 +292,21 @@ func ProgressBar(current, total int64, width int) string {
 	}
 
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+
 	return fmt.Sprintf("[%s] %.1f%%", bar, percentage*100)
 }
 
-// FileProgressBar creates a progress bar for individual files
+// FileProgressBar creates a progress bar for individual files.
 func (fp *FileProgress) ProgressBar(width int) string {
 	return ProgressBar(fp.Downloaded, fp.Size, width)
 }
 
-// GetCurrentSpeed returns the current download speed for a file
+// GetCurrentSpeed returns the current download speed for a file.
 func (fp *FileProgress) GetCurrentSpeed() float64 {
 	return fp.Speed
 }
 
-// GetETA estimates time remaining for file download
+// GetETA estimates time remaining for file download.
 func (fp *FileProgress) GetETA() time.Duration {
 	if fp.Speed <= 0 || fp.Downloaded >= fp.Size {
 		return 0
@@ -307,13 +314,15 @@ func (fp *FileProgress) GetETA() time.Duration {
 
 	remainingBytes := fp.Size - fp.Downloaded
 	remainingSeconds := float64(remainingBytes) / fp.Speed
+
 	return time.Duration(remainingSeconds) * time.Second
 }
 
-// GetPercentage returns download percentage for a file
+// GetPercentage returns download percentage for a file.
 func (fp *FileProgress) GetPercentage() float64 {
 	if fp.Size == 0 {
 		return 0
 	}
+
 	return float64(fp.Downloaded) / float64(fp.Size) * 100
 }
