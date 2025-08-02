@@ -20,9 +20,7 @@ import (
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio" // Import for side effects (validator registration)
 )
 
-const (
-	outputFormatCSV = "csv"
-)
+// No need for local constants, using shared ones from constants.go
 
 var (
 	validateLinks   bool
@@ -63,14 +61,16 @@ func init() {
 
 	extractCmd.Flags().BoolVar(&validateLinks, "validate-links", false, "validate extracted links for accessibility")
 	extractCmd.Flags().BoolVar(&includeContext, "include-context", true, "include surrounding text context for links")
-	extractCmd.Flags().IntVar(&contextLength, "context-length", 100, "length of context to extract around links")
+	extractCmd.Flags().IntVar(&contextLength, "context-length", defaultContextLength,
+		"length of context to extract around links")
 	extractCmd.Flags().StringSliceVar(&filterDomains, "filter-domains", nil,
 		"comma-separated list of domains to filter (e.g., figshare.com,zenodo.org)")
-	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", 0.85,
+	extractCmd.Flags().Float64Var(&minConfidence, "min-confidence", defaultMinConfidence,
 		"minimum confidence threshold for including links")
 	extractCmd.Flags().StringVar(&outputFormat, "format", "human", "output format (human, json, csv)")
 	extractCmd.Flags().BoolVar(&batchMode, "batch", false, "process multiple files and output summary")
-	extractCmd.Flags().IntVar(&maxLinksPerPage, "max-links-per-page", 50, "maximum number of links to extract per page")
+	extractCmd.Flags().IntVar(&maxLinksPerPage, "max-links-per-page", defaultMaxLinksPerPage,
+		"maximum number of links to extract per page")
 	extractCmd.Flags().IntVar(&numWorkers, "workers", runtime.NumCPU(), "number of parallel workers for processing")
 	extractCmd.Flags().BoolVar(&showProgress, "progress", true, "show progress during batch processing")
 	extractCmd.Flags().BoolVar(&keep404s, "keep-404s", false,
@@ -122,7 +122,7 @@ func processSingleFile(pdfExtractor *extractor.PDFExtractor, filename string) er
 
 func outputResult(result *extractor.ExtractionResult) error {
 	switch strings.ToLower(outputFormat) {
-	case "json":
+	case outputFormatJSON:
 		return outputExtractionJSON(result)
 	case outputFormatCSV:
 		return outputCSV(result)
@@ -147,7 +147,7 @@ func outputHuman(result *extractor.ExtractionResult) error {
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr, "🔗 Found %d links total (%d above %.0f%% confidence)\n",
-		result.Summary.TotalLinks, highConfidenceLinks, minConfidence*100)
+		result.Summary.TotalLinks, highConfidenceLinks, minConfidence*percentageMultiplier)
 
 	if len(result.Errors) > 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "\n❌ Errors:\n")
@@ -215,12 +215,12 @@ func outputHuman(result *extractor.ExtractionResult) error {
 				continue
 			}
 
-			if i >= 10 && quiet {
-				_, _ = fmt.Fprintf(os.Stderr, "   ... and %d more (use without --quiet to show all)\n", len(links)-10)
+			if i >= maxDisplayLinks && quiet {
+				_, _ = fmt.Fprintf(os.Stderr, "   ... and %d more (use without --quiet to show all)\n", len(links)-maxDisplayLinks)
 				break
 			}
 
-			confidence := fmt.Sprintf("%.1f%%", link.Confidence*100)
+			confidence := fmt.Sprintf("%.1f%%", link.Confidence*percentageMultiplier)
 			pageInfo := fmt.Sprintf("p.%d", link.Page)
 
 			// Add validation status if available
@@ -248,7 +248,8 @@ func outputHuman(result *extractor.ExtractionResult) error {
 	}
 
 	if result.Summary.ValidatedLinks > 0 {
-		accessiblePercent := float64(result.Summary.AccessibleLinks) / float64(result.Summary.ValidatedLinks) * 100
+		accessiblePercent := float64(result.Summary.AccessibleLinks) /
+			float64(result.Summary.ValidatedLinks) * percentageMultiplier
 		_, _ = fmt.Fprintf(os.Stderr, "   Validated: %d/%d (%.1f%% accessible)\n",
 			result.Summary.AccessibleLinks, result.Summary.ValidatedLinks, accessiblePercent)
 	}
@@ -330,7 +331,7 @@ func processBatchFilesParallel(filenames []string, options extractor.ExtractionO
 
 		// Start progress reporting goroutine
 		go func() {
-			ticker := time.NewTicker(500 * time.Millisecond)
+			ticker := time.NewTicker(progressUpdateInterval * time.Millisecond)
 			defer ticker.Stop()
 
 			for range ticker.C {
@@ -500,7 +501,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 		_, _ = fmt.Fprintf(os.Stderr, "Total links found: %d\n", totalLinks)
 
 		if totalValidated > 0 {
-			accessiblePercent := float64(totalAccessible) / float64(totalValidated) * 100
+			accessiblePercent := float64(totalAccessible) / float64(totalValidated) * percentageMultiplier
 			_, _ = fmt.Fprintf(os.Stderr, "Links validated: %d (%.1f%% accessible)\n", totalValidated, accessiblePercent)
 		}
 
@@ -529,7 +530,7 @@ func outputBatchResults(results []*extractor.ExtractionResult, totalLinks, total
 					// Extract domain from URL
 					if strings.HasPrefix(link.URL, "http") {
 						parts := strings.Split(link.URL, "/")
-						if len(parts) >= 3 {
+						if len(parts) >= minURLParts {
 							domain := parts[2]
 							domainCounts[domain]++
 						}

@@ -14,6 +14,8 @@ import (
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 )
 
+// No need for local constants, using shared ones from constants.go
+
 var (
 	listDomains  bool
 	showPatterns bool
@@ -87,7 +89,7 @@ func listAvailableDomains() error {
 
 	_, _ = fmt.Fprintf(os.Stderr, "Available Domains (%d):\n\n", len(domainList))
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, tabWriterPadding, ' ', 0)
 	_, _ = fmt.Fprintln(w, "DOMAIN\tVALIDATORS\tDESCRIPTION")
 	_, _ = fmt.Fprintln(w, "------\t----------\t-----------")
 
@@ -172,14 +174,14 @@ func showAllValidators() error {
 		_, _ = fmt.Fprintf(os.Stderr, "🔬 %s\n", strings.ToUpper(domain))
 		_, _ = fmt.Fprintf(os.Stderr, "   %s\n\n", getDomainDescription(domain))
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, tabWriterPadding, ' ', 0)
 		_, _ = fmt.Fprintln(w, "   NAME\tPRIORITY\tDESCRIPTION")
 		_, _ = fmt.Fprintln(w, "   ----\t--------\t-----------")
 
 		for _, validator := range validators {
 			desc := validator.Description
-			if len(desc) > 60 {
-				desc = desc[:57] + "..."
+			if len(desc) > maxDescriptionChars {
+				desc = desc[:maxDescriptionChars-truncationSuffix] + "..."
 			}
 
 			_, _ = fmt.Fprintf(w, "   %s\t%d\t%s\n", validator.Name, validator.Priority, desc)

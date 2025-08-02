@@ -335,17 +335,17 @@ func TestGEODownloader_parseEUtilsDate(t *testing.T) {
 
 	tests := []struct {
 		input       string
-		expectError bool
 		description string
+		expectError bool
 	}{
-		{"2020/01/15", false, "E-utilities format should parse"},
-		{"2020-01-15", false, "ISO format should parse"},
-		{"2020/1/2", false, "Single digit format should parse"},
-		{"Jan 15, 2020", false, "Text format should parse"},
-		{"Jan 1, 2020", false, "Single digit day should parse"},
-		{"", true, "Empty string should fail"},
-		{"invalid date", true, "Invalid format should fail"},
-		{"2020-13-45", true, "Invalid date values should fail"},
+		{"2020/01/15", "E-utilities format should parse", false},
+		{"2020-01-15", "ISO format should parse", false},
+		{"2020/1/2", "Single digit format should parse", false},
+		{"Jan 15, 2020", "Text format should parse", false},
+		{"Jan 1, 2020", "Single digit day should parse", false},
+		{"", "Empty string should fail", true},
+		{"invalid date", "Invalid format should fail", true},
+		{"2020-13-45", "Invalid date values should fail", true},
 	}
 
 	for _, tt := range tests {

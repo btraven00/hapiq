@@ -76,6 +76,12 @@ Output as JSON:
 hapiq check "10.5061/dryad.example" --output json
 ```
 
+Get only the URL if found with confidence:
+```bash
+hapiq check --get-url https://zenodo.org/record/1234567
+hapiq check --get-url 10.5281/zenodo.1234567
+```
+
 ### Supported Repositories
 
 - **Zenodo** - `zenodo.org`

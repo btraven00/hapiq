@@ -158,7 +158,7 @@ func (c *Checker) Check(target string) (*Result, error) {
 	// Perform HTTP check
 	start := time.Now()
 
-	req, err := http.NewRequestWithContext(ctx, "HEAD", normalizedURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", normalizedURL, http.NoBody)
 	if err != nil {
 		result.Error = fmt.Sprintf("Failed to create request: %v", err)
 		return result, nil
@@ -167,11 +167,12 @@ func (c *Checker) Check(target string) (*Result, error) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		// Try GET request if HEAD fails
-		req, err = http.NewRequestWithContext(ctx, "GET", normalizedURL, nil)
+		req, err = http.NewRequestWithContext(ctx, "GET", normalizedURL, http.NoBody)
 		if err != nil {
 			result.Error = fmt.Sprintf("Failed to create GET request: %v", err)
 			return result, nil
 		}
+
 		resp, err = c.client.Do(req)
 	}
 
@@ -406,7 +407,6 @@ func (c *Checker) attemptDownload(url string, result *Result) {
 		FileTypes:  make(map[string]int),
 		Extensions: make(map[string]int),
 	}
-
 }
 
 // OutputResult outputs the result in the specified format.
@@ -414,6 +414,8 @@ func (c *Checker) OutputResult(result *Result) error {
 	switch strings.ToLower(c.config.OutputFormat) {
 	case "json":
 		return c.outputJSON(result)
+	case "get-url":
+		return c.outputURL(result)
 	case "human", "":
 		return c.outputHuman(result)
 	default:
@@ -427,6 +429,54 @@ func (c *Checker) outputJSON(result *Result) error {
 	encoder.SetIndent("", "  ")
 
 	return encoder.Encode(result)
+}
+
+// outputURL outputs just the URL if found with confidence.
+func (c *Checker) outputURL(result *Result) error {
+	// Check if we have a domain result with PrimaryURL (prioritize this)
+	if len(result.DomainResults) > 0 {
+		bestResult := c.selectBestDomainResult(result.DomainResults)
+		if bestResult != nil && bestResult.Confidence >= 0.5 && bestResult.PrimaryURL != "" {
+			fmt.Println(bestResult.PrimaryURL)
+			return nil
+		}
+	}
+
+	// Check if target is already a URL and meets basic criteria
+	if u, err := url.Parse(result.Target); err == nil && u.Scheme != "" {
+		// For repository URLs, be more permissive (even with 404s they're still valid URLs)
+		datasetType := strings.ToLower(result.DatasetType)
+		if datasetType == "zenodo" || datasetType == "figshare" || datasetType == "dryad" || datasetType == "github" || datasetType == "doi" {
+			if result.LikelihoodScore >= 0.3 {
+				fmt.Println(result.Target)
+				return nil
+			}
+		}
+
+		// For other URLs, require valid status and good likelihood
+		if result.Valid && result.LikelihoodScore >= 0.6 {
+			fmt.Println(result.Target)
+			return nil
+		}
+	}
+
+	// Handle DOI identifiers that get normalized to URLs
+	if !strings.HasPrefix(result.Target, "http") {
+		// Check if this was a DOI that got normalized
+		normalizedURL, datasetType, err := c.normalizeTarget(result.Target)
+		if err == nil && normalizedURL != "" {
+			// Check if the normalized URL meets our criteria
+			if datasetType == "doi" || strings.Contains(normalizedURL, "zenodo") || strings.Contains(normalizedURL, "figshare") {
+				if result.LikelihoodScore >= 0.3 {
+					fmt.Println(normalizedURL)
+					return nil
+				}
+			}
+		}
+	}
+
+	// No URL to output
+	return nil
 }
 
 // outputHuman outputs the result in human-readable format.

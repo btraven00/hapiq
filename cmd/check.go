@@ -17,6 +17,7 @@ var (
 	downloadFlag bool
 	timeoutFlag  int
 	inputFile    string
+	getUrlFlag   bool
 )
 
 // checkCmd represents the check command.
@@ -31,7 +32,8 @@ Examples:
   hapiq check https://zenodo.org/record/123456
   hapiq check 10.5281/zenodo.123456
   hapiq check https://figshare.com/articles/dataset/example/123456
-  hapiq check -i links.txt --download`,
+  hapiq check -i links.txt --download
+  hapiq check --get-url https://zenodo.org/record/123456`,
 	Args: cobra.RangeArgs(0, 1),
 	RunE: runCheck,
 }
@@ -47,11 +49,16 @@ func runCheck(_ *cobra.Command, args []string) error {
 	}
 
 	// Create checker configuration
+	outputFormat := output
+	if getUrlFlag {
+		outputFormat = "get-url"
+	}
+
 	config := checker.Config{
-		Verbose:        !quiet,
+		Verbose:        !quiet && !getUrlFlag,
 		Download:       downloadFlag,
 		TimeoutSeconds: timeoutFlag,
-		OutputFormat:   output,
+		OutputFormat:   outputFormat,
 	}
 
 	// Initialize checker
@@ -66,7 +73,7 @@ func runCheck(_ *cobra.Command, args []string) error {
 }
 
 func processSingleTarget(c *checker.Checker, target string) error {
-	if !quiet {
+	if !quiet && !getUrlFlag {
 		_, _ = fmt.Fprintf(os.Stderr, "Checking: %s\n", target)
 		_, _ = fmt.Fprintf(os.Stderr, "Download enabled: %t\n", downloadFlag)
 		_, _ = fmt.Fprintf(os.Stderr, "Timeout: %ds\n", timeoutFlag)
@@ -75,7 +82,7 @@ func processSingleTarget(c *checker.Checker, target string) error {
 
 	// Clean and normalize the target
 	cleanTarget := cleanupIdentifier(target)
-	if !quiet && cleanTarget != target {
+	if !quiet && !getUrlFlag && cleanTarget != target {
 		_, _ = fmt.Fprintf(os.Stderr, "Normalized: %s -> %s\n", target, cleanTarget)
 	}
 
@@ -94,7 +101,7 @@ func processSingleTarget(c *checker.Checker, target string) error {
 }
 
 func processBatchFile(c *checker.Checker, filename string) error {
-	if !quiet {
+	if !quiet && !getUrlFlag {
 		_, _ = fmt.Fprintf(os.Stderr, "Processing batch file: %s\n", filename)
 		_, _ = fmt.Fprintf(os.Stderr, "Download enabled: %t\n", downloadFlag)
 		_, _ = fmt.Fprintf(os.Stderr, "Timeout: %ds\n", timeoutFlag)
@@ -131,7 +138,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		// Clean and normalize the identifier
 		cleanLine := cleanupIdentifier(line)
 		if cleanLine == "" {
-			if !quiet {
+			if !quiet && !getUrlFlag {
 				_, _ = fmt.Fprintf(os.Stderr, "Line %d: Skipping empty after cleanup: %s\n", lineNumber, line)
 			}
 
@@ -139,7 +146,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		}
 
 		processedCount++
-		if !quiet {
+		if !quiet && !getUrlFlag {
 			_, _ = fmt.Fprintf(os.Stderr, "\n[%d/%d] Processing: %s", processedCount, lineNumber, cleanLine)
 
 			if cleanLine != line {
@@ -173,7 +180,7 @@ func processBatchFile(c *checker.Checker, filename string) error {
 		return fmt.Errorf("error reading file: %w", err)
 	}
 
-	if !quiet {
+	if !quiet && !getUrlFlag {
 		_, _ = fmt.Fprintf(os.Stderr, "\nBatch processing completed: %d processed, %d errors\n", processedCount, errorCount)
 	}
 
@@ -262,6 +269,14 @@ func containsValidIdentifier(s string) bool {
 	if regexp.MustCompile(`(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
 		return true
 	}
+	// Check for Ensembl identifier patterns
+	if regexp.MustCompile(`(bacteria|fungi|metazoa|plants|protists):\d+:(pep|cds|gff3|dna)`).MatchString(s) {
+		return true
+	}
+	// Check for Ensembl FTP URLs
+	if regexp.MustCompile(`ftp://ftp\.ensemblgenomes\.org/pub/`).MatchString(s) {
+		return true
+	}
 
 	return false
 }
@@ -278,6 +293,14 @@ func isValidIdentifierStart(s string) bool {
 	}
 	// Check for other identifier patterns
 	if regexp.MustCompile(`^(PRJNA|PRJEB|GSE|SRA|ERP|DRP)`).MatchString(s) {
+		return true
+	}
+	// Check for Ensembl identifier patterns
+	if regexp.MustCompile(`^(bacteria|fungi|metazoa|plants|protists):\d+:(pep|cds|gff3|dna)`).MatchString(s) {
+		return true
+	}
+	// Check for Ensembl FTP URLs
+	if regexp.MustCompile(`^ftp://ftp\.ensemblgenomes\.org/pub/`).MatchString(s) {
 		return true
 	}
 
@@ -363,7 +386,7 @@ func handleSpecialCharacters(cleaned string) string {
 	}
 
 	parts := strings.Fields(cleaned)
-	if len(parts) < 2 {
+	if len(parts) < minPartsRequired {
 		return cleaned
 	}
 
@@ -391,6 +414,7 @@ func init() {
 
 	// Local flags for the check command
 	checkCmd.Flags().BoolVarP(&downloadFlag, "download", "d", false, "attempt to download the dataset")
-	checkCmd.Flags().IntVarP(&timeoutFlag, "timeout", "t", 30, "timeout in seconds for HTTP requests")
+	checkCmd.Flags().IntVarP(&timeoutFlag, "timeout", "t", defaultCheckTimeoutSec, "timeout in seconds for HTTP requests")
 	checkCmd.Flags().StringVarP(&inputFile, "input", "i", "", "input file with DOIs/links (one per line)")
+	checkCmd.Flags().BoolVar(&getUrlFlag, "get-url", false, "output only the URL if found with confidence")
 }

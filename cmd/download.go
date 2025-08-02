@@ -11,14 +11,13 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
+	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
 
-const (
-	outputFormatJSON = "json"
-)
+// No need for local constants, using shared ones from constants.go
 
 var (
 	outputDir            string
@@ -43,15 +42,18 @@ Supported sources:
   geo       - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
   figshare  - Figshare articles, collections, and projects
   zenodo    - Zenodo research data repository
+  ensembl   - Ensembl Genomes databases (bacteria, fungi, metazoa, plants, protists)
 
 Examples:
   hapiq download geo GSE123456 --out ./datasets
-  hapiq download figshare 12345678 --out ./datasets
-  hapiq download zenodo 123456 --out ./datasets
   hapiq download geo GSE123456 --out ./data --parallel 4
+  hapiq download figshare 12345678 --out ./datasets
   hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet
+  hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet
+  hapiq download ensembl bacteria:47:pep --out ./datasets
+  hapiq download ensembl fungi:47:gff3:saccharomyces_cerevisiae --out ./data
   hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet`,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.ExactArgs(requiredArgsCount),
 	RunE: runDownload,
 }
 
@@ -107,7 +109,7 @@ func validateAndPrepareDownload() error {
 		return fmt.Errorf("output directory must be specified with --out flag")
 	}
 
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+	if err := os.MkdirAll(outputDir, defaultDirPermissions); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -179,7 +181,7 @@ func displayMetadataSummary(metadata *downloaders.Metadata) {
 	_, _ = fmt.Fprintf(os.Stderr, "   Title: %s\n", metadata.Title)
 
 	if metadata.Description != "" {
-		_, _ = fmt.Fprintf(os.Stderr, "   Description: %s\n", truncateString(metadata.Description, 100))
+		_, _ = fmt.Fprintf(os.Stderr, "   Description: %s\n", truncateString(metadata.Description, maxDescriptionLength))
 	}
 
 	if len(metadata.Authors) > 0 {
@@ -258,7 +260,7 @@ func displayResults(result *downloaders.DownloadResult) {
 	_, _ = fmt.Fprintf(os.Stderr, "   Data downloaded: %s\n", common.FormatBytes(result.BytesDownloaded))
 
 	if result.BytesTotal > 0 {
-		percentage := float64(result.BytesDownloaded) / float64(result.BytesTotal) * 100
+		percentage := float64(result.BytesDownloaded) / float64(result.BytesTotal) * percentageMultiplier
 		_, _ = fmt.Fprintf(os.Stderr, "   Completion: %.1f%%\n", percentage)
 	}
 
@@ -357,6 +359,14 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(zenodoDownloader); err != nil {
 		return fmt.Errorf("failed to register Zenodo downloader: %w", err)
+    }
+	// Register Ensembl downloader
+	ensemblDownloader := ensembl.NewEnsemblDownloader(
+		ensembl.WithVerbose(!quiet),
+		ensembl.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(ensemblDownloader); err != nil {
+		return fmt.Errorf("failed to register Ensembl downloader: %w", err)
 	}
 
 	// Register aliases
@@ -397,13 +407,14 @@ func init() {
 	// Download behavior flags
 	downloadCmd.Flags().BoolVar(&excludeRaw, "exclude-raw", false, "exclude raw data files (e.g., FASTQ, BAM)")
 	downloadCmd.Flags().BoolVar(&excludeSupplementary, "exclude-supplementary", false, "exclude supplementary files")
-	downloadCmd.Flags().IntVar(&maxConcurrent, "parallel", 8, "maximum number of concurrent downloads")
+	downloadCmd.Flags().IntVar(&maxConcurrent, "parallel", defaultConcurrentDL, "maximum number of concurrent downloads")
 	downloadCmd.Flags().BoolVar(&resumeDownload, "resume", false, "resume interrupted downloads")
 	downloadCmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "skip files that already exist")
 	downloadCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "non-interactive mode (auto-confirm prompts)")
 
 	// Network and timeout flags
-	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", 300, "timeout in seconds for download operations")
+	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
+		"timeout in seconds for download operations")
 
 	// Custom filters flag
 	downloadCmd.Flags().StringToStringVar(&customFilters, "filter", map[string]string{},

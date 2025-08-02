@@ -191,6 +191,44 @@ func TestCleanupIdentifier_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestGetUrlFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool // whether URL should be output
+	}{
+		{
+			name:     "valid zenodo URL",
+			input:    "https://zenodo.org/record/123456",
+			expected: true,
+		},
+		{
+			name:     "valid DOI",
+			input:    "10.5281/zenodo.123456",
+			expected: true,
+		},
+		{
+			name:     "invalid input",
+			input:    "not-a-valid-url",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that the flag is properly registered
+			cmd := checkCmd
+			flag := cmd.Flags().Lookup("get-url")
+			if flag == nil {
+				t.Error("--get-url flag not found")
+			}
+			if flag.Usage != "output only the URL if found with confidence" {
+				t.Errorf("Unexpected flag usage: %s", flag.Usage)
+			}
+		})
+	}
+}
+
 func TestCleanupIdentifier_RealWorldExamples(t *testing.T) {
 	// Real-world examples from academic papers
 	realWorld := []struct {

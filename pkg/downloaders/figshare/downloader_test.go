@@ -452,8 +452,8 @@ func TestFigshareDownloader_shouldDownloadFile(t *testing.T) {
 
 	tests := []struct {
 		options  *downloaders.DownloadOptions
-		file     FigshareFile
 		name     string
+		file     FigshareFile
 		expected bool
 	}{
 		{

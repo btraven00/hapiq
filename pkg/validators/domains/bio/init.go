@@ -5,6 +5,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/validators/domains"
 	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio/accessions"
+	_ "github.com/btraven00/hapiq/pkg/validators/domains/bio/ensembl"
 )
 
 // init registers all bioinformatics domain validators.
@@ -16,9 +17,9 @@ func init() {
 func registerBioValidators() {
 	validators := []domains.DomainValidator{
 		NewGEOValidator(),
+		// Note: EnsemblValidator is registered via its init() function
 		// Add more bio validators here as they are implemented
 		// NewSRAValidator(),
-		// NewEnsemblValidator(),
 		// NewUniProtValidator(),
 	}
 

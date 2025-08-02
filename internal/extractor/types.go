@@ -59,10 +59,10 @@ const (
 // ExtractionResult contains the complete result of PDF link extraction.
 type ExtractionResult struct {
 	Filename    string          `json:"filename"`
-	Summary     ExtractionStats `json:"summary"`
 	Links       []ExtractedLink `json:"links"`
 	Errors      []string        `json:"errors,omitempty"`
 	Warnings    []string        `json:"warnings,omitempty"`
+	Summary     ExtractionStats `json:"summary"`
 	Pages       int             `json:"pages"`
 	TotalText   int             `json:"total_text"`
 	ProcessTime time.Duration   `json:"process_time"`
