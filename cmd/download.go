@@ -13,6 +13,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
 
 const (
@@ -41,12 +42,15 @@ metadata tracking and provenance information.
 Supported sources:
   geo       - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
   figshare  - Figshare articles, collections, and projects
+  zenodo    - Zenodo research data repository
 
 Examples:
   hapiq download geo GSE123456 --out ./datasets
   hapiq download figshare 12345678 --out ./datasets
+  hapiq download zenodo 123456 --out ./datasets
   hapiq download geo GSE123456 --out ./data --parallel 4
-  hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet`,
+  hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet
+  hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet`,
 	Args: cobra.ExactArgs(2),
 	RunE: runDownload,
 }
@@ -344,6 +348,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(figshareDownloader); err != nil {
 		return fmt.Errorf("failed to register Figshare downloader: %w", err)
+	}
+
+	// Register Zenodo downloader
+	zenodoDownloader := zenodo.NewZenodoDownloader(
+		zenodo.WithVerbose(!quiet),
+		zenodo.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(zenodoDownloader); err != nil {
+		return fmt.Errorf("failed to register Zenodo downloader: %w", err)
 	}
 
 	// Register aliases
