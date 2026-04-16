@@ -17,10 +17,11 @@ var (
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
 	Use:   "hapiq",
-	Short: "A CLI tool for extracting and inspecting dataset links from scientific papers",
-	Long: `Hapiq is a CLI tool for extracting and inspecting dataset links from
-scientific papers. It verifies, downloads, and analyzes data sources to
-estimate the likelihood of a valid dataset.
+	Short: "A CLI tool for downloading datasets from scientific repositories",
+	Long: `Hapiq downloads datasets from scientific data repositories with full
+provenance tracking. Point it at a source and ID; it handles the rest.
+
+Supported sources: geo, figshare, zenodo, ensembl
 
 "Hapiq" means "the one who fetches" in Quechua.`,
 	// Uncomment the following line if your bare application
