@@ -12,8 +12,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
-	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 )
 
 var (
@@ -122,7 +123,7 @@ func runSearch(_ *cobra.Command, args []string) error {
 		if quiet {
 			return printSearchQuiet(results)
 		}
-		return printSearchTable(results)
+		return printSearchTable(results, src)
 	}
 }
 
@@ -135,24 +136,42 @@ func printSearchQuiet(results []downloaders.SearchResult) error {
 }
 
 // printSearchTable prints a formatted table to stderr and accessions to stdout.
-func printSearchTable(results []downloaders.SearchResult) error {
+// Column layout differs by source:
+//   - geo: ACCESSION  TITLE  ORGANISM  TYPE  SAMPLES  DATE
+//   - vcp: ACCESSION  TITLE  ORGANISM  ASSAY  SIZE
+func printSearchTable(results []downloaders.SearchResult, src string) error {
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, tabWriterPadding, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tTYPE\tSAMPLES\tDATE")
-	_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t----\t-------\t----")
 
-	for _, r := range results {
-		title := r.Title
-		if len(title) > maxDescriptionChars {
-			title = title[:maxDescriptionChars-truncationSuffix] + "..."
+	if src == "vcp" {
+		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tASSAY\tSIZE")
+		_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t-----\t----")
+		for _, r := range results {
+			title := r.Title
+			if len(title) > maxDescriptionChars {
+				title = title[:maxDescriptionChars-truncationSuffix] + "..."
+			}
+			size := "-"
+			if r.FileSize > 0 {
+				size = common.FormatBytes(r.FileSize)
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				r.Accession, title, r.Organism, r.EntryType, size)
 		}
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
-			r.Accession, title, r.Organism, r.EntryType, r.SampleCount, r.Date)
+	} else {
+		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tTYPE\tSAMPLES\tDATE")
+		_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t----\t-------\t----")
+		for _, r := range results {
+			title := r.Title
+			if len(title) > maxDescriptionChars {
+				title = title[:maxDescriptionChars-truncationSuffix] + "..."
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n",
+				r.Accession, title, r.Organism, r.EntryType, r.SampleCount, r.Date)
+		}
 	}
 
 	_ = w.Flush()
 
-	// Also print accessions to stdout for easy piping even in human mode.
 	_, _ = fmt.Fprintf(os.Stderr, "\nAccessions (stdout):\n")
 	for _, r := range results {
 		fmt.Println(r.Accession)

@@ -18,6 +18,7 @@ type SearchResult struct {
 	DatasetType string `json:"dataset_type,omitempty"`
 	Date        string `json:"date,omitempty"`
 	SampleCount int    `json:"sample_count,omitempty"`
+	FileSize    int64  `json:"file_size,omitempty"` // total bytes of all files in the dataset
 }
 
 // Searcher is an optional capability a Downloader can implement to support

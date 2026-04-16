@@ -54,12 +54,17 @@ func buildQuery(term string, opts downloaders.SearchOptions) string {
 
 // itemToSearchResult converts a DataItem to the common SearchResult type.
 func itemToSearchResult(item DataItem) downloaders.SearchResult {
+	var totalSize int64
+	for _, loc := range item.Locations {
+		totalSize += loc.ContentSize
+	}
+
 	return downloaders.SearchResult{
 		Accession:   item.InternalID,
 		Title:       item.Name,
 		Organism:    strings.Join(item.Organism, ", "),
-		EntryType:   item.Domain,
-		DatasetType: strings.Join(item.Assay, ", "),
-		SampleCount: 0, // not available in search results
+		EntryType:   strings.Join(item.Assay, ", "), // assay is more useful than domain for display
+		DatasetType: item.Domain,
+		FileSize:    totalSize,
 	}
 }
