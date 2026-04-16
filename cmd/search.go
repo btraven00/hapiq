@@ -171,12 +171,6 @@ func printSearchTable(results []downloaders.SearchResult, src string) error {
 	}
 
 	_ = w.Flush()
-
-	_, _ = fmt.Fprintf(os.Stderr, "\nAccessions (stdout):\n")
-	for _, r := range results {
-		fmt.Println(r.Accession)
-	}
-
 	return nil
 }
 
