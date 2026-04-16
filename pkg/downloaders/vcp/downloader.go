@@ -1,4 +1,4 @@
-package czi
+package vcp
 
 import (
 	"context"
@@ -17,36 +17,36 @@ import (
 
 var idPattern = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
-// CZIDownloader downloads datasets from the CZI Virtual Cell Platform.
-type CZIDownloader struct {
+// VCPDownloader downloads datasets from the CZI Virtual Cell Platform.
+type VCPDownloader struct {
 	c       *client
 	timeout time.Duration
 	verbose bool
 }
 
-// Option configures a CZIDownloader.
-type Option func(*CZIDownloader)
+// Option configures a VCPDownloader.
+type Option func(*VCPDownloader)
 
 // WithTimeout sets the HTTP timeout.
 func WithTimeout(t time.Duration) Option {
-	return func(d *CZIDownloader) {
+	return func(d *VCPDownloader) {
 		d.timeout = t
 		d.c = newClient(d.c.token, t)
 	}
 }
 
 // WithVerbose enables verbose output.
-func WithVerbose(v bool) Option { return func(d *CZIDownloader) { d.verbose = v } }
+func WithVerbose(v bool) Option { return func(d *VCPDownloader) { d.verbose = v } }
 
 // WithToken sets the VCP authentication token (JWT).
 // If empty, public endpoints are used (no authentication).
 func WithToken(token string) Option {
-	return func(d *CZIDownloader) { d.c.token = token }
+	return func(d *VCPDownloader) { d.c.token = token }
 }
 
-// NewCZIDownloader creates a new CZIDownloader.
-func NewCZIDownloader(opts ...Option) *CZIDownloader {
-	d := &CZIDownloader{
+// NewVCPDownloader creates a new VCPDownloader.
+func NewVCPDownloader(opts ...Option) *VCPDownloader {
+	d := &VCPDownloader{
 		timeout: 60 * time.Second,
 	}
 	d.c = newClient("", d.timeout)
@@ -57,10 +57,10 @@ func NewCZIDownloader(opts ...Option) *CZIDownloader {
 }
 
 // GetSourceType returns the source identifier.
-func (d *CZIDownloader) GetSourceType() string { return "czi" }
+func (d *VCPDownloader) GetSourceType() string { return "vcp" }
 
 // Validate checks that the id is a 24-char hex VCP dataset ID.
-func (d *CZIDownloader) Validate(_ context.Context, id string) (*downloaders.ValidationResult, error) {
+func (d *VCPDownloader) Validate(_ context.Context, id string) (*downloaders.ValidationResult, error) {
 	clean := strings.ToLower(strings.TrimSpace(id))
 	result := &downloaders.ValidationResult{
 		ID:         clean,
@@ -76,7 +76,7 @@ func (d *CZIDownloader) Validate(_ context.Context, id string) (*downloaders.Val
 }
 
 // GetMetadata retrieves dataset metadata from the VCP API.
-func (d *CZIDownloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
+func (d *VCPDownloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	rec, err := d.c.getDataset(ctx, id, false)
 	if err != nil {
 		return nil, fmt.Errorf("CZI metadata for %s: %w", id, err)
@@ -85,7 +85,7 @@ func (d *CZIDownloader) GetMetadata(ctx context.Context, id string) (*downloader
 }
 
 // Download fetches dataset files from VCP/S3.
-func (d *CZIDownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
+func (d *VCPDownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
 	start := time.Now()
 	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
 
@@ -232,7 +232,7 @@ func collectFiles(rec *DatasetRecord) []vcpFile {
 	return files
 }
 
-func (d *CZIDownloader) downloadFile(ctx context.Context, rawURL, targetPath string) (*downloaders.FileInfo, error) {
+func (d *VCPDownloader) downloadFile(ctx context.Context, rawURL, targetPath string) (*downloaders.FileInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -295,7 +295,7 @@ func (d *CZIDownloader) downloadFile(ctx context.Context, rawURL, targetPath str
 // recordToMetadata converts a DatasetRecord to the common Metadata type.
 func recordToMetadata(id string, rec *DatasetRecord) *downloaders.Metadata {
 	m := &downloaders.Metadata{
-		Source:    "czi",
+		Source:    "vcp",
 		ID:        id,
 		FileCount: len(rec.Locations),
 		Custom:    map[string]any{"domain": rec.Domain},

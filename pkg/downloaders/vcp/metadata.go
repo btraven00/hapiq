@@ -6,7 +6,7 @@
 //
 // Files are stored as S3 URIs; the downloader converts them to plain HTTPS
 // for public buckets and falls back to a 403 error message for private ones.
-package czi
+package vcp
 
 import (
 	"context"

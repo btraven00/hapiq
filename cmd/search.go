@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
-	"github.com/btraven00/hapiq/pkg/downloaders/czi"
+	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 )
 
@@ -35,14 +35,14 @@ them easy to pipe into 'hapiq download':
 
 Supported sources:
   geo  - NCBI Gene Expression Omnibus (uses eutils esearch/esummary)
-  czi  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
+  vcp  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
 
 Examples:
   hapiq search geo "ATAC-seq human liver" --limit 20
   hapiq search geo "scRNA-seq pancreas" --organism "Mus musculus"
-  hapiq search czi "Perturb-Seq" --limit 10
-  hapiq search czi "Perturb-Seq" --assay "Perturb-Seq" --organism "Homo sapiens"
-  hapiq search czi "Perturb-Seq" -q | xargs -I{} hapiq download czi {} --out ./data`,
+  hapiq search vcp "Perturb-Seq" --limit 10
+  hapiq search vcp "Perturb-Seq" --assay "Perturb-Seq" --organism "Homo sapiens"
+  hapiq search vcp "Perturb-Seq" -q | xargs -I{} hapiq download vcp {} --out ./data`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSearch,
 }
@@ -72,18 +72,18 @@ func runSearch(_ *cobra.Command, args []string) error {
 		}
 		d = geo.NewGEODownloader(geoOpts...)
 
-	case "czi":
-		cziOpts := []czi.Option{
-			czi.WithVerbose(false),
-			czi.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+	case "vcp":
+		cziOpts := []vcp.Option{
+			vcp.WithVerbose(false),
+			vcp.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
 		}
 		if token := os.Getenv("VCP_TOKEN"); token != "" {
-			cziOpts = append(cziOpts, czi.WithToken(token))
+			cziOpts = append(cziOpts, vcp.WithToken(token))
 		}
-		d = czi.NewCZIDownloader(cziOpts...)
+		d = vcp.NewVCPDownloader(cziOpts...)
 
 	default:
-		return fmt.Errorf("search is supported for 'geo' and 'czi'; got %q", sourceType)
+		return fmt.Errorf("search is supported for 'geo' and 'vcp'; got %q", sourceType)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

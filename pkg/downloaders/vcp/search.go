@@ -1,4 +1,4 @@
-package czi
+package vcp
 
 import (
 	"context"
@@ -17,7 +17,7 @@ const defaultSearchLimit = 10
 //
 //	--organism "Homo sapiens"  →  AND organism:"Homo sapiens"
 //	--assay "Perturb-Seq"      →  AND assay:"Perturb-Seq"
-func (d *CZIDownloader) Search(ctx context.Context, query string, opts downloaders.SearchOptions) ([]downloaders.SearchResult, error) {
+func (d *VCPDownloader) Search(ctx context.Context, query string, opts downloaders.SearchOptions) ([]downloaders.SearchResult, error) {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = defaultSearchLimit
