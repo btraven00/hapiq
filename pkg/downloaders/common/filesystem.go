@@ -274,8 +274,11 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 }
 
 // mergeWitnessFiles merges prev and next into a single WitnessFile.
-// next's metadata and stats win; file lists are union-merged by path,
-// with next's entries taking precedence over prev's on conflict.
+// next's top-level metadata and stats win; file lists are union-merged by
+// path, with next's entries taking precedence over prev's on conflict.
+// When prev and next have different OriginalIDs (i.e. different datasets were
+// downloaded into the same folder), prev's provenance is preserved in the
+// Datasets slice so no information is lost.
 func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.WitnessFile {
 	merged := *next // start from next (metadata, stats, version)
 
@@ -304,6 +307,34 @@ func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.Witness
 			Duration:      next.DownloadStats.Duration,
 			AverageSpeed:  next.DownloadStats.AverageSpeed,
 			MaxConcurrent: next.DownloadStats.MaxConcurrent,
+		}
+	}
+
+	// When the two downloads are for different accessions, preserve prev's
+	// dataset-level provenance in the Datasets slice so it is not silently
+	// overwritten by next's top-level fields.
+	if prev.OriginalID != "" && prev.OriginalID != next.OriginalID {
+		// Carry forward any dataset records already accumulated in prev.
+		merged.Datasets = append(merged.Datasets, prev.Datasets...)
+
+		// Add prev's own top-level provenance as a DatasetRecord, but only if
+		// it isn't already present (dedup by OriginalID).
+		alreadyPresent := false
+		for _, d := range prev.Datasets {
+			if d.OriginalID == prev.OriginalID {
+				alreadyPresent = true
+				break
+			}
+		}
+		if !alreadyPresent {
+			merged.Datasets = append(merged.Datasets, downloaders.DatasetRecord{
+				DownloadTime: prev.DownloadTime,
+				Metadata:     prev.Metadata,
+				Options:      prev.Options,
+				Source:       prev.Source,
+				OriginalID:   prev.OriginalID,
+				ResolvedURL:  prev.ResolvedURL,
+			})
 		}
 	}
 

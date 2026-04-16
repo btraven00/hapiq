@@ -125,6 +125,18 @@ type FileInfo struct {
 	Size         int64     `json:"size"`
 }
 
+// DatasetRecord captures provenance for a single dataset/accession within a
+// shared output directory. It is appended to WitnessFile.Datasets whenever a
+// second (or later) distinct accession is downloaded into the same folder.
+type DatasetRecord struct {
+	DownloadTime time.Time        `json:"download_time"`
+	Metadata     *Metadata        `json:"metadata"`
+	Options      *DownloadOptions `json:"options,omitempty"`
+	Source       string           `json:"source"`
+	OriginalID   string           `json:"original_id"`
+	ResolvedURL  string           `json:"resolved_url,omitempty"`
+}
+
 // WitnessFile represents the hapiq.json metadata file for provenance tracking.
 type WitnessFile struct {
 	DownloadTime  time.Time        `json:"download_time"`
@@ -138,6 +150,9 @@ type WitnessFile struct {
 	ResolvedURL   string           `json:"resolved_url,omitempty"`
 	Files         []FileWitness    `json:"files"`
 	Collections   []Collection     `json:"collections,omitempty"`
+	// Datasets accumulates per-accession provenance when multiple distinct
+	// datasets are downloaded into the same output directory.
+	Datasets []DatasetRecord `json:"datasets,omitempty"`
 }
 
 // FileWitness contains detailed provenance information for each file.
