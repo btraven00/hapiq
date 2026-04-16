@@ -58,6 +58,10 @@ func runSearch(_ *cobra.Command, args []string) error {
 
 	switch src {
 	case "geo":
+		// Default GEO searches to series (GSE) when no type is specified.
+		if searchType == "" {
+			searchType = "GSE"
+		}
 		apiKey := os.Getenv("NCBI_API_KEY")
 		geoOpts := []geo.Option{
 			geo.WithVerbose(false),
@@ -92,12 +96,12 @@ func runSearch(_ *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(os.Stderr, "Searching GEO for: %s\n", query)
+		_, _ = fmt.Fprintf(os.Stderr, "Searching %s for: %s\n", strings.ToUpper(src), query)
 		if searchOrganism != "" {
 			_, _ = fmt.Fprintf(os.Stderr, "  Organism filter: %s\n", searchOrganism)
 		}
 		if searchType != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "  Type filter: %s\n", searchType)
+			_, _ = fmt.Fprintf(os.Stderr, "  Type/assay filter: %s\n", searchType)
 		}
 	}
 
@@ -169,6 +173,6 @@ func init() {
 
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 10, "maximum number of results to return")
 	searchCmd.Flags().StringVar(&searchOrganism, "organism", "", "filter by organism (e.g. 'Homo sapiens')")
-	searchCmd.Flags().StringVar(&searchType, "type", "GSE",
-		"GEO: entry type (GSE/GSM/GPL/GDS); CZI: assay filter (e.g. 'Perturb-Seq')")
+	searchCmd.Flags().StringVar(&searchType, "type", "",
+		"GEO: entry type to filter (GSE/GSM/GPL/GDS, default GSE); CZI: assay filter (e.g. 'Perturb-Seq')")
 }
