@@ -237,8 +237,19 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	// Handle dry-run: enumerate files without downloading anything.
 	if req.Options != nil && req.Options.DryRun {
 		if strings.HasPrefix(cleanID, "GSE") {
-			if err := d.enumerateSeries(ctx, cleanID, req.Options, result); err != nil {
-				result.Errors = append(result.Errors, err.Error())
+			if req.Options.IncludeSRA {
+				// --raw --dry-run: emit the JSON SRA manifest instead of the
+				// processed-data listing.
+				gdsUID, _ := metadata.Custom["gds_uid"].(string)
+				if gdsUID == "" {
+					result.Warnings = append(result.Warnings, "could not determine GDS UID for SRA resolution")
+				} else if err := d.downloadSRA(ctx, cleanID, "", gdsUID, req.Options, result); err != nil {
+					result.Errors = append(result.Errors, err.Error())
+				}
+			} else {
+				if err := d.enumerateSeries(ctx, cleanID, req.Options, result); err != nil {
+					result.Errors = append(result.Errors, err.Error())
+				}
 			}
 		} else {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("dry-run enumeration only supported for GSE; %s will be skipped", cleanID))
