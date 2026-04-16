@@ -14,6 +14,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 )
 
@@ -83,8 +84,14 @@ func runSearch(_ *cobra.Command, args []string) error {
 		}
 		d = vcp.NewVCPDownloader(cziOpts...)
 
+	case "scperturb":
+		d = scperturb.NewScPerturbDownloader(
+			scperturb.WithVerbose(false),
+			scperturb.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+		)
+
 	default:
-		return fmt.Errorf("search is supported for 'geo' and 'vcp'; got %q", sourceType)
+		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb'; got %q", sourceType)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -142,7 +149,7 @@ func printSearchQuiet(results []downloaders.SearchResult) error {
 func printSearchTable(results []downloaders.SearchResult, src string) error {
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, tabWriterPadding, ' ', 0)
 
-	if src == "vcp" {
+	if src == "vcp" || src == "scperturb" {
 		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tASSAY\tSIZE")
 		_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t-----\t----")
 		for _, r := range results {

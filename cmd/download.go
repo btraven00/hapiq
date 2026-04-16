@@ -15,6 +15,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
@@ -489,6 +490,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(cziDownloader); err != nil {
 		return fmt.Errorf("failed to register CZI downloader: %w", err)
+	}
+
+	// Register scPerturb downloader
+	scpDownloader := scperturb.NewScPerturbDownloader(
+		scperturb.WithVerbose(!quiet),
+		scperturb.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(scpDownloader); err != nil {
+		return fmt.Errorf("failed to register scPerturb downloader: %w", err)
 	}
 
 	// Register aliases
