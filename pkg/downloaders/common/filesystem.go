@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
@@ -115,18 +114,7 @@ func (dc *DirectoryChecker) scanForConflicts(targetDir string) ([]string, error)
 	return conflicts, err
 }
 
-// getFreeSpace returns available disk space in bytes.
-func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
-	var stat syscall.Statfs_t
-
-	err := syscall.Statfs(path, &stat)
-	if err != nil {
-		return 0, err
-	}
-
-	// Available blocks * block size
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
-}
+// getFreeSpace is implemented per-platform in freespace_unix.go / freespace_windows.go.
 
 // HandleDirectoryConflicts presents options to the user for conflict resolution.
 func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractive bool) (downloaders.Action, error) {
