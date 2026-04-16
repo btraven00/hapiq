@@ -15,6 +15,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/czi"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
@@ -477,6 +478,17 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(sraDownloader); err != nil {
 		return fmt.Errorf("failed to register SRA downloader: %w", err)
+	}
+
+	// Register CZI downloader (Virtual Cell Platform)
+	vcpToken := os.Getenv("VCP_TOKEN")
+	cziDownloader := czi.NewCZIDownloader(
+		czi.WithVerbose(!quiet),
+		czi.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+		czi.WithToken(vcpToken),
+	)
+	if err := downloaders.Register(cziDownloader); err != nil {
+		return fmt.Errorf("failed to register CZI downloader: %w", err)
 	}
 
 	// Register aliases

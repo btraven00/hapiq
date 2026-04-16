@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/czi"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 )
 
@@ -34,12 +35,14 @@ them easy to pipe into 'hapiq download':
 
 Supported sources:
   geo  - NCBI Gene Expression Omnibus (uses eutils esearch/esummary)
+  czi  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
 
 Examples:
   hapiq search geo "ATAC-seq human liver" --limit 20
-  hapiq search geo "single-cell RNA-seq pancreas" --organism "Mus musculus"
-  hapiq search geo "ChIP-seq H3K27ac" --type GSE --limit 5 --output json
-  hapiq search geo "bulk RNA-seq" -q | head -5 | xargs -I{} hapiq download geo {} --out ./data`,
+  hapiq search geo "scRNA-seq pancreas" --organism "Mus musculus"
+  hapiq search czi "Perturb-Seq" --limit 10
+  hapiq search czi "Perturb-Seq" --assay "Perturb-Seq" --organism "Homo sapiens"
+  hapiq search czi "Perturb-Seq" -q | xargs -I{} hapiq download czi {} --out ./data`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSearch,
 }
@@ -48,20 +51,36 @@ func runSearch(_ *cobra.Command, args []string) error {
 	sourceType := args[0]
 	query := args[1]
 
-	if strings.ToLower(sourceType) != "geo" {
-		return fmt.Errorf("search is currently only supported for 'geo'; got %q", sourceType)
-	}
+	var (
+		d   downloaders.Searcher
+		src = strings.ToLower(sourceType)
+	)
 
-	apiKey := os.Getenv("NCBI_API_KEY")
-	geoOpts := []geo.Option{
-		geo.WithVerbose(false), // search output managed here, not by downloader
-		geo.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
-	}
-	if apiKey != "" {
-		geoOpts = append(geoOpts, geo.WithAPIKey(apiKey))
-	}
+	switch src {
+	case "geo":
+		apiKey := os.Getenv("NCBI_API_KEY")
+		geoOpts := []geo.Option{
+			geo.WithVerbose(false),
+			geo.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+		}
+		if apiKey != "" {
+			geoOpts = append(geoOpts, geo.WithAPIKey(apiKey))
+		}
+		d = geo.NewGEODownloader(geoOpts...)
 
-	d := geo.NewGEODownloader(geoOpts...)
+	case "czi":
+		cziOpts := []czi.Option{
+			czi.WithVerbose(false),
+			czi.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+		}
+		if token := os.Getenv("VCP_TOKEN"); token != "" {
+			cziOpts = append(cziOpts, czi.WithToken(token))
+		}
+		d = czi.NewCZIDownloader(cziOpts...)
+
+	default:
+		return fmt.Errorf("search is supported for 'geo' and 'czi'; got %q", sourceType)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -150,5 +169,6 @@ func init() {
 
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 10, "maximum number of results to return")
 	searchCmd.Flags().StringVar(&searchOrganism, "organism", "", "filter by organism (e.g. 'Homo sapiens')")
-	searchCmd.Flags().StringVar(&searchType, "type", "GSE", "filter by entry type: GSE, GSM, GPL, GDS (default: GSE)")
+	searchCmd.Flags().StringVar(&searchType, "type", "GSE",
+		"GEO: entry type (GSE/GSM/GPL/GDS); CZI: assay filter (e.g. 'Perturb-Seq')")
 }
