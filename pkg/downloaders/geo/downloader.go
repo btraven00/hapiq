@@ -310,6 +310,27 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		}
 	}
 
+	// --raw: download raw FASTQ files via SRA/ENA instead of (or in addition to)
+	// the processed GEO data.
+	if req.Options != nil && req.Options.IncludeSRA && geoType == "GSE" {
+		gdsUID, _ := metadata.Custom["gds_uid"].(string)
+		if gdsUID == "" {
+			result.Warnings = append(result.Warnings, "could not determine GDS UID for SRA resolution; skipping raw download")
+		} else {
+			// Show total size and ask for confirmation unless -y was passed.
+			if err := d.confirmSRADownload(ctx, cleanID, gdsUID, req.Options, result); err != nil {
+				result.Errors = append(result.Errors, err.Error())
+				return result, nil
+			}
+			if err := d.downloadSRA(ctx, cleanID, targetDir, gdsUID, req.Options, result); err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("SRA download: %v", err))
+			}
+		}
+		result.Duration = time.Since(startTime)
+		result.Success = len(result.Errors) == 0
+		return result, nil
+	}
+
 	// Perform the actual download based on type
 	var downloadErr error
 

@@ -15,6 +15,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/sra"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
 
@@ -37,6 +38,8 @@ var (
 	subset               string
 	organism             string
 	dryRun               bool
+	limitFiles           int
+	includeSRA           bool
 )
 
 // downloadCmd represents the download command.
@@ -245,6 +248,8 @@ func createDownloadRequest(
 		Subset:               splitCSV(subset),
 		Organism:             organism,
 		DryRun:               dryRun,
+		LimitFiles:           limitFiles,
+		IncludeSRA:           includeSRA,
 	}
 
 	return &downloaders.DownloadRequest{
@@ -465,9 +470,22 @@ func initializeDownloaders() error {
 		return fmt.Errorf("failed to register Ensembl downloader: %w", err)
 	}
 
+	// Register SRA downloader (downloads FASTQs from ENA/EBI)
+	sraDownloader := sra.NewSRADownloader(
+		sra.WithVerbose(!quiet),
+		sra.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(sraDownloader); err != nil {
+		return fmt.Errorf("failed to register SRA downloader: %w", err)
+	}
+
 	// Register aliases
 	if err := downloaders.RegisterAlias("ncbi", "geo"); err != nil {
 		return fmt.Errorf("failed to register NCBI alias: %w", err)
+	}
+
+	if err := downloaders.RegisterAlias("ena", "sra"); err != nil {
+		return fmt.Errorf("failed to register ENA alias: %w", err)
 	}
 
 	return nil
@@ -529,6 +547,10 @@ func init() {
 		"skip datasets whose organism doesn't contain this string (case-insensitive, e.g. 'Homo sapiens')")
 	downloadCmd.Flags().BoolVar(&dryRun, "dry-run", false,
 		"enumerate files that would be downloaded without writing anything to disk")
+	downloadCmd.Flags().IntVar(&limitFiles, "limit-files", 0,
+		"stop after downloading this many files — useful for testing (0 = no limit)")
+	downloadCmd.Flags().BoolVar(&includeSRA, "raw", false,
+		"also download raw FASTQ files via ENA/SRA (prompts for confirmation, use -y to skip)")
 
 	// Legacy custom filters flag (kept for backward compatibility)
 	downloadCmd.Flags().StringToStringVar(&customFilters, "filter", map[string]string{},

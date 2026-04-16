@@ -181,8 +181,9 @@ func (c *MultiProtocolClient) ftpHead(ctx context.Context, parsedURL *url.URL) (
 			return nil, fmt.Errorf("FTP path not found: %s", path)
 		}
 
-		// If List succeeded, it's a directory
-		if len(entries) >= 0 {
+		// If List returned at least one entry, the path exists as a directory.
+		// An empty listing means the path does not exist on this server.
+		if len(entries) > 0 {
 			return &ProtocolResponse{
 				StatusCode: 200,
 				Header:     make(map[string][]string),
@@ -190,6 +191,7 @@ func (c *MultiProtocolClient) ftpHead(ctx context.Context, parsedURL *url.URL) (
 				Size:       -1, // Directory size is not meaningful
 			}, nil
 		}
+		return nil, fmt.Errorf("FTP path not found (empty listing): %s", path)
 	}
 
 	// File exists and we got its size

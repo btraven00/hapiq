@@ -73,7 +73,7 @@ func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*down
 	metadata := &downloaders.Metadata{
 		Source: d.GetSourceType(),
 		ID:     id,
-		Custom: make(map[string]any),
+		Custom: map[string]any{"gds_uid": uid}, // stored for SRA resolution in Download()
 	}
 
 	// Parse summary fields

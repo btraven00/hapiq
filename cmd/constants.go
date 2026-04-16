@@ -24,7 +24,8 @@ const (
 	requiredArgsCount      = 2
 	defaultMinConfidence   = 0.85
 	defaultMaxLinksPerPage = 50
-	defaultConcurrentDL    = 8
+	defaultConcurrentDL    = 4 // conservative default; large files saturate bandwidth quickly
+	defaultConcurrentSRA   = 2 // FASTQ files are typically multi-GB; 2 concurrent is safe
 
 	// File and directory constants.
 	defaultDirPermissions = 0o750

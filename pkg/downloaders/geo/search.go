@@ -33,6 +33,11 @@ func (d *GEODownloader) Search(ctx context.Context, query string, opts downloade
 		limit = defaultSearchLimit
 	}
 
+	// If the query is a BioProject accession, use ELink for reliable resolution.
+	if IsBioProjectAccession(query) {
+		return d.searchByBioProject(ctx, query, limit)
+	}
+
 	// Build query string with optional field operators.
 	terms := []string{query}
 	if opts.Organism != "" {
@@ -121,6 +126,32 @@ func (d *GEODownloader) getBatchSummaries(ctx context.Context, uids []string) ([
 	}
 
 	return resp.DocSum, nil
+}
+
+// searchByBioProject resolves a BioProject accession to its linked GEO entries
+// via ELink (bioproject→gds), then fetches their summaries.
+func (d *GEODownloader) searchByBioProject(ctx context.Context, prjna string, limit int) ([]downloaders.SearchResult, error) {
+	gdsUIDs, err := d.ResolveBioProject(ctx, prjna)
+	if err != nil {
+		return nil, err
+	}
+	if len(gdsUIDs) == 0 {
+		return nil, nil
+	}
+	if len(gdsUIDs) > limit {
+		gdsUIDs = gdsUIDs[:limit]
+	}
+
+	summaries, err := d.getBatchSummaries(ctx, gdsUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]downloaders.SearchResult, 0, len(summaries))
+	for _, s := range summaries {
+		results = append(results, parseSummaryToSearchResult(s))
+	}
+	return results, nil
 }
 
 // parseSummaryToSearchResult converts a DocSum into a SearchResult.
