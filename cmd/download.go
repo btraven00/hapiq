@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,6 +30,10 @@ var (
 	nonInteractive       bool
 	downloadTimeout      int
 	customFilters        map[string]string
+	includeExts          string
+	excludeExts          string
+	maxFileSizeStr       string
+	filenameGlob         string
 )
 
 // downloadCmd represents the download command.
@@ -216,6 +221,8 @@ func createDownloadRequest(
 	validationResult *downloaders.ValidationResult,
 	metadata *downloaders.Metadata,
 ) *downloaders.DownloadRequest {
+	maxSize, _ := parseSize(maxFileSizeStr)
+
 	downloadOptions := &downloaders.DownloadOptions{
 		IncludeRaw:           !excludeRaw,
 		ExcludeSupplementary: excludeSupplementary,
@@ -224,6 +231,10 @@ func createDownloadRequest(
 		SkipExisting:         skipExisting,
 		NonInteractive:       nonInteractive,
 		CustomFilters:        customFilters,
+		IncludeExts:          splitCSV(includeExts),
+		ExcludeExts:          splitCSV(excludeExts),
+		MaxFileSize:          maxSize,
+		FilenameGlob:         filenameGlob,
 	}
 
 	return &downloaders.DownloadRequest{
@@ -232,6 +243,49 @@ func createDownloadRequest(
 		Options:   downloadOptions,
 		Metadata:  metadata,
 	}
+}
+
+// splitCSV splits a comma-separated string into a slice, ignoring empty parts.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := parts[:0]
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+// parseSize parses a human-readable size string (e.g. "500MB", "2GB") into bytes.
+// Returns 0 with no error for an empty string.
+func parseSize(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	s = strings.TrimSpace(s)
+	units := map[string]int64{
+		"B": 1, "KB": 1 << 10, "MB": 1 << 20, "GB": 1 << 30, "TB": 1 << 40,
+	}
+	for suffix, mult := range units {
+		if strings.HasSuffix(strings.ToUpper(s), suffix) {
+			numStr := strings.TrimSuffix(strings.ToUpper(s), suffix)
+			var n float64
+			if _, err := fmt.Sscanf(strings.TrimSpace(numStr), "%f", &n); err != nil {
+				return 0, fmt.Errorf("invalid size %q: %w", s, err)
+			}
+			return int64(n * float64(mult)), nil
+		}
+	}
+	// Bare number → bytes
+	var n int64
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return 0, fmt.Errorf("invalid size %q: %w", s, err)
+	}
+	return n, nil
 }
 
 func performDownload(
@@ -416,7 +470,17 @@ func init() {
 	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"timeout in seconds for download operations")
 
-	// Custom filters flag
+	// File-level filters (Phase 1)
+	downloadCmd.Flags().StringVar(&includeExts, "include-ext", "",
+		"only download files with these extensions, comma-separated (e.g. .h5ad,.csv.gz)")
+	downloadCmd.Flags().StringVar(&excludeExts, "exclude-ext", "",
+		"skip files with these extensions, comma-separated (e.g. .bam,.fastq.gz)")
+	downloadCmd.Flags().StringVar(&maxFileSizeStr, "max-file-size", "",
+		"skip files larger than this size (e.g. 500MB, 2GB)")
+	downloadCmd.Flags().StringVar(&filenameGlob, "filename-pattern", "",
+		"only download filenames matching this glob pattern (e.g. '*.counts.*')")
+
+	// Legacy custom filters flag (kept for backward compatibility)
 	downloadCmd.Flags().StringToStringVar(&customFilters, "filter", map[string]string{},
 		"custom filters (e.g., --filter extension=.txt)")
 }

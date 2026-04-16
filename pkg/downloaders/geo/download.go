@@ -653,58 +653,7 @@ func isRetryableError(err error) bool {
 
 // shouldDownloadFile determines if a file should be downloaded based on options.
 func (d *GEODownloader) shouldDownloadFile(filename string, options *downloaders.DownloadOptions) bool {
-	if options == nil {
-		return true
-	}
-
-	filename = strings.ToLower(filename)
-
-	// Check for raw data exclusion
-	if !options.IncludeRaw {
-		rawPatterns := []string{
-			".fastq", ".fq", ".sra", ".bam", ".sam",
-			"_raw", "raw_", ".cel",
-		}
-		for _, pattern := range rawPatterns {
-			if strings.Contains(filename, pattern) {
-				return false
-			}
-		}
-	}
-
-	// Check for supplementary exclusion
-	if options.ExcludeSupplementary {
-		suppPatterns := []string{
-			"supplementary", "suppl", "readme", "filelist",
-		}
-		for _, pattern := range suppPatterns {
-			if strings.Contains(filename, pattern) {
-				return false
-			}
-		}
-	}
-
-	// Apply custom filters
-	if options.CustomFilters != nil {
-		for filterType, filterValue := range options.CustomFilters {
-			switch filterType {
-			case "extension":
-				if !strings.HasSuffix(filename, filterValue) {
-					return false
-				}
-			case "contains":
-				if !strings.Contains(filename, filterValue) {
-					return false
-				}
-			case "excludes":
-				if strings.Contains(filename, filterValue) {
-					return false
-				}
-			}
-		}
-	}
-
-	return true
+	return downloaders.ShouldDownload(filename, -1, options)
 }
 
 // getGSESubdir returns the FTP subdirectory for a GSE accession.

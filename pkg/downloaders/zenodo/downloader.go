@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -568,66 +567,7 @@ func (d *ZenodoDownloader) shouldDownloadFile(file ZenodoFile, options *download
 	if options == nil {
 		return true
 	}
-
-	filename := strings.ToLower(file.Key)
-
-	// Check for raw data exclusion
-	if !options.IncludeRaw {
-		rawPatterns := []string{
-			".fastq", ".fq", ".sra", ".bam", ".sam",
-			"_raw", "raw_", ".cel", ".fcs", ".h5",
-		}
-		for _, pattern := range rawPatterns {
-			if strings.Contains(filename, pattern) {
-				return false
-			}
-		}
-	}
-
-	// Check for supplementary exclusion
-	if options.ExcludeSupplementary {
-		suppPatterns := []string{
-			"supplementary", "suppl", "readme", "license",
-			"metadata", "manifest", "documentation",
-		}
-		for _, pattern := range suppPatterns {
-			if strings.Contains(filename, pattern) {
-				return false
-			}
-		}
-	}
-
-	// Apply custom filters
-	if options.CustomFilters != nil {
-		for filterType, filterValue := range options.CustomFilters {
-			switch filterType {
-			case "extension":
-				if !strings.HasSuffix(filename, filterValue) {
-					return false
-				}
-			case "contains":
-				if !strings.Contains(filename, filterValue) {
-					return false
-				}
-			case "excludes":
-				if strings.Contains(filename, filterValue) {
-					return false
-				}
-			case "max_size":
-				if maxSize, err := strconv.ParseInt(filterValue, 10, 64); err == nil {
-					if file.Size > maxSize {
-						return false
-					}
-				}
-			case "min_size":
-				if minSize, err := strconv.ParseInt(filterValue, 10, 64); err == nil {
-					if file.Size < minSize {
-						return false
-					}
-				}
-			}
-		}
-	}
+	return downloaders.ShouldDownload(file.Key, file.Size, options)
 
 	return true
 }
