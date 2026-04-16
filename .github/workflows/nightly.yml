@@ -6,7 +6,7 @@ on:
   workflow_dispatch:        # allow manual trigger from the Actions tab
 
 env:
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25.9"
 
 jobs:
   build:
