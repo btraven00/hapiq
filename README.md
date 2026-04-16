@@ -1,12 +1,7 @@
 # Hapiq
 
-**Hapiq** is a CLI tool for extracting and inspecting dataset links from
-scientific papers.
-
-To extract and check links, it verifies and analyzes data sources to estimate
-the likelihood of a valid dataset.
-
-Hapiq can also be used to directly download datasets into local folders.
+**Hapiq** downloads datasets from scientific repositories with provenance tracking.
+Point it at a source and accession ID; it handles metadata, file enumeration, filtering, and download.
 
 _"Hapiq" means "the one who fetches" in Quechua._
 
@@ -16,130 +11,265 @@ _"Hapiq" means "the one who fetches" in Quechua._
 
 ---
 
-## Features
-
-- ✅ Validate URLs and identifiers (e.g. Zenodo, Figshare, Dryad)
-- 🔍 Support for DOI resolution and repository classification
-- 📊 Estimate likelihood of dataset validity
-- 🌐 HTTP status and metadata inspection
-- 📝 JSON or human-readable output formats
-
----
-
 ## Installation
 
-### From Source
-
-```bash
-git clone https://github.com/btraven00/hapiq.git
-cd hapiq
-make install
-```
-
-### Using Go Install
+### go install (recommended)
 
 ```bash
 go install github.com/btraven00/hapiq@latest
 ```
 
-### Download Binary
+Requires Go 1.24+. The binary is placed in `$GOPATH/bin` (usually `~/go/bin`).
 
-Download pre-built binaries from the [releases page](https://github.com/btraven00/hapiq/releases).
+### Nightly binary
 
-## Usage
-
-### Basic Usage
+Pre-built binaries are published nightly for Linux, macOS, and Windows:
 
 ```bash
-hapiq check <url-or-identifier>
+# Linux amd64
+curl -L https://github.com/btraven00/hapiq/releases/download/nightly/hapiq-linux-amd64.tar.gz \
+  | tar -xz
+sudo mv hapiq-linux-amd64 /usr/local/bin/hapiq
+
+# macOS arm64 (Apple Silicon)
+curl -L https://github.com/btraven00/hapiq/releases/download/nightly/hapiq-darwin-arm64.tar.gz \
+  | tar -xz
+sudo mv hapiq-darwin-arm64 /usr/local/bin/hapiq
 ```
 
-### Examples
+Windows: download `hapiq-windows-amd64.zip` from the [nightly release](https://github.com/btraven00/hapiq/releases/tag/nightly), extract, and add to `PATH`.
 
-Check a Zenodo record:
+### From source
+
 ```bash
-hapiq check https://zenodo.org/record/1234567
+git clone https://github.com/btraven00/hapiq.git
+cd hapiq
+go build -o hapiq .
 ```
 
-Check using DOI:
+---
+
+## Supported sources
+
+| Source | IDs | Notes |
+|--------|-----|-------|
+| `geo` | `GSE*`, `GSM*`, `GPL*`, `GDS*` | NCBI Gene Expression Omnibus |
+| `zenodo` | DOIs (`10.5281/zenodo.*`), record IDs | |
+| `figshare` | Article/collection IDs, URLs | |
+| `ensembl` | `bacteria:47:pep`, `fungi:47:gff3:saccharomyces_cerevisiae` | FTP + HTTP |
+
+`ncbi` is an alias for `geo`.
+
+---
+
+## Quick start
+
 ```bash
-hapiq check 10.5281/zenodo.1234567
+# Search GEO, inspect before downloading
+hapiq search geo "ATAC-seq human liver" --limit 5
+hapiq download geo GSE133344 --out ./data --dry-run
+
+# Download
+hapiq download geo GSE133344 --out ./data
+
+# Only grab specific file types
+hapiq download geo GSE133344 --out ./data --include-ext .h5ad,.csv.gz
+
+# Download only selected samples
+hapiq download geo GSE133344 --out ./data --subset GSM3912345,GSM3912346
+
+# Search → download pipeline
+hapiq search geo "bulk RNA-seq liver" -q \
+  | xargs -I{} hapiq download geo {} --out ./data --dry-run
 ```
 
-Check with quiet output (suppress verbose messages):
+---
+
+## Commands
+
+### `hapiq search`
+
+Search for datasets using a repository's native query API.
+
+```
+hapiq search <source> <query> [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--limit N` | 10 | Maximum results to return |
+| `--organism X` | — | Filter by organism (e.g. `"Homo sapiens"`) |
+| `--type X` | GSE | Entry type: `GSE`, `GSM`, `GPL`, `GDS` |
+| `-o, --output` | human | Output format: `human`, `json` |
+| `-q, --quiet` | false | Print accessions only (one per line, pipe-friendly) |
+
+**Output modes:**
+
+- `human` — formatted table on stderr, accessions on stdout
+- `json` — JSON array of result objects
+- quiet (`-q`) — bare accessions only, ideal for piping
+
+**Examples:**
+
 ```bash
-hapiq check https://figshare.com/articles/dataset/example/123456 --quiet
+hapiq search geo "ATAC-seq human liver" --limit 20
+hapiq search geo "scRNA-seq pancreas" --organism "Mus musculus"
+hapiq search geo "ChIP-seq H3K27ac" --type GSE --output json
+
+# Pipe into download
+hapiq search geo "bulk RNA-seq liver" -q \
+  | head -3 \
+  | xargs -I{} hapiq download geo {} --out ./data
 ```
 
-Output as JSON:
+---
+
+### `hapiq download`
+
+Download a dataset from a repository.
+
+```
+hapiq download <source> <id> --out <dir> [flags]
+```
+
+#### Required
+
+| Flag | Description |
+|------|-------------|
+| `--out <dir>` | Output directory (created if it doesn't exist) |
+
+#### File-level filters
+
+Applied per file before anything is written to disk.
+
+| Flag | Description |
+|------|-------------|
+| `--include-ext .h5ad,.csv.gz` | Only download files with these extensions (comma-separated) |
+| `--exclude-ext .bam,.fastq.gz` | Skip files with these extensions |
+| `--max-file-size 500MB` | Skip files larger than this (supports B, KB, MB, GB, TB) |
+| `--filename-pattern '*.counts.*'` | Only download filenames matching this glob |
+
+#### Source-specific filters
+
+| Flag | Description |
+|------|-------------|
+| `--subset GSM123,GSM456` | GEO only: download only these sample accessions from a series |
+| `--organism "Homo sapiens"` | Skip the dataset if its organism doesn't match (case-insensitive partial) |
+| `--dry-run` | List files that would be downloaded without writing anything |
+
+#### Download behaviour
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--exclude-raw` | false | Skip raw data files (FASTQ, BAM, SRA, CEL…) |
+| `--exclude-supplementary` | false | Skip supplementary/readme/manifest files |
+| `--parallel N` | 8 | Concurrent downloads |
+| `--resume` | false | Resume interrupted downloads |
+| `--skip-existing` | false | Skip files that already exist locally |
+| `-y, --yes` | false | Non-interactive mode (auto-confirm prompts) |
+| `-t, --timeout N` | 300 | Timeout in seconds |
+
+#### Output
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-o, --output` | human | `human` or `json` |
+| `-q, --quiet` | false | Suppress progress output |
+
+**Examples:**
+
 ```bash
-hapiq check "10.5061/dryad.example" --output json
+# Basic download
+hapiq download geo GSE133344 --out ./data
+
+# Inspect first
+hapiq download geo GSE133344 --out ./data --dry-run
+
+# Only processed files, no raw sequences
+hapiq download geo GSE133344 --out ./data --exclude-raw
+
+# Only .h5ad and .csv.gz files under 2 GB
+hapiq download geo GSE133344 --out ./data \
+  --include-ext .h5ad,.csv.gz \
+  --max-file-size 2GB
+
+# Only specific samples from a large series
+hapiq download geo GSE133344 --out ./data \
+  --subset GSM3912345,GSM3912346,GSM3912347
+
+# Zenodo
+hapiq download zenodo 10.5281/zenodo.3242074 --out ./data
+
+# Figshare
+hapiq download figshare 12345678 --out ./data --exclude-raw
+
+# Ensembl
+hapiq download ensembl bacteria:47:pep --out ./data
+hapiq download ensembl fungi:47:gff3:saccharomyces_cerevisiae --out ./data
 ```
 
-Get only the URL if found with confidence:
+Each download writes a `hapiq.json` witness file containing the full metadata, per-file checksums (SHA-256), and download statistics for reproducibility.
+
+---
+
+### `hapiq downloaders`
+
+List all registered downloaders with their supported IDs and examples.
+
 ```bash
-hapiq check --get-url https://zenodo.org/record/1234567
-hapiq check --get-url 10.5281/zenodo.1234567
+hapiq downloaders
+hapiq downloaders --output json
 ```
 
-### Supported Repositories
+---
 
-- **Zenodo** - `zenodo.org`
-- **Figshare** - `figshare.com`
-- **Dryad** - `datadryad.org`
-- **OSF** - `osf.io`
-- **GitHub** - `github.com` (releases)
-- **Dataverse** - Various Dataverse instances
-- **DOI Resolution** - `doi.org`
+### `hapiq species`
 
-## Output Format
+Browse Ensembl Genomes databases to find the right identifier for `hapiq download ensembl`.
 
-### Human-readable Output
-```
-Target: https://zenodo.org/record/1234567
-✅ Status: Valid (HTTP 200)
-📂 Dataset Type: zenodo_record
-🔗 Content Type: text/html
-📏 Size: 15234 bytes
-⏱️  Response Time: 245ms
-🧠 Dataset Likelihood: 0.95
+```bash
+hapiq species                         # list available databases
+hapiq species bacteria 47             # list species in bacteria release 47
+hapiq species fungi 47 --filter yeast # filter by name
+hapiq species plants --examples       # show example download IDs
 ```
 
-### JSON Output
+---
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `NCBI_API_KEY` | NCBI API key — raises rate limit from 3 to 10 req/s for GEO. Get one at [ncbi.nlm.nih.gov/account](https://www.ncbi.nlm.nih.gov/account/). |
+
+```bash
+export NCBI_API_KEY=your_key_here
+hapiq download geo GSE133344 --out ./data
+```
+
+---
+
+## Provenance
+
+Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
+
 ```json
 {
-  "target": "https://zenodo.org/record/1234567",
-  "valid": true,
-  "http_status": 200,
-  "content_type": "text/html",
-  "content_length": 15234,
-  "response_time": "245ms",
-  "dataset_type": "zenodo_record",
-  "likelihood_score": 0.95,
-  "metadata": {
-    "server": "nginx/1.18.0",
-    "last-modified": "Wed, 15 Mar 2023 10:30:00 GMT"
-  }
+  "hapiq_version": "nightly-20260416-a1b2c3d",
+  "download_time": "2026-04-16T02:00:00Z",
+  "source": "geo",
+  "original_id": "GSE133344",
+  "metadata": { "title": "...", "organism": "Homo sapiens", ... },
+  "files": [
+    { "path": "supplementary/GSE133344_RAW.tar.gz", "size": 131072000,
+      "checksum": "sha256:abc123...", "source_url": "https://ftp.ncbi..." }
+  ],
+  "download_stats": { "duration": "4m32s", "bytes_downloaded": 134217728 }
 }
 ```
 
-## Development
-
-### Prerequisites
-
-- Go 1.21 or later
-- Make (optional, for convenience)
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+---
 
 ## License
 
 GPL-3-or-later © 2025 btraven
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-## References
-
-* [iSeq](https://github.com/BioOmics/iSeq)
