@@ -256,9 +256,18 @@ func CalculateFileChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// WriteWitnessFile creates a hapiq.json file with download metadata.
+// WriteWitnessFile writes a hapiq.json file with download metadata.
+// If a hapiq.json already exists in targetDir, the new file list is merged
+// into the existing record (deduplicating by path) so that incremental
+// downloads (e.g. --limit-files 1, then more later) accumulate rather than
+// overwrite. Metadata and stats are taken from the newest run.
 func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
+
+	// Merge with any existing witness file.
+	if existing, err := LoadWitnessFile(targetDir); err == nil {
+		witness = mergeWitnessFiles(existing, witness)
+	}
 
 	file, err := os.Create(witnessPath)
 	if err != nil {
@@ -274,6 +283,43 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 	}
 
 	return nil
+}
+
+// mergeWitnessFiles merges prev and next into a single WitnessFile.
+// next's metadata and stats win; file lists are union-merged by path,
+// with next's entries taking precedence over prev's on conflict.
+func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.WitnessFile {
+	merged := *next // start from next (metadata, stats, version)
+
+	// Build a map of next's files keyed by path for dedup.
+	have := make(map[string]bool, len(next.Files))
+	for _, f := range next.Files {
+		have[f.Path] = true
+	}
+
+	// Prepend prev's files that are not already in next.
+	var extra []downloaders.FileWitness
+	for _, f := range prev.Files {
+		if !have[f.Path] {
+			extra = append(extra, f)
+		}
+	}
+	merged.Files = append(extra, next.Files...)
+
+	// Accumulate byte counts from previous runs.
+	if next.DownloadStats != nil && prev.DownloadStats != nil {
+		merged.DownloadStats = &downloaders.DownloadStats{
+			BytesDownloaded: prev.DownloadStats.BytesDownloaded + next.DownloadStats.BytesDownloaded,
+			FilesDownloaded: prev.DownloadStats.FilesDownloaded + next.DownloadStats.FilesDownloaded,
+			FilesTotal:      prev.DownloadStats.FilesTotal + next.DownloadStats.FilesTotal,
+			// Duration/speed reflect the most recent run only.
+			Duration:      next.DownloadStats.Duration,
+			AverageSpeed:  next.DownloadStats.AverageSpeed,
+			MaxConcurrent: next.DownloadStats.MaxConcurrent,
+		}
+	}
+
+	return &merged
 }
 
 // LoadWitnessFile reads and parses a hapiq.json file.
