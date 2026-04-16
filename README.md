@@ -54,11 +54,13 @@ go build -o hapiq .
 | Source | IDs | Notes |
 |--------|-----|-------|
 | `geo` | `GSE*`, `GSM*`, `GPL*`, `GDS*` | NCBI Gene Expression Omnibus |
+| `sra` | `PRJNA*`, `SRR*`, `ERR*`, `DRR*`, `SRX*` | Raw FASTQ via ENA HTTPS mirror |
 | `zenodo` | DOIs (`10.5281/zenodo.*`), record IDs | |
 | `figshare` | Article/collection IDs, URLs | |
 | `ensembl` | `bacteria:47:pep`, `fungi:47:gff3:saccharomyces_cerevisiae` | FTP + HTTP |
+| `vcp` | 24-char hex IDs (e.g. `6946b5261d32b0e84ba87057`) | CZI Virtual Cell Platform; set `VCP_TOKEN` for private datasets |
 
-`ncbi` is an alias for `geo`.
+`ncbi` is an alias for `geo`. `ena` is an alias for `sra`.
 
 ---
 
@@ -81,6 +83,11 @@ hapiq download geo GSE133344 --out ./data --subset GSM3912345,GSM3912346
 # Search → download pipeline
 hapiq search geo "bulk RNA-seq liver" -q \
   | xargs -I{} hapiq download geo {} --out ./data --dry-run
+
+# CZI Virtual Cell Platform
+hapiq search vcp "norman" --limit 10
+hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --dry-run
+hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --limit-files 1
 ```
 
 ---
@@ -95,11 +102,13 @@ Search for datasets using a repository's native query API.
 hapiq search <source> <query> [flags]
 ```
 
+Supported sources: `geo`, `vcp`
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--limit N` | 10 | Maximum results to return |
 | `--organism X` | — | Filter by organism (e.g. `"Homo sapiens"`) |
-| `--type X` | GSE | Entry type: `GSE`, `GSM`, `GPL`, `GDS` |
+| `--type X` | — | GEO: entry type (`GSE`/`GSM`/`GPL`/`GDS`); VCP: assay filter (e.g. `"Perturb-Seq"`) |
 | `-o, --output` | human | Output format: `human`, `json` |
 | `-q, --quiet` | false | Print accessions only (one per line, pipe-friendly) |
 
@@ -115,6 +124,9 @@ hapiq search <source> <query> [flags]
 hapiq search geo "ATAC-seq human liver" --limit 20
 hapiq search geo "scRNA-seq pancreas" --organism "Mus musculus"
 hapiq search geo "ChIP-seq H3K27ac" --type GSE --output json
+
+hapiq search vcp "norman" --limit 10
+hapiq search vcp "Perturb-Seq" --organism "Homo sapiens" --type "Perturb-Seq"
 
 # Pipe into download
 hapiq search geo "bulk RNA-seq liver" -q \
@@ -206,6 +218,11 @@ hapiq download figshare 12345678 --out ./data --exclude-raw
 # Ensembl
 hapiq download ensembl bacteria:47:pep --out ./data
 hapiq download ensembl fungi:47:gff3:saccharomyces_cerevisiae --out ./data
+
+# CZI Virtual Cell Platform (VCP)
+hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --dry-run
+hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data
+hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --limit-files 1  # test first
 ```
 
 Each download writes a `hapiq.json` witness file containing the full metadata, per-file checksums (SHA-256), and download statistics for reproducibility.
@@ -241,6 +258,7 @@ hapiq species plants --examples       # show example download IDs
 | Variable | Description |
 |----------|-------------|
 | `NCBI_API_KEY` | NCBI API key — raises rate limit from 3 to 10 req/s for GEO. Get one at [ncbi.nlm.nih.gov/account](https://www.ncbi.nlm.nih.gov/account/). |
+| `VCP_TOKEN` | JWT for the CZI Virtual Cell Platform. Required for private/restricted VCP datasets. Public datasets (e.g. Billion Cell Project) work without it. |
 
 ```bash
 export NCBI_API_KEY=your_key_here
