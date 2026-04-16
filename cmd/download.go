@@ -34,6 +34,9 @@ var (
 	excludeExts          string
 	maxFileSizeStr       string
 	filenameGlob         string
+	subset               string
+	organism             string
+	dryRun               bool
 )
 
 // downloadCmd represents the download command.
@@ -104,7 +107,11 @@ func runDownload(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("download completed with errors")
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
+	if dryRun {
+		_, _ = fmt.Fprintf(os.Stderr, "\n✅ Dry-run complete. Use without --dry-run to download.\n")
+	} else {
+		_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
+	}
 
 	return nil
 }
@@ -235,6 +242,9 @@ func createDownloadRequest(
 		ExcludeExts:          splitCSV(excludeExts),
 		MaxFileSize:          maxSize,
 		FilenameGlob:         filenameGlob,
+		Subset:               splitCSV(subset),
+		Organism:             organism,
+		DryRun:               dryRun,
 	}
 
 	return &downloaders.DownloadRequest{
@@ -348,18 +358,50 @@ func displayWarningsAndErrors(result *downloaders.DownloadResult) {
 }
 
 func displayFileList(result *downloaders.DownloadResult) {
-	if quiet || len(result.Files) == 0 {
+	if quiet {
 		return
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "\n📁 Downloaded Files:\n")
+	if len(result.Files) > 0 {
+		label := "Downloaded Files"
+		if dryRun {
+			label = "Files that would be downloaded"
+		}
 
-	for i := range result.Files {
-		file := &result.Files[i]
-		_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
+		_, _ = fmt.Fprintf(os.Stderr, "\n📁 %s:\n", label)
 
-		if file.Checksum != "" {
-			_, _ = fmt.Fprintf(os.Stderr, "      %s: %s\n", file.ChecksumType, file.Checksum)
+		for i := range result.Files {
+			file := &result.Files[i]
+			name := file.OriginalName
+			if name == "" {
+				name = file.Path
+			}
+
+			if dryRun {
+				_, _ = fmt.Fprintf(os.Stderr, "   %s\n", name)
+				if file.SourceURL != "" {
+					_, _ = fmt.Fprintf(os.Stderr, "      → %s\n", file.SourceURL)
+				}
+			} else {
+				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
+				if file.Checksum != "" {
+					_, _ = fmt.Fprintf(os.Stderr, "      %s: %s\n", file.ChecksumType, file.Checksum)
+				}
+			}
+		}
+	}
+
+	if dryRun && len(result.Collections) > 0 {
+		for _, col := range result.Collections {
+			_, _ = fmt.Fprintf(os.Stderr, "\n🧬 %s (%s):\n", col.Title, col.Type)
+			maxShow := 20
+			for i, s := range col.Samples {
+				if i >= maxShow {
+					_, _ = fmt.Fprintf(os.Stderr, "   ... and %d more\n", len(col.Samples)-maxShow)
+					break
+				}
+				_, _ = fmt.Fprintf(os.Stderr, "   %s\n", s)
+			}
 		}
 	}
 }
@@ -479,6 +521,14 @@ func init() {
 		"skip files larger than this size (e.g. 500MB, 2GB)")
 	downloadCmd.Flags().StringVar(&filenameGlob, "filename-pattern", "",
 		"only download filenames matching this glob pattern (e.g. '*.counts.*')")
+
+	// Source-specific filters (Phase 2)
+	downloadCmd.Flags().StringVar(&subset, "subset", "",
+		"download only these sub-items, comma-separated (e.g. GSM123,GSM456 within a GSE)")
+	downloadCmd.Flags().StringVar(&organism, "organism", "",
+		"skip datasets whose organism doesn't contain this string (case-insensitive, e.g. 'Homo sapiens')")
+	downloadCmd.Flags().BoolVar(&dryRun, "dry-run", false,
+		"enumerate files that would be downloaded without writing anything to disk")
 
 	// Legacy custom filters flag (kept for backward compatibility)
 	downloadCmd.Flags().StringToStringVar(&customFilters, "filter", map[string]string{},

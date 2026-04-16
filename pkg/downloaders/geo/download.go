@@ -91,8 +91,17 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to get samples list: %v", err))
 		// Continue without individual samples - this is not a critical error
 	} else {
+		// Apply subset filter: restrict to user-specified GSM accessions.
+		if options != nil && len(options.Subset) > 0 {
+			before := len(samples)
+			samples = filterSubsetSamples(samples, options.Subset)
+			if d.verbose {
+				fmt.Printf("🔬 Subset filter: %d/%d samples selected\n", len(samples), before)
+			}
+		}
+
 		if d.verbose {
-			fmt.Printf("🧬 Found %d samples in series, checking for individual files\n", len(samples))
+			fmt.Printf("🧬 Downloading %d samples, checking for individual files\n", len(samples))
 		}
 
 		// Only create samples directory if we have samples to download
@@ -140,6 +149,79 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 				fmt.Printf("ℹ️  No individual sample files found - this is normal for datasets with series-level data only\n")
 			}
 		}
+	}
+
+	return nil
+}
+
+// filterSubsetSamples returns only those samples that appear in the subset list.
+func filterSubsetSamples(samples, subset []string) []string {
+	allowed := make(map[string]bool, len(subset))
+	for _, s := range subset {
+		allowed[strings.ToUpper(strings.TrimSpace(s))] = true
+	}
+
+	var filtered []string
+
+	for _, s := range samples {
+		if allowed[strings.ToUpper(s)] {
+			filtered = append(filtered, s)
+		}
+	}
+
+	return filtered
+}
+
+// enumerateSeries lists the files that would be downloaded for a GSE without writing anything.
+// It populates result.Files with series-level files and result.Collections with the sample list.
+func (d *GEODownloader) enumerateSeries(ctx context.Context, id string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
+	// --- Series supplementary files (real directory listing) ---
+	suppBaseURL := fmt.Sprintf("%s/series/%s/%s/suppl/", d.ftpBaseURL, d.getGSESubdir(id), id)
+
+	suppFiles, err := d.getDirectoryListing(ctx, suppBaseURL)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("could not list supplementary files: %v", err))
+	}
+
+	for _, filename := range suppFiles {
+		if options == nil || downloaders.ShouldDownload(filename, -1, options) {
+			result.Files = append(result.Files, downloaders.FileInfo{
+				OriginalName: filename,
+				SourceURL:    suppBaseURL + filename,
+			})
+		}
+	}
+
+	// --- Series metadata files (well-known patterns, not verified) ---
+	gseSubdir := d.getGSESubdir(id)
+	metaBaseURL := fmt.Sprintf("%s/series/%s/%s", d.ftpBaseURL, gseSubdir, id)
+
+	for _, f := range []string{
+		fmt.Sprintf("%s_series_matrix.txt.gz", id),
+		fmt.Sprintf("%s_family.soft.gz", id),
+	} {
+		result.Files = append(result.Files, downloaders.FileInfo{
+			OriginalName: f,
+			SourceURL:    metaBaseURL + "/matrix/" + f,
+		})
+	}
+
+	// --- Sample list ---
+	samples, err := d.getSeriesSamplesViaEUtils(ctx, id)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("could not enumerate samples: %v", err))
+	} else {
+		if options != nil && len(options.Subset) > 0 {
+			samples = filterSubsetSamples(samples, options.Subset)
+		}
+
+		result.Collections = append(result.Collections, downloaders.Collection{
+			Type:      "geo_samples",
+			ID:        id,
+			Title:     fmt.Sprintf("%d samples in series", len(samples)),
+			Samples:   samples,
+			FileCount: len(samples),
+		})
 	}
 
 	return nil

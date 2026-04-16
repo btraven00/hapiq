@@ -34,10 +34,16 @@ type DownloadRequest struct {
 // DownloadOptions provides configuration for download behavior.
 type DownloadOptions struct {
 	// File-level filters (Phase 1)
-	IncludeExts   []string `json:"include_exts,omitempty"`   // only download files with these extensions (e.g. ".h5ad", ".csv.gz")
-	ExcludeExts   []string `json:"exclude_exts,omitempty"`   // skip files with these extensions
-	FilenameGlob  string   `json:"filename_glob,omitempty"`  // only download filenames matching this glob
-	MaxFileSize   int64    `json:"max_file_size,omitempty"`  // skip files larger than this (bytes, 0 = no limit)
+	IncludeExts  []string `json:"include_exts,omitempty"`  // only download files with these extensions (e.g. ".h5ad", ".csv.gz")
+	ExcludeExts  []string `json:"exclude_exts,omitempty"`  // skip files with these extensions
+	FilenameGlob string   `json:"filename_glob,omitempty"` // only download filenames matching this glob
+	MaxFileSize  int64    `json:"max_file_size,omitempty"` // skip files larger than this (bytes, 0 = no limit)
+
+	// Source-specific filters (Phase 2)
+	Subset   []string `json:"subset,omitempty"`   // only download these sub-items (e.g. specific GSMs within a GSE)
+	Organism string   `json:"organism,omitempty"` // skip datasets whose organism doesn't match (case-insensitive partial)
+	DryRun   bool     `json:"dry_run,omitempty"`  // enumerate files without downloading
+
 	CustomFilters        map[string]string `json:"custom_filters,omitempty"`
 	MaxConcurrent        int               `json:"max_concurrent"`
 	IncludeRaw           bool              `json:"include_raw"`

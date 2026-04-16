@@ -216,6 +216,39 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	result.Metadata = metadata
 
+	// Apply organism filter: skip the whole series if organism doesn't match.
+	if req.Options != nil && req.Options.Organism != "" {
+		seriesOrganism := ""
+		if org, ok := metadata.Custom["organism"].(string); ok {
+			seriesOrganism = org
+		}
+
+		if seriesOrganism != "" && !strings.Contains(strings.ToLower(seriesOrganism), strings.ToLower(req.Options.Organism)) {
+			_, _ = fmt.Fprintf(os.Stderr, "⏭️  Skipping %s: organism '%s' does not match filter '%s'\n",
+				cleanID, seriesOrganism, req.Options.Organism)
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("skipped: organism '%s' does not match filter '%s'", seriesOrganism, req.Options.Organism))
+			result.Success = true
+
+			return result, nil
+		}
+	}
+
+	// Handle dry-run: enumerate files without downloading anything.
+	if req.Options != nil && req.Options.DryRun {
+		if strings.HasPrefix(cleanID, "GSE") {
+			if err := d.enumerateSeries(ctx, cleanID, req.Options, result); err != nil {
+				result.Errors = append(result.Errors, err.Error())
+			}
+		} else {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("dry-run enumeration only supported for GSE; %s will be skipped", cleanID))
+		}
+
+		result.Success = true
+
+		return result, nil
+	}
+
 	// Check directory and handle conflicts
 	dirChecker := common.NewDirectoryChecker(req.OutputDir)
 
