@@ -9,7 +9,7 @@ on:
     types: [published]
 
 env:
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.24"
 
 jobs:
   test:
@@ -322,22 +322,15 @@ jobs:
         if: matrix.test-type == 'basic'
         run: |
           ./hapiq-linux-amd64 --help
-          ./hapiq-linux-amd64 check --help
+          ./hapiq-linux-amd64 download --help
+          ./hapiq-linux-amd64 search --help
+          ./hapiq-linux-amd64 downloaders
 
-      - name: Run real-world integration tests
+      - name: Run smoke tests
         if: matrix.test-type == 'real-world'
         run: |
-          # Test with a known good Zenodo record (small dataset)
-          ./hapiq-linux-amd64 check "https://zenodo.org/record/3242074" --output json
+          # Dry-run a known small GEO series (no files written)
+          ./hapiq-linux-amd64 download geo GSE133344 --out /tmp/hapiq-test --dry-run --quiet || true
 
-          # Test with DOI
-          ./hapiq-linux-amd64 check "10.5281/zenodo.3242074" --output json
-
-          # Test with invalid URL (should fail gracefully)
-          ./hapiq-linux-amd64 check "https://invalid-url-that-does-not-exist.com" --output json || true
-
-      - name: Run performance tests
-        if: matrix.test-type == 'basic'
-        run: |
-          echo "Testing response time for validation..."
-          time ./hapiq-linux-amd64 check "10.5281/zenodo.123456" --output json || true
+          # Search GEO (network call, non-fatal)
+          ./hapiq-linux-amd64 search geo "ATAC-seq liver" --limit 3 --quiet || true
