@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -42,15 +43,106 @@ func (d *GEODownloader) ResolveBioProject(ctx context.Context, prjna string) ([]
 	return d.elink(ctx, "bioproject", "gds", bioprojectUID)
 }
 
-// ResolveGSEToSRARuns resolves a GDS UID to its linked SRA experiment UIDs,
-// then fetches the SRR run accessions from ESummary.
-func (d *GEODownloader) ResolveGSEToSRARuns(ctx context.Context, gdsUID string) ([]SRARun, error) {
+// ResolveGSEToSRARuns resolves a GSE accession to SRA run records.
+// Resolution path:
+//  1. ELink gds→sra (fast when NCBI link tables are populated)
+//  2. Fallback: fetch GEO text page → extract SRP study accession →
+//     search SRA by study (reliable but one extra HTTP call)
+//
+// gdsUID is the numeric GDS UID for the ELink step.
+// gseAccession (optional) is used for the fallback path.
+func (d *GEODownloader) ResolveGSEToSRARuns(ctx context.Context, gdsUID string, gseAccession ...string) ([]SRARun, error) {
 	sraUIDs, err := d.elink(ctx, "gds", "sra", gdsUID)
-	if err != nil || len(sraUIDs) == 0 {
+	if err != nil {
 		return nil, err
 	}
 
+	if len(sraUIDs) == 0 && len(gseAccession) > 0 && gseAccession[0] != "" {
+		sraUIDs, err = d.resolveSRAViaGEOPage(ctx, gseAccession[0])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(sraUIDs) == 0 {
+		return nil, nil
+	}
+
 	return d.fetchSRARuns(ctx, sraUIDs)
+}
+
+// resolveSRAViaGEOPage fetches the GEO text page for a series, extracts the
+// SRP/ERP/DRP study accession from the !Series_relation field, then searches
+// SRA to get experiment UIDs.
+func (d *GEODownloader) resolveSRAViaGEOPage(ctx context.Context, gseAccession string) ([]string, error) {
+	srp, err := d.extractSRPFromGEOPage(ctx, gseAccession)
+	if err != nil || srp == "" {
+		return nil, err
+	}
+
+	if d.verbose {
+		fmt.Fprintf(os.Stderr, "   GEO→SRA study: %s → %s\n", gseAccession, srp)
+	}
+
+	return d.searchSRAByStudy(ctx, srp)
+}
+
+// extractSRPFromGEOPage fetches the brief GEO soft text for a series and
+// returns the SRA study accession (SRP*/ERP*/DRP*) from the Series_relation
+// line, e.g.:
+//
+//	!Series_relation = SRA: https://www.ncbi.nlm.nih.gov/sra?term=SRP212114
+func (d *GEODownloader) extractSRPFromGEOPage(ctx context.Context, gseAccession string) (string, error) {
+	pageURL := fmt.Sprintf(
+		"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=%s&targ=self&form=text&view=brief",
+		gseAccession,
+	)
+
+	d.rateLimitEUtils()
+
+	content, err := d.makeEUtilsRequest(ctx, pageURL)
+	if err != nil {
+		return "", err
+	}
+
+	for _, line := range strings.Split(string(content), "\n") {
+		// !Series_relation = SRA: https://www.ncbi.nlm.nih.gov/sra?term=SRP212114
+		if !strings.Contains(line, "!Series_relation") || !strings.Contains(line, "SRA:") {
+			continue
+		}
+		if idx := strings.Index(line, "term="); idx >= 0 {
+			srp := strings.TrimSpace(line[idx+5:])
+			return srp, nil
+		}
+	}
+	return "", nil
+}
+
+// searchSRAByStudy searches SRA for all experiment UIDs belonging to a study
+// accession (SRP*/ERP*/DRP*).
+func (d *GEODownloader) searchSRAByStudy(ctx context.Context, studyAccession string) ([]string, error) {
+	params := url.Values{}
+	params.Set("db", "sra")
+	params.Set("term", studyAccession+"[accession]")
+	params.Set("retmax", "500")
+	params.Set("tool", "hapiq")
+	params.Set("email", "hapiq@example.com")
+
+	searchURL := "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + params.Encode()
+
+	d.rateLimitEUtils()
+
+	content, err := d.makeEUtilsRequest(ctx, searchURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp ESearchResponse
+	if err := xml.Unmarshal(content, &resp); err != nil {
+		return nil, fmt.Errorf("parse sra esearch for study %s: %w", studyAccession, err)
+	}
+
+	return resp.IdList.IDs, nil
 }
 
 // SRARun holds the key fields for an SRA run.

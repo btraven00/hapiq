@@ -52,19 +52,18 @@ func (d *GEODownloader) downloadSRA(
 	result *downloaders.DownloadResult,
 ) error {
 	if d.verbose {
-		fmt.Printf("🧬 Resolving SRA runs for %s...\n", gseID)
+		fmt.Fprintf(os.Stderr,"🧬 Resolving SRA runs for %s...\n", gseID)
 	}
 
-	sraRuns, err := d.ResolveGSEToSRARuns(ctx, gdsUID)
+	sraRuns, err := d.ResolveGSEToSRARuns(ctx, gdsUID, gseID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve SRA runs: %w", err)
 	}
 	if len(sraRuns) == 0 {
-		result.Warnings = append(result.Warnings, "no SRA runs found for "+gseID)
-		return nil
+		return fmt.Errorf("no SRA runs found for %s — the dataset may not have raw data in SRA, or the accession may not be linked", gseID)
 	}
 	if d.verbose {
-		fmt.Printf("   Found %d SRA runs — fetching ENA file info\n", len(sraRuns))
+		fmt.Fprintf(os.Stderr,"   Found %d SRA runs — fetching ENA file info\n", len(sraRuns))
 	}
 
 	sraDownloader := sra.NewSRADownloader(
@@ -149,28 +148,48 @@ func (d *GEODownloader) confirmSRADownload(
 		return nil
 	}
 
-	sraRuns, err := d.ResolveGSEToSRARuns(ctx, gdsUID)
+	sraRuns, err := d.ResolveGSEToSRARuns(ctx, gdsUID, gseID)
 	if err != nil || len(sraRuns) == 0 {
 		return nil // can't get size, proceed anyway
 	}
 
 	sraDownloader := sra.NewSRADownloader(sra.WithVerbose(false), sra.WithTimeout(d.timeout))
-	details, totalBytes := d.collectSRADetails(ctx, sraRuns, sraDownloader, result)
+	details, _ := d.collectSRADetails(ctx, sraRuns, sraDownloader, result)
 
-	totalFiles := 0
-	for _, det := range details {
-		totalFiles += len(det.info.Files)
+	// Count files and bytes, honouring --limit-files so the confirmation
+	// prompt reflects what will actually be downloaded.
+	limit := 0
+	if opts != nil {
+		limit = opts.LimitFiles
 	}
+	countedFiles := 0
+	var countedBytes int64
+	for _, det := range details {
+		for _, f := range det.info.Files {
+			if limit > 0 && countedFiles >= limit {
+				goto doneCount
+			}
+			countedFiles++
+			countedBytes += f.Bytes
+		}
+	}
+doneCount:
 
-	fmt.Printf("\n📦 Raw data summary for %s:\n", gseID)
-	fmt.Printf("   Runs:  %d\n", len(details))
-	fmt.Printf("   Files: %d\n", totalFiles)
-	fmt.Printf("   Total: %s\n", formatBytes(totalBytes))
-	fmt.Println()
+	limited := limit > 0 && countedFiles == limit
 
-	ok, err := common.AskUserConfirmation(
-		fmt.Sprintf("Download %s of raw FASTQ data?", formatBytes(totalBytes)),
-	)
+	fmt.Fprintf(os.Stderr, "\n📦 Raw data summary for %s:\n", gseID)
+	fmt.Fprintf(os.Stderr, "   Runs (total): %d\n", len(details))
+	if limited {
+		fmt.Fprintf(os.Stderr, "   Files (first %d): %d\n", limit, countedFiles)
+		fmt.Fprintf(os.Stderr, "   Estimated size:   %s\n", formatBytes(countedBytes))
+	} else {
+		fmt.Fprintf(os.Stderr, "   Files: %d\n", countedFiles)
+		fmt.Fprintf(os.Stderr, "   Total: %s\n", formatBytes(countedBytes))
+	}
+	fmt.Fprintln(os.Stderr)
+
+	question := fmt.Sprintf("Download %s of raw FASTQ data?", formatBytes(countedBytes))
+	ok, err := common.AskUserConfirmation(question)
 	if err != nil {
 		return err
 	}

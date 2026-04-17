@@ -300,9 +300,11 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		return result, nil
 	}
 
-	// Handle collection confirmation for series
+	// Handle collection confirmation for series (skipped when --raw is used,
+	// because confirmSRADownload covers that case instead).
 	geoType := cleanID[:3]
-	if geoType == "GSE" && len(metadata.Collections) > 0 {
+	includeSRA := req.Options != nil && req.Options.IncludeSRA
+	if geoType == "GSE" && len(metadata.Collections) > 0 && !includeSRA {
 		collection := metadata.Collections[0]
 		if !nonInteractive && !collection.UserConfirmed {
 			confirmed, err := d.confirmCollection(ctx, &collection)
@@ -334,7 +336,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 				return result, nil
 			}
 			if err := d.downloadSRA(ctx, cleanID, targetDir, gdsUID, req.Options, result); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("SRA download: %v", err))
+				result.Errors = append(result.Errors, fmt.Sprintf("SRA download: %v", err))
 			}
 		}
 		result.Duration = time.Since(startTime)
