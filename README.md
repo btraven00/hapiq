@@ -59,6 +59,7 @@ go build -o hapiq .
 | `figshare` | Article/collection IDs, URLs | |
 | `ensembl` | `bacteria:47:pep`, `fungi:47:gff3:saccharomyces_cerevisiae` | FTP + HTTP |
 | `vcp` | 24-char hex IDs (e.g. `6946b5261d32b0e84ba87057`) | CZI Virtual Cell Platform; set `VCP_TOKEN` for private datasets |
+| `scperturb` | `AuthorYear` or `AuthorYear_SubsetID` (e.g. `NormanWeissman2019`) | scPerturb compendium (Peidli et al., Nature Methods 2024); files via Zenodo |
 
 `ncbi` is an alias for `geo`. `ena` is an alias for `sra`.
 
@@ -102,7 +103,7 @@ Search for datasets using a repository's native query API.
 hapiq search <source> <query> [flags]
 ```
 
-Supported sources: `geo`, `vcp`
+Supported sources: `geo`, `vcp`, `scperturb`
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -127,6 +128,9 @@ hapiq search geo "ChIP-seq H3K27ac" --type GSE --output json
 
 hapiq search vcp "norman" --limit 10
 hapiq search vcp "Perturb-Seq" --organism "Homo sapiens" --type "Perturb-Seq"
+
+hapiq search scperturb "CRISPR" --limit 10
+hapiq search scperturb "pancreas" --organism "Homo sapiens" --type "Perturb-seq"
 
 # Pipe into download
 hapiq search geo "bulk RNA-seq liver" -q \
@@ -223,6 +227,12 @@ hapiq download ensembl fungi:47:gff3:saccharomyces_cerevisiae --out ./data
 hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --dry-run
 hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data
 hapiq download vcp 6946b5261d32b0e84ba87057 --out ./data --limit-files 1  # test first
+
+# scPerturb (all datasets for a publication)
+hapiq download scperturb NormanWeissman2019 --out ./data --dry-run
+hapiq download scperturb NormanWeissman2019 --out ./data
+# single dataset variant
+hapiq download scperturb NormanWeissman2019_filtered --out ./data
 ```
 
 Each download writes a `hapiq.json` witness file containing the full metadata, per-file checksums (SHA-256), and download statistics for reproducibility.
