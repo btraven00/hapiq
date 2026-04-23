@@ -300,6 +300,12 @@ Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
 
 ---
 
+## Further reading
+
+- [Local download cache](docs/cache.md) — enable caching to avoid re-fetching the same files
+
+---
+
 ## License
 
 GPL-3-or-later © 2025 btraven

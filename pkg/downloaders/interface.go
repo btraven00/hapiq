@@ -123,6 +123,7 @@ type FileInfo struct {
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
 	Size         int64     `json:"size"`
+	CacheHit     bool      `json:"cache_hit,omitempty"`
 }
 
 // DatasetRecord captures provenance for a single dataset/accession within a
@@ -165,6 +166,7 @@ type FileWitness struct {
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
 	Size         int64     `json:"size"`
+	CacheHit     bool      `json:"cache_hit,omitempty"`
 }
 
 // DownloadStats contains performance and operational statistics.
