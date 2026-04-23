@@ -79,6 +79,9 @@ func (c *Cache) evictLocked(ctx context.Context, sha256hex string) error {
 type GCResult struct {
 	Evicted int
 	Freed   int64
+	// Skipped counts blobs that were candidates for eviction but were skipped
+	// because they have live hardlinks (Nlink > 1) from output directories.
+	Skipped int
 	DryRun  bool
 }
 
@@ -133,14 +136,25 @@ func (c *Cache) GC(ctx context.Context, dryRun bool, keepDuration time.Duration)
 	}
 	rows.Close()
 
-	res := GCResult{DryRun: dryRun, Freed: freed, Evicted: len(toEvict)}
+	// Filter out pinned blobs before reporting or acting.
+	var unpinned []candidate
+	skipped := 0
+	for _, e := range toEvict {
+		if blobNlink(c.blobPath(e.sha256)) > 1 {
+			skipped++
+		} else {
+			unpinned = append(unpinned, e)
+		}
+	}
+
+	res := GCResult{DryRun: dryRun, Freed: freed, Evicted: len(unpinned), Skipped: skipped}
 	if dryRun {
 		return res, nil
 	}
 
 	res.Freed = 0
 	res.Evicted = 0
-	for _, e := range toEvict {
+	for _, e := range unpinned {
 		blobSz := fileSizeOrZero(c.blobPath(e.sha256))
 		if err := c.evictLocked(ctx, e.sha256); err == nil {
 			res.Evicted++

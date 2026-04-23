@@ -213,3 +213,38 @@ func TestFromContextNil(t *testing.T) {
 		t.Fatal("FromContext should return nil when no cache is set")
 	}
 }
+
+func TestIsPinnedAfterHardlink(t *testing.T) {
+	c := openTestCache(t)
+	ctx := context.Background()
+	content := []byte("pinned blob content")
+
+	tmpPath, hash := writeTmp(t, c, content)
+	if err := c.Put(ctx, "https://example.com/pinned", tmpPath, hash); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	// Before any materialization the blob has Nlink == 1 (only the CAS entry).
+	if c.IsPinned(hash) {
+		t.Fatal("fresh blob should not be pinned (Nlink == 1)")
+	}
+
+	// Materialize via hardlink — Nlink becomes 2.
+	destDir := t.TempDir()
+	destPath := filepath.Join(destDir, "out")
+	if err := c.Materialize(hash, destPath); err != nil {
+		t.Skipf("hardlink not supported: %v", err)
+	}
+
+	if !c.IsPinned(hash) {
+		t.Error("blob should be pinned after hardlink materialization (Nlink > 1)")
+	}
+
+	// Removing the hardlinked output file un-pins the blob.
+	if err := os.Remove(destPath); err != nil {
+		t.Fatalf("remove hardlink: %v", err)
+	}
+	if c.IsPinned(hash) {
+		t.Error("blob should no longer be pinned after output file removed")
+	}
+}

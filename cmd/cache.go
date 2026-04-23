@@ -181,12 +181,16 @@ var cacheGCCmd = &cobra.Command{
 		}
 
 		if cacheGCDryRun {
-			fmt.Printf("Dry-run: would evict %d blobs, freeing %s\n",
+			fmt.Printf("Dry-run: would evict %d blobs, freeing %s",
 				result.Evicted, common.FormatBytes(result.Freed))
 		} else {
-			fmt.Printf("Evicted %d blobs, freed %s\n",
+			fmt.Printf("Evicted %d blobs, freed %s",
 				result.Evicted, common.FormatBytes(result.Freed))
 		}
+		if result.Skipped > 0 {
+			fmt.Printf(" (%d skipped — live hardlinks)", result.Skipped)
+		}
+		fmt.Println()
 		return nil
 	},
 }
@@ -202,10 +206,17 @@ var cacheEvictCmd = &cobra.Command{
 		}
 		defer c.Close()
 
-		if err := c.Evict(context.Background(), args[0]); err != nil {
+		sha256hex := args[0]
+		if c.IsPinned(sha256hex) {
+			fmt.Fprintf(os.Stderr, "warning: blob %s has live hardlinks from output directories;\n"+
+				"  the index entry will be removed but the file data remains accessible\n"+
+				"  via those hardlinks until the output files are deleted.\n", sha256hex[:16])
+		}
+
+		if err := c.Evict(context.Background(), sha256hex); err != nil {
 			return err
 		}
-		fmt.Printf("Evicted: %s\n", args[0])
+		fmt.Printf("Evicted: %s\n", sha256hex)
 		return nil
 	},
 }

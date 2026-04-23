@@ -216,6 +216,15 @@ type BlobInfo struct {
 // Dir returns the cache root directory.
 func (c *Cache) Dir() string { return c.cfg.Dir }
 
+// IsPinned reports whether the blob identified by sha256hex has live hardlinks
+// outside the cache (Nlink > 1). A pinned blob is still referenced by at least
+// one output directory and should not be evicted by automated GC.
+// Returns false for blobs that do not exist or on platforms where Nlink is
+// unavailable (Windows).
+func (c *Cache) IsPinned(sha256hex string) bool {
+	return blobNlink(c.blobPath(sha256hex)) > 1
+}
+
 // --- helpers ---
 
 func fileSizeOrZero(path string) int64 {
