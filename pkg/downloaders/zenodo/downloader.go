@@ -637,7 +637,7 @@ func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult,
 			FilesDownloaded: len(result.Files),
 			FilesSkipped:    0, // TODO: Track this properly
 			FilesFailed:     len(result.Errors),
-			AverageSpeed:    float64(result.BytesDownloaded) / result.Duration.Seconds(),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			ResumedDownload: false, // TODO: Implement resume functionality
 		},
 	}

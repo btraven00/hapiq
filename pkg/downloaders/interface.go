@@ -183,6 +183,14 @@ type DownloadStats struct {
 	ResumedDownload bool          `json:"resumed_download"`
 }
 
+// Speed returns bytes/second, returning 0 instead of +Inf when duration is zero.
+func Speed(bytes int64, d time.Duration) float64 {
+	if d <= 0 {
+		return 0
+	}
+	return float64(bytes) / d.Seconds()
+}
+
 // Verification contains integrity verification information.
 type Verification struct {
 	VerifyTime time.Time `json:"verify_time"`

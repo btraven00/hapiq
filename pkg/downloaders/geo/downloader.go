@@ -408,7 +408,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 			FilesDownloaded: len(result.Files),
 			FilesSkipped:    0,
 			FilesFailed:     0,
-			AverageSpeed:    float64(result.BytesDownloaded) / result.Duration.Seconds(),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			MaxConcurrent:   1,
 			ResumedDownload: false,
 		},
