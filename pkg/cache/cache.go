@@ -66,31 +66,32 @@ func (c *Cache) blobPath(sha256hex string) string {
 }
 
 // Get looks up rawURL in the index. On hit it refreshes last_used and returns
-// the sha256 hash. On miss it returns ("", false, nil).
-func (c *Cache) Get(ctx context.Context, rawURL string) (sha256hex string, hit bool, err error) {
+// the sha256 hash and the recorded blob size. On miss it returns ("", 0, false, nil).
+func (c *Cache) Get(ctx context.Context, rawURL string) (sha256hex string, size int64, hit bool, err error) {
 	canonical, err := canonicalizeURL(rawURL)
 	if err != nil {
-		return "", false, err
+		return "", 0, false, err
 	}
 
 	var hash string
-	var size int64
+	var sz int64
 	row := c.s.getByURL.QueryRowContext(ctx, canonical)
-	if err := row.Scan(&hash, &size); err == sql.ErrNoRows {
-		return "", false, nil
+	if err := row.Scan(&hash, &sz); err == sql.ErrNoRows {
+		return "", 0, false, nil
 	} else if err != nil {
-		return "", false, fmt.Errorf("cache lookup: %w", err)
+		return "", 0, false, fmt.Errorf("cache lookup: %w", err)
 	}
 
-	// Verify the blob file still exists on disk.
-	if _, err := os.Stat(c.blobPath(hash)); err != nil {
-		return "", false, nil
+	// Verify the blob file still exists on disk and matches the recorded size.
+	info, err := os.Stat(c.blobPath(hash))
+	if err != nil || info.Size() != sz {
+		return "", 0, false, nil
 	}
 
 	now := time.Now().Unix()
 	_, _ = c.s.touchBlob.ExecContext(ctx, now, hash)
 
-	return hash, true, nil
+	return hash, sz, true, nil
 }
 
 // Put promotes tmpPath into the CAS and records rawURL → sha256hex.
@@ -115,7 +116,14 @@ func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) erro
 	blob := c.blobPath(sha256hex)
 	now := time.Now().Unix()
 
-	if _, statErr := os.Stat(blob); os.IsNotExist(statErr) {
+	existingInfo, statErr := os.Stat(blob)
+	blobMissing := os.IsNotExist(statErr)
+	blobCorrupt := !blobMissing && statErr == nil && existingInfo.Size() != blobSz
+
+	if blobMissing || blobCorrupt {
+		if blobCorrupt {
+			_ = os.Remove(blob)
+		}
 		if err := os.MkdirAll(filepath.Dir(blob), 0o755); err != nil {
 			return fmt.Errorf("create shard dir: %w", err)
 		}
@@ -126,7 +134,7 @@ func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) erro
 			return fmt.Errorf("record blob: %w", err)
 		}
 	} else {
-		// Blob already in CAS; discard the duplicate tmp.
+		// Blob already in CAS and healthy; discard the duplicate tmp.
 		_ = os.Remove(tmpPath)
 		_, _ = c.s.touchBlob.ExecContext(ctx, now, sha256hex)
 	}

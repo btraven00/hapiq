@@ -51,7 +51,7 @@ func TestPutThenGet(t *testing.T) {
 		t.Fatalf("Put: %v", err)
 	}
 
-	gotHash, hit, err := c.Get(ctx, rawURL)
+	gotHash, _, hit, err := c.Get(ctx, rawURL)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPutThenGet(t *testing.T) {
 
 func TestGetMiss(t *testing.T) {
 	c := openTestCache(t)
-	_, hit, err := c.Get(context.Background(), "https://example.com/missing")
+	_, _, hit, err := c.Get(context.Background(), "https://example.com/missing")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestURLCanonicalization(t *testing.T) {
 	}
 
 	// Same URL, different case/port representation — must be a hit.
-	_, hit, err := c.Get(ctx, "http://example.com/path?q=1")
+	_, _, hit, err := c.Get(ctx, "http://example.com/path?q=1")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestEvictRemovesBlob(t *testing.T) {
 		t.Fatalf("Evict: %v", err)
 	}
 
-	_, hit, err := c.Get(ctx, "https://example.com/evict")
+	_, _, hit, err := c.Get(ctx, "https://example.com/evict")
 	if err != nil {
 		t.Fatalf("Get after evict: %v", err)
 	}

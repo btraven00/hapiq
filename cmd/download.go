@@ -370,6 +370,10 @@ func displayResults(result *downloaders.DownloadResult) {
 
 	_, _ = fmt.Fprintf(os.Stderr, "   Duration: %v\n", result.Duration.Round(time.Second))
 	_, _ = fmt.Fprintf(os.Stderr, "   Files downloaded: %d\n", len(result.Files))
+	cacheHits := countCacheHits(result)
+	if cacheHits > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "   Cache hits: %d/%d (no network traffic)\n", cacheHits, len(result.Files))
+	}
 	_, _ = fmt.Fprintf(os.Stderr, "   Data downloaded: %s\n", common.FormatBytes(result.BytesDownloaded))
 
 	if result.BytesTotal > 0 {
@@ -432,7 +436,11 @@ func displayFileList(result *downloaders.DownloadResult) {
 					_, _ = fmt.Fprintf(os.Stderr, "      → %s\n", file.SourceURL)
 				}
 			} else {
-				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
+				cacheLabel := ""
+				if file.CacheHit {
+					cacheLabel = " [cached]"
+				}
+				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)%s\n", file.Path, common.FormatBytes(file.Size), cacheLabel)
 				if file.Checksum != "" {
 					_, _ = fmt.Fprintf(os.Stderr, "      %s: %s\n", file.ChecksumType, file.Checksum)
 				}
@@ -564,6 +572,16 @@ func initializeDownloaders() error {
 	}
 
 	return nil
+}
+
+func countCacheHits(result *downloaders.DownloadResult) int {
+	n := 0
+	for _, f := range result.Files {
+		if f.CacheHit {
+			n++
+		}
+	}
+	return n
 }
 
 // verifyExpectedHash checks the downloaded file against an expected hash spec.

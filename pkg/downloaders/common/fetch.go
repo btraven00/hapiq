@@ -47,7 +47,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 
 	// ── cache hit path ────────────────────────────────────────────────────────
 	if c != nil {
-		hash, hit, err := c.Get(ctx, rawURL)
+		hash, size, hit, err := c.Get(ctx, rawURL)
 		if err != nil {
 			return FetchResult{}, fmt.Errorf("cache get: %w", err)
 		}
@@ -57,7 +57,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 			}
 			return FetchResult{
 				SHA256: hash,
-				N:      fileSizeAt(destPath),
+				N:      size,
 				Hit:    true,
 			}, nil
 		}
@@ -162,10 +162,3 @@ func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra
 	return n, hex.EncodeToString(h.Sum(nil)), resp.Header.Get("Content-Type"), nil
 }
 
-func fileSizeAt(path string) int64 {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0
-	}
-	return info.Size()
-}
