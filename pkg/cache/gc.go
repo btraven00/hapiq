@@ -109,6 +109,7 @@ func (c *Cache) GC(ctx context.Context, dryRun bool, keepDuration time.Duration)
 	if err != nil {
 		return GCResult{}, err
 	}
+	defer rows.Close()
 
 	keepAfter := int64(0)
 	if keepDuration > 0 {
@@ -134,7 +135,9 @@ func (c *Cache) GC(ctx context.Context, dryRun bool, keepDuration time.Duration)
 		toEvict = append(toEvict, candidate{hash, size, lastUsed})
 		freed += size
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return GCResult{}, err
+	}
 
 	// Filter out pinned blobs before reporting or acting.
 	var unpinned []candidate

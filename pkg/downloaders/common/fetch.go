@@ -78,7 +78,9 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		tmpPath = tmpFile.Name()
 
 		n, sha256hex, contentType, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, tmpFile)
-		tmpFile.Close()
+		if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			_ = os.Remove(tmpPath)
 			return FetchResult{}, err

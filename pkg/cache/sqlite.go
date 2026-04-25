@@ -54,21 +54,21 @@ func openDB(dir string) (*sql.DB, *dbStmts, error) {
 	db.SetMaxOpenConns(1) // SQLite WAL handles readers; one writer is sufficient
 
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("set WAL mode: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, fmt.Errorf("apply schema: %w", err)
 	}
 
 	s, err := prepareStmts(db)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, nil, err
 	}
 
@@ -109,7 +109,7 @@ func (s *dbStmts) close() {
 		s.totalSize, s.listLRU,
 	} {
 		if stmt != nil {
-			stmt.Close()
+			_ = stmt.Close()
 		}
 	}
 }
