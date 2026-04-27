@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hapiq"
+version = "0.1.0"
+description = "HDL (Has Data Locally) — Python library for downloading scientific datasets via hapiq"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/btraven00/hapiq"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hapiq"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "hapiq/",
+    "hatch_build.py",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: hits real network endpoints (deselect with '-m not integration')",
+]
