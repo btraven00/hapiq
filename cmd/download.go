@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -427,13 +428,6 @@ func displayFileList(result *downloaders.DownloadResult) {
 	}
 }
 
-func outputJSON(result *downloaders.DownloadResult) error {
-	encoder := &jsonEncoder{}
-	encoder.SetIndent("", "  ")
-
-	return encoder.Encode(result)
-}
-
 // initializeDownloaders registers all available downloaders.
 func initializeDownloaders() error {
 	// Get NCBI API key from environment variable if available
@@ -554,15 +548,10 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-// jsonEncoder is a simple JSON encoder interface.
-type jsonEncoder struct{}
-
-func (e *jsonEncoder) SetIndent(_, _ string) {}
-func (e *jsonEncoder) Encode(_ interface{}) error {
-	// This would use the actual JSON encoder from the common package
-	// For now, just print a placeholder
-	_, _ = fmt.Fprintln(os.Stderr, "JSON output would be here")
-	return nil
+func outputJSON(result *downloaders.DownloadResult) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
 
 func init() {
