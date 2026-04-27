@@ -11,10 +11,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/biostudies"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/hca"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
@@ -52,20 +54,27 @@ var downloadCmd = &cobra.Command{
 metadata tracking and provenance information.
 
 Supported sources:
-  geo       - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
-  figshare  - Figshare articles, collections, and projects
-  zenodo    - Zenodo research data repository
-  ensembl   - Ensembl Genomes databases (bacteria, fungi, metazoa, plants, protists)
+  geo         - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
+  sra         - Raw FASTQ via ENA HTTPS mirror (PRJNA, SRR, ERR, DRR, SRX)
+  figshare    - Figshare articles, collections, and projects
+  zenodo      - Zenodo research data repository (DOIs, record IDs)
+  ensembl     - Ensembl Genomes databases (bacteria, fungi, metazoa, plants, protists)
+  vcp         - CZI Virtual Cell Platform (24-char hex IDs)
+  scperturb   - scPerturb compendium (AuthorYear or AuthorYear_SubsetID)
+  biostudies  - EBI BioStudies (S-<COLL><digits>, E-<TYPE>-<digits>)
+  hca         - Human Cell Atlas Data Portal (project UUID)
 
 Examples:
   hapiq download geo GSE123456 --out ./datasets
   hapiq download geo GSE123456 --out ./data --parallel 4
   hapiq download figshare 12345678 --out ./datasets
   hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet
-  hapiq download figshare 12345678 --out ./data --exclude-raw --exclude-supplementary --quiet
   hapiq download ensembl bacteria:47:pep --out ./datasets
   hapiq download ensembl fungi:47:gff3:saccharomyces_cerevisiae --out ./data
-  hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet`,
+  hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet
+  hapiq download biostudies S-BSST1502 --out ./data
+  hapiq download biostudies E-MTAB-8077 --out ./data --include-ext .mtx,.h5,.h5ad
+  hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad`,
 	Args: cobra.ExactArgs(requiredArgsCount),
 	RunE: runDownload,
 }
@@ -114,10 +123,15 @@ func runDownload(_ *cobra.Command, args []string) error {
 
 	if dryRun {
 		_, _ = fmt.Fprintf(os.Stderr, "\n✅ Dry-run complete. Use without --dry-run to download.\n")
-	} else {
-		_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
+		return nil
 	}
 
+	if len(result.Files) == 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "\n⚠️  No files were downloaded.\n")
+		return fmt.Errorf("no files downloaded")
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
 	return nil
 }
 
@@ -490,6 +504,24 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(cziDownloader); err != nil {
 		return fmt.Errorf("failed to register CZI downloader: %w", err)
+	}
+
+	// Register HCA downloader (Human Cell Atlas Data Portal via Azul)
+	hcaDownloader := hca.NewHCADownloader(
+		hca.WithVerbose(!quiet),
+		hca.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(hcaDownloader); err != nil {
+		return fmt.Errorf("failed to register HCA downloader: %w", err)
+	}
+
+	// Register BioStudies downloader (EBI BioStudies)
+	bsDownloader := biostudies.NewBioStudiesDownloader(
+		biostudies.WithVerbose(!quiet),
+		biostudies.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(bsDownloader); err != nil {
+		return fmt.Errorf("failed to register BioStudies downloader: %w", err)
 	}
 
 	// Register scPerturb downloader

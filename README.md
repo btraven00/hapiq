@@ -60,6 +60,8 @@ go build -o hapiq .
 | `ensembl` | `bacteria:47:pep`, `fungi:47:gff3:saccharomyces_cerevisiae` | FTP + HTTP |
 | `vcp` | 24-char hex IDs (e.g. `6946b5261d32b0e84ba87057`) | CZI Virtual Cell Platform; set `VCP_TOKEN` for private datasets |
 | `scperturb` | `AuthorYear` or `AuthorYear_SubsetID` (e.g. `NormanWeissman2019`) | scPerturb compendium (Peidli et al., Nature Methods 2024); files via Zenodo |
+| `biostudies` | `S-<COLLECTION><digits>`, `E-<TYPE>-<digits>` (e.g. `S-BSST1502`, `E-MTAB-8077`) | EBI BioStudies; combine with `--include-ext` / `--filename-glob` to target count matrices |
+| `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
 
 `ncbi` is an alias for `geo`. `ena` is an alias for `sra`.
 
