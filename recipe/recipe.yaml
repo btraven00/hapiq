@@ -1,0 +1,35 @@
+schema_version: 1
+
+package:
+  name: hapiq
+  version: ${{ version }}
+
+source:
+  path: ../
+
+build:
+  number: 0
+  script:
+    - install -D -m 755 hapiq-bin $PREFIX/bin/hapiq
+  dynamic_linking:
+    binary_relocation: false
+
+tests:
+  - script:
+      - hapiq --help
+      - hapiq download --help
+
+about:
+  homepage: https://github.com/btraven00/hapiq
+  license: GPL-3.0-only
+  license_file: LICENSE
+  summary: Download scientific datasets with provenance tracking
+  description: |
+    Hapiq downloads datasets from scientific repositories with provenance tracking.
+    Point it at a source and accession ID; it handles metadata, file enumeration,
+    filtering, and download.
+  repository: https://github.com/btraven00/hapiq
+
+extra:
+  recipe-maintainers:
+    - btraven00

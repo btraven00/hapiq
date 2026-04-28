@@ -1,0 +1,72 @@
+name: Publish to prefix.dev
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # required for trusted publishing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-64
+            goos: linux
+            goarch: amd64
+          - target: osx-arm64
+            goos: darwin
+            goarch: arm64
+          - target: osx-64
+            goos: darwin
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version from git hash
+        id: version
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "version=0.0.0.dev${SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" -o hapiq-bin .
+
+      - name: Install rattler-build
+        uses: prefix-dev/rattler-build-action@v0.2.37
+        with:
+          setup-only: true
+
+      - name: Build conda package
+        run: |
+          printf 'version: ["%s"]\n' "${{ steps.version.outputs.version }}" > /tmp/variant.yaml
+          SKIP_TEST=""
+          if [ "${{ matrix.target }}" != "linux-64" ]; then
+            SKIP_TEST="--no-test"
+          fi
+          rattler-build build \
+            --recipe recipe/ \
+            --target-platform ${{ matrix.target }} \
+            -c conda-forge \
+            --variant-config /tmp/variant.yaml \
+            $SKIP_TEST
+
+      - name: Upload to prefix.dev
+        run: |
+          rattler-build upload prefix \
+            --channel almost-conductor \
+            output/**/*.conda
