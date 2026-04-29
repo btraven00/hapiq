@@ -22,6 +22,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/biostudies"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
+	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/hca"
@@ -70,6 +71,7 @@ Supported sources:
   ensembl     - Ensembl Genomes databases (bacteria, fungi, metazoa, plants, protists)
   vcp         - CZI Virtual Cell Platform (24-char hex IDs)
   scperturb   - scPerturb compendium (AuthorYear or AuthorYear_SubsetID)
+  experimenthub - Bioconductor ExperimentHub (EH<digits>)
   biostudies  - EBI BioStudies (S-<COLL><digits>, E-<TYPE>-<digits>)
   hca         - Human Cell Atlas Data Portal (project UUID)
 
@@ -560,6 +562,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(scpDownloader); err != nil {
 		return fmt.Errorf("failed to register scPerturb downloader: %w", err)
+	}
+
+	// Register ExperimentHub downloader
+	ehDownloader := experimenthub.NewExperimentHubDownloader(
+		experimenthub.WithVerbose(!quiet),
+		experimenthub.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(ehDownloader); err != nil {
+		return fmt.Errorf("failed to register ExperimentHub downloader: %w", err)
 	}
 
 	// Register aliases
