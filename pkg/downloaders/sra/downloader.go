@@ -13,7 +13,8 @@ package sra
 
 import (
 	"context"
-	"crypto/md5" // #nosec G501 -- MD5 used for checksum verification only, as provided by ENA
+	"crypto/md5"    // #nosec G501 -- MD5 used for checksum verification only, as provided by ENA
+	"crypto/sha256" // sha256 is the cache key
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
@@ -285,11 +287,38 @@ func (d *SRADownloader) dryRun(runs []RunInfo, opts *downloaders.DownloadOptions
 	return result
 }
 
-// downloadWithMD5 downloads a file and verifies the ENA-provided MD5.
-// TODO(cache): integrate local cache — requires computing sha256 in parallel with md5
-// during streaming, then calling cache.Put with the sha256. common.Fetch cannot be
-// used directly because ENA supplies MD5 checksums that must be verified inline.
+// downloadWithMD5 downloads a file and verifies the ENA-provided MD5. When a
+// cache is attached to ctx, sha256 is computed in parallel with md5 during
+// streaming so the blob can be cached (the cache is keyed by sha256). MD5 is
+// still verified inline against the ENA-supplied digest.
 func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, expectedMD5 string) (*downloaders.FileInfo, error) {
+	c := cache.FromContext(ctx)
+
+	// Cache hit: materialize and verify md5 (in case the cached blob was
+	// produced under a different ENA mirror; we still need to honour the
+	// expected md5 for the witness).
+	if c != nil {
+		if sha256hex, sz, hit, err := c.Get(ctx, url); err == nil && hit {
+			if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+				gotMD5, mdErr := fileMD5(targetPath)
+				if mdErr == nil && (expectedMD5 == "" || gotMD5 == expectedMD5) {
+					return &downloaders.FileInfo{
+						Path:         targetPath,
+						OriginalName: filepath.Base(targetPath),
+						Size:         sz,
+						Checksum:     gotMD5,
+						ChecksumType: "md5",
+						SourceURL:    url,
+						DownloadTime: time.Now(),
+						CacheHit:     true,
+					}, nil
+				}
+				// Cached blob does not match expected md5 — fall through and re-download.
+				_ = os.Remove(targetPath)
+			}
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, err
@@ -305,21 +334,69 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 
+	mdHash := md5.New()       // #nosec G401 -- ENA-provided MD5 checksum verification
+	shaHash := sha256.New()
+
+	// Stream into a cache tmp file when a cache is available; otherwise stream
+	// directly to targetPath. md5 and sha256 are computed in parallel.
+	if c != nil {
+		tmpFile, tmpErr := c.NewTmpFile()
+		if tmpErr == nil {
+			written, copyErr := io.Copy(io.MultiWriter(tmpFile, mdHash, shaHash), resp.Body)
+			gotMD5 := hex.EncodeToString(mdHash.Sum(nil))
+			sha256hex := hex.EncodeToString(shaHash.Sum(nil))
+			_ = tmpFile.Close()
+
+			if copyErr != nil {
+				_ = os.Remove(tmpFile.Name())
+				return nil, fmt.Errorf("write %s: %w", targetPath, copyErr)
+			}
+			if expectedMD5 != "" && gotMD5 != expectedMD5 {
+				_ = os.Remove(tmpFile.Name())
+				return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
+			}
+
+			if putErr := c.Put(ctx, url, tmpFile.Name(), sha256hex); putErr == nil {
+				if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+					return &downloaders.FileInfo{
+						Path:         targetPath,
+						OriginalName: filepath.Base(targetPath),
+						Size:         written,
+						Checksum:     gotMD5,
+						ChecksumType: "md5",
+						SourceURL:    url,
+						DownloadTime: time.Now(),
+					}, nil
+				}
+			}
+			// Cache promotion failed; salvage the tmp file as targetPath.
+			_ = os.Rename(tmpFile.Name(), targetPath)
+			return &downloaders.FileInfo{
+				Path:         targetPath,
+				OriginalName: filepath.Base(targetPath),
+				Size:         written,
+				Checksum:     gotMD5,
+				ChecksumType: "md5",
+				SourceURL:    url,
+				DownloadTime: time.Now(),
+			}, nil
+		}
+	}
+
+	// No cache (or tmp file creation failed): stream directly to targetPath.
 	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- targetPath is a constructed download path
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	h := md5.New() // #nosec G401 -- ENA-provided MD5 checksum verification
-	written, err := io.Copy(io.MultiWriter(f, h), resp.Body)
+	written, err := io.Copy(io.MultiWriter(f, mdHash), resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("write %s: %w", targetPath, err)
 	}
-
-	gotMD5 := hex.EncodeToString(h.Sum(nil))
+	gotMD5 := hex.EncodeToString(mdHash.Sum(nil))
 	if expectedMD5 != "" && gotMD5 != expectedMD5 {
-		_ = os.Remove(targetPath) // don't keep corrupt file
+		_ = os.Remove(targetPath)
 		return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
 	}
 
@@ -332,4 +409,17 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		SourceURL:    url,
 		DownloadTime: time.Now(),
 	}, nil
+}
+
+func fileMD5(path string) (string, error) {
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- internal cache-materialized path
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := md5.New() // #nosec G401 -- ENA-provided MD5 verification
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
