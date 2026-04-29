@@ -30,7 +30,7 @@ type Cache struct {
 // Open opens (and if necessary initialises) the cache rooted at cfg.Dir.
 func Open(cfg Config) (*Cache, error) {
 	for _, sub := range []string{"blobs/sha256", "tmp"} {
-		if err := os.MkdirAll(filepath.Join(cfg.Dir, sub), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(cfg.Dir, sub), 0o750); err != nil {
 			return nil, fmt.Errorf("cache init %s: %w", sub, err)
 		}
 	}
@@ -124,7 +124,7 @@ func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) erro
 		if blobCorrupt {
 			_ = os.Remove(blob)
 		}
-		if err := os.MkdirAll(filepath.Dir(blob), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(blob), 0o750); err != nil {
 			return fmt.Errorf("create shard dir: %w", err)
 		}
 		if err := os.Rename(tmpPath, blob); err != nil {
@@ -244,7 +244,7 @@ func fileSizeOrZero(path string) int64 {
 }
 
 func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- internal cache path
 	if err != nil {
 		return "", err
 	}

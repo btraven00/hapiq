@@ -6,8 +6,8 @@ package manifest
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/sha1"
+	"crypto/md5"  // #nosec G501 -- used only for upstream checksum verification
+	"crypto/sha1" // #nosec G505 -- used only for upstream checksum verification
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -57,7 +57,7 @@ type Options struct {
 // sequence of entries. Unknown fields are rejected to keep the schema flat
 // and explicit.
 func Load(path string) ([]Entry, error) {
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(filepath.Clean(path)) // #nosec G304 -- path is user-supplied manifest file
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
@@ -145,15 +145,15 @@ func VerifyFile(path, spec string) error {
 	var h hash.Hash
 	switch strings.ToLower(algo) {
 	case "md5":
-		h = md5.New() //nolint:gosec
+		h = md5.New() // #nosec G401 -- checksum verification, not security
 	case "sha1":
-		h = sha1.New() //nolint:gosec
+		h = sha1.New() // #nosec G401 -- checksum verification, not security
 	case "sha256":
 		h = sha256.New()
 	default:
 		return fmt.Errorf("unsupported hash algorithm %q", algo)
 	}
-	f, err := os.Open(path) //nolint:gosec
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- user-specified file to verify
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
@@ -180,7 +180,7 @@ func combineHash(algo, sum string) string {
 }
 
 func readWitness(path string) (*downloaders.WitnessFile, error) {
-	data, err := os.ReadFile(path) //nolint:gosec
+	data, err := os.ReadFile(filepath.Clean(path)) // #nosec G304 -- user-specified witness file
 	if err != nil {
 		return nil, fmt.Errorf("read witness: %w", err)
 	}

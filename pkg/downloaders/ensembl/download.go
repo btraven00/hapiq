@@ -226,7 +226,7 @@ func (d *EnsemblDownloader) downloadSpeciesList(ctx context.Context, url, target
 
 	// Save species list to file
 	speciesListPath := filepath.Join(targetDir, filepath.Base(url))
-	file, err := os.Create(speciesListPath)
+	file, err := os.Create(filepath.Clean(speciesListPath)) // #nosec G304 -- internal species list path
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +242,7 @@ func (d *EnsemblDownloader) downloadSpeciesList(ctx context.Context, url, target
 
 // parseSpeciesList parses the Ensembl species list file.
 func (d *EnsemblDownloader) parseSpeciesList(filePath string) ([]SpeciesInfo, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Clean(filePath)) // #nosec G304 -- internal species list path
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +439,7 @@ func (d *EnsemblDownloader) downloadFileWithProgress(ctx context.Context, url, t
 	}
 
 	// Create target file
-	file, err := os.Create(targetPath)
+	file, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}

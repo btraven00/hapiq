@@ -41,7 +41,7 @@ type dbStmts struct {
 }
 
 func openDB(dir string) (*sql.DB, *dbStmts, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, nil, fmt.Errorf("create cache dir: %w", err)
 	}
 

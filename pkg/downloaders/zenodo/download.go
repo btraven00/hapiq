@@ -200,13 +200,13 @@ func (d *ZenodoDownloader) DownloadWithResume(ctx context.Context, file ZenodoFi
 	// Create or open output file
 	var outFile *os.File
 	if startByte > 0 && resp.StatusCode == 206 {
-		outFile, err = os.OpenFile(outputPath, os.O_WRONLY|os.O_APPEND, 0644)
+		outFile, err = os.OpenFile(filepath.Clean(outputPath), os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- caller-controlled output path
 	} else {
 		// Create directory if needed
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
 			return nil, fmt.Errorf("failed to create directory: %w", err)
 		}
-		outFile, err = os.Create(outputPath)
+		outFile, err = os.Create(filepath.Clean(outputPath)) // #nosec G304 -- caller-controlled output path
 		startByte = 0
 	}
 
@@ -294,7 +294,7 @@ func (d *ZenodoDownloader) PrepareDownloadDirectory(outputDir string, options *d
 
 	// Create directory if it doesn't exist
 	if !status.Exists {
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
+		if err := os.MkdirAll(outputDir, 0o750); err != nil {
 			return nil, fmt.Errorf("failed to create directory: %w", err)
 		}
 		status.Exists = true
@@ -390,7 +390,7 @@ func (d *ZenodoDownloader) GetDownloadURL(ctx context.Context, recordID string, 
 func (d *ZenodoDownloader) CreateDownloadManifest(outputDir string, files []downloaders.FileInfo) error {
 	manifestPath := filepath.Join(outputDir, "download_manifest.txt")
 
-	file, err := os.Create(manifestPath)
+	file, err := os.Create(filepath.Clean(manifestPath)) // #nosec G304 -- internal manifest path
 	if err != nil {
 		return fmt.Errorf("failed to create manifest file: %w", err)
 	}

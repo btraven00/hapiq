@@ -841,7 +841,7 @@ func (d *GEODownloader) sampleHasFiles(ctx context.Context, sampleID string) boo
 		return false
 	}
 
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// If we can access the sample directory, assume it has files
 	return resp.StatusCode == http.StatusOK

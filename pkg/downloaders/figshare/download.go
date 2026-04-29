@@ -262,7 +262,7 @@ func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir 
 func (d *FigshareDownloader) saveArticleMetadata(article FigshareArticle, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "article_metadata.json")
 
-	file, err := os.Create(metadataPath)
+	file, err := os.Create(filepath.Clean(metadataPath)) // #nosec G304 -- internal metadata path
 	if err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func (d *FigshareDownloader) saveArticleMetadata(article FigshareArticle, target
 func (d *FigshareDownloader) saveCollectionMetadata(collection FigshareCollection, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "collection_metadata.json")
 
-	file, err := os.Create(metadataPath)
+	file, err := os.Create(filepath.Clean(metadataPath)) // #nosec G304 -- internal metadata path
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func (d *FigshareDownloader) saveCollectionMetadata(collection FigshareCollectio
 func (d *FigshareDownloader) saveProjectMetadata(project FigshareProject, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "project_metadata.json")
 
-	file, err := os.Create(metadataPath)
+	file, err := os.Create(filepath.Clean(metadataPath)) // #nosec G304 -- internal metadata path
 	if err != nil {
 		return err
 	}

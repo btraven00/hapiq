@@ -223,7 +223,7 @@ func (d *ZenodoDownloader) Download(ctx context.Context, req *downloaders.Downlo
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(req.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(req.OutputDir, 0o750); err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create output directory: %v", err))
 		result.Duration = time.Since(startTime)
 		return result, nil
@@ -593,7 +593,7 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 

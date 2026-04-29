@@ -523,7 +523,7 @@ func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targe
 	}
 
 	// Create target file
-	file, err := os.Create(targetPath)
+	file, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}

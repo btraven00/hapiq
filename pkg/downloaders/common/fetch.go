@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/btraven00/hapiq/pkg/cache"
 )
@@ -99,12 +100,12 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		}
 	} else {
 		// No cache: stream directly to destPath.
-		f, err := os.Create(destPath)
+		f, err := os.Create(filepath.Clean(destPath)) // #nosec G304 -- caller-controlled destination
 		if err != nil {
 			return FetchResult{}, err
 		}
 		n, sha256hex, contentType, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, f)
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			_ = os.Remove(destPath)
 			return FetchResult{}, err
@@ -121,12 +122,12 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 
 // directFetch streams rawURL directly to destPath without cache involvement.
 func directFetch(ctx context.Context, client *http.Client, rawURL, destPath string, extra map[string]string) (FetchResult, error) {
-	f, err := os.Create(destPath)
+	f, err := os.Create(filepath.Clean(destPath)) // #nosec G304 -- caller-controlled destination
 	if err != nil {
 		return FetchResult{}, err
 	}
 	n, sha256hex, ct, err := streamToFile(ctx, client, rawURL, extra, f)
-	f.Close()
+	_ = f.Close()
 	if err != nil {
 		_ = os.Remove(destPath)
 		return FetchResult{}, err

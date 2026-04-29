@@ -13,7 +13,7 @@ package sra
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // MD5 used for checksum verification only, as provided by ENA
+	"crypto/md5" // #nosec G501 -- MD5 used for checksum verification only, as provided by ENA
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -302,13 +302,13 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	f, err := os.Create(targetPath)
+	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- targetPath is a constructed download path
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	h := md5.New() //nolint:gosec
+	h := md5.New() // #nosec G401 -- ENA-provided MD5 checksum verification
 	written, err := io.Copy(io.MultiWriter(f, h), resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("write %s: %w", targetPath, err)

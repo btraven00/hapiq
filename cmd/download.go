@@ -3,7 +3,7 @@ package cmd
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- used for checksum verification only
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -662,7 +662,7 @@ func parseHashSpec(spec string) (algo, hex string, err error) {
 
 // hashFile computes the hash of a file using the provided hash constructor.
 func hashFile(path string, newHash func() io.Writer) (string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- user-supplied file path for hashing
 	if err != nil {
 		return "", err
 	}
@@ -682,7 +682,7 @@ func hashFile(path string, newHash func() io.Writer) (string, error) {
 }
 
 func sha256Writer() io.Writer { return sha256.New() }
-func md5Writer() io.Writer    { return md5.New() }
+func md5Writer() io.Writer    { return md5.New() } // #nosec G401 -- checksum verification only
 
 // truncateString truncates a string to the specified length.
 func truncateString(s string, maxLen int) string {

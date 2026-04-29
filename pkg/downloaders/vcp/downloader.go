@@ -256,7 +256,7 @@ func (d *VCPDownloader) downloadFile(ctx context.Context, rawURL, targetPath str
 	// is still useful as a fingerprint even though it's not a plain MD5.
 	etag := strings.Trim(resp.Header.Get("ETag"), `"`)
 
-	f, err := os.Create(targetPath)
+	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,10 @@
 
 package common
 
-import "syscall"
+import (
+	"math"
+	"syscall"
+)
 
 // getFreeSpace returns available disk space in bytes.
 func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
@@ -10,5 +13,18 @@ func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err
 	}
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
+	bavail := stat.Bavail
+	bsize := stat.Bsize
+	if bsize < 0 {
+		return 0, nil
+	}
+	bsizeU := uint64(bsize)
+	if bsizeU != 0 && bavail > math.MaxInt64/bsizeU {
+		return math.MaxInt64, nil
+	}
+	free := bavail * bsizeU
+	if free > math.MaxInt64 {
+		return math.MaxInt64, nil
+	}
+	return int64(free), nil
 }

@@ -271,7 +271,7 @@ func (d *BioStudiesDownloader) downloadFile(ctx context.Context, rawURL, targetP
 		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
 	}
 
-	f, err := os.Create(targetPath)
+	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, err
 	}

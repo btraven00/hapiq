@@ -20,7 +20,7 @@ const (
 // tryLink materializes src to dst using the given strategy.
 // StrategyAuto tries reflink → hardlink → symlink (with warning) → copy.
 func tryLink(src, dst string, strategy Strategy) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
 	switch strategy {
@@ -58,19 +58,19 @@ func symlink(src, dst string) error {
 }
 
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	in, err := os.Open(filepath.Clean(src)) // #nosec G304 -- internal cache blob path
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
-	out, err := os.Create(dst)
+	out, err := os.Create(filepath.Clean(dst)) // #nosec G304 -- caller-controlled destination
 	if err != nil {
 		return err
 	}
 
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
 		_ = os.Remove(dst)
 		return err
 	}
