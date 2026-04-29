@@ -13,6 +13,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
+	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
@@ -38,6 +39,7 @@ them easy to pipe into 'hapiq download':
 Supported sources:
   geo  - NCBI Gene Expression Omnibus (uses eutils esearch/esummary)
   vcp  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
+  experimenthub - Bioconductor ExperimentHub (uses cached metadata sqlite)
 
 Examples:
   hapiq search geo "ATAC-seq human liver" --limit 20
@@ -90,8 +92,14 @@ func runSearch(_ *cobra.Command, args []string) error {
 			scperturb.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
 		)
 
+	case "experimenthub", "eh":
+		d = experimenthub.NewExperimentHubDownloader(
+			experimenthub.WithVerbose(!quiet),
+			experimenthub.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+		)
+
 	default:
-		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb'; got %q", sourceType)
+		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb', 'experimenthub'; got %q", sourceType)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

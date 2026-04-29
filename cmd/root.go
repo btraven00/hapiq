@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/btraven00/hapiq/pkg/cache"
+	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 )
 
 var (
@@ -55,6 +56,7 @@ func init() {
 //  4. /etc/hapiq/config.toml
 func initConfig() {
 	cache.RegisterDefaults()
+	experimenthub.RegisterDefaults()
 
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
