@@ -278,7 +278,7 @@ func (c *MultiProtocolClient) connectFTP(ctx context.Context, parsedURL *url.URL
 
 	err = conn.Login(username, password)
 	if err != nil {
-		conn.Quit()
+		_ = conn.Quit()
 		return nil, fmt.Errorf("failed to login to FTP server: %w", err)
 	}
 
@@ -301,7 +301,7 @@ func (r *ftpReaderCloser) Read(p []byte) (n int, err error) {
 func (r *ftpReaderCloser) Close() error {
 	// Close the reader first
 	if r.reader != nil {
-		r.reader.Close()
+		_ = r.reader.Close()
 	}
 
 	// Return connection to pool instead of closing it
@@ -347,7 +347,7 @@ func (p *ftpConnectionPool) getConnection(ctx context.Context, parsedURL *url.UR
 			return conn, nil
 		}
 		// Connection is dead, close it and create a new one
-		conn.Quit()
+		_ = conn.Quit()
 	default:
 		// No available connections
 	}
@@ -381,7 +381,7 @@ func (p *ftpConnectionPool) releaseConnection(conn *ftp.ServerConn) {
 		// Successfully returned to pool
 	default:
 		// Pool is full, close the connection
-		conn.Quit()
+		_ = conn.Quit()
 	}
 }
 
@@ -425,7 +425,7 @@ func (p *ftpConnectionPool) createConnection(parsedURL *url.URL) (*ftp.ServerCon
 
 	err = conn.Login(username, password)
 	if err != nil {
-		conn.Quit()
+		_ = conn.Quit()
 		return nil, fmt.Errorf("failed to login to FTP server: %w", err)
 	}
 
@@ -437,13 +437,13 @@ func (p *ftpConnectionPool) Close() {
 	// Close all pooled connections
 	close(p.connections)
 	for conn := range p.connections {
-		conn.Quit()
+		_ = conn.Quit()
 	}
 
 	// Close all active connections
 	p.mu.Lock()
 	for conn := range p.activeConns {
-		conn.Quit()
+		_ = conn.Quit()
 	}
 	p.activeConns = make(map[*ftp.ServerConn]bool)
 	p.mu.Unlock()

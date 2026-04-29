@@ -3,14 +3,21 @@ package cmd
 
 import (
 	"context"
+	"crypto/md5" // #nosec G501 -- used for checksum verification only
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/biostudies"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
@@ -19,8 +26,8 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/hca"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
-	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
+	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
 
@@ -45,6 +52,7 @@ var (
 	dryRun               bool
 	limitFiles           int
 	includeSRA           bool
+	expectedHash         string
 )
 
 // downloadCmd represents the download command.
@@ -91,6 +99,19 @@ func runDownload(_ *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
 	defer cancel()
 
+	if viper.GetString("cache.mode") == "on" {
+		cfg := cache.ConfigFromViper()
+		if c, err := cache.Open(cfg); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
+		} else {
+			defer c.Close()
+			ctx = cache.WithCache(ctx, c)
+			if !quiet {
+				_, _ = fmt.Fprintf(os.Stderr, "Cache enabled: %s\n", cfg.Dir)
+			}
+		}
+	}
+
 	printDownloadInfo(sourceType, id)
 
 	validationResult, err := validateSourceAndID(ctx, sourceType, id)
@@ -108,6 +129,12 @@ func runDownload(_ *cobra.Command, args []string) error {
 	result, err := performDownload(ctx, sourceType, downloadRequest)
 	if err != nil {
 		return err
+	}
+
+	if expectedHash != "" {
+		if err := verifyExpectedHash(result, outputDir, expectedHash); err != nil {
+			return err
+		}
 	}
 
 	displayResults(result)
@@ -343,6 +370,10 @@ func displayResults(result *downloaders.DownloadResult) {
 
 	_, _ = fmt.Fprintf(os.Stderr, "   Duration: %v\n", result.Duration.Round(time.Second))
 	_, _ = fmt.Fprintf(os.Stderr, "   Files downloaded: %d\n", len(result.Files))
+	cacheHits := countCacheHits(result)
+	if cacheHits > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "   Cache hits: %d/%d (no network traffic)\n", cacheHits, len(result.Files))
+	}
 	_, _ = fmt.Fprintf(os.Stderr, "   Data downloaded: %s\n", common.FormatBytes(result.BytesDownloaded))
 
 	if result.BytesTotal > 0 {
@@ -405,7 +436,11 @@ func displayFileList(result *downloaders.DownloadResult) {
 					_, _ = fmt.Fprintf(os.Stderr, "      → %s\n", file.SourceURL)
 				}
 			} else {
-				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)\n", file.Path, common.FormatBytes(file.Size))
+				cacheLabel := ""
+				if file.CacheHit {
+					cacheLabel = " [cached]"
+				}
+				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)%s\n", file.Path, common.FormatBytes(file.Size), cacheLabel)
 				if file.Checksum != "" {
 					_, _ = fmt.Fprintf(os.Stderr, "      %s: %s\n", file.ChecksumType, file.Checksum)
 				}
@@ -539,6 +574,116 @@ func initializeDownloaders() error {
 	return nil
 }
 
+func countCacheHits(result *downloaders.DownloadResult) int {
+	n := 0
+	for _, f := range result.Files {
+		if f.CacheHit {
+			n++
+		}
+	}
+	return n
+}
+
+// verifyExpectedHash checks the downloaded file against an expected hash spec.
+// It requires exactly one file to have been downloaded; fails otherwise.
+// On mismatch it removes the file from the output directory before returning
+// the error so the caller is not left with unverified data.
+func verifyExpectedHash(result *downloaders.DownloadResult, outputDir, spec string) error {
+	algo, expected, err := parseHashSpec(spec)
+	if err != nil {
+		return err
+	}
+
+	// Count non-dry-run files (dry-run files have no path).
+	var files []downloaders.FileInfo
+	for _, f := range result.Files {
+		if f.Path != "" {
+			files = append(files, f)
+		}
+	}
+
+	if len(files) != 1 {
+		return fmt.Errorf("--hash requires a single-file download, but %d files were downloaded; omit --hash for multi-file datasets", len(files))
+	}
+
+	f := files[0]
+
+	// Resolve to an absolute path (some downloaders store relative paths).
+	absPath := f.Path
+	if !filepath.IsAbs(absPath) {
+		absPath = filepath.Join(outputDir, absPath)
+	}
+
+	var actual string
+	switch algo {
+	case "sha256":
+		// Fetch already computed sha256; use it directly if available.
+		if f.Checksum != "" && f.ChecksumType == "sha256" {
+			actual = f.Checksum
+		} else {
+			actual, err = hashFile(absPath, sha256Writer)
+			if err != nil {
+				return fmt.Errorf("compute sha256: %w", err)
+			}
+		}
+	case "md5":
+		actual, err = hashFile(absPath, md5Writer)
+		if err != nil {
+			return fmt.Errorf("compute md5: %w", err)
+		}
+	}
+
+	if !strings.EqualFold(actual, expected) {
+		_ = os.Remove(absPath)
+		return fmt.Errorf("hash mismatch for %s\n  expected %s:%s\n  got      %s:%s\nfile removed from output directory",
+			f.OriginalName, algo, expected, algo, actual)
+	}
+
+	if !quiet {
+		_, _ = fmt.Fprintf(os.Stderr, "   Hash verified (%s:%s)\n", algo, actual)
+	}
+	return nil
+}
+
+// parseHashSpec parses "<algo>:<hex>" into its components.
+func parseHashSpec(spec string) (algo, hex string, err error) {
+	parts := strings.SplitN(spec, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("--hash: expected <algo>:<hex>, got %q", spec)
+	}
+	algo = strings.ToLower(parts[0])
+	switch algo {
+	case "sha256", "md5":
+	default:
+		return "", "", fmt.Errorf("--hash: unsupported algorithm %q (supported: sha256, md5)", parts[0])
+	}
+	return algo, strings.ToLower(parts[1]), nil
+}
+
+// hashFile computes the hash of a file using the provided hash constructor.
+func hashFile(path string, newHash func() io.Writer) (string, error) {
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- user-supplied file path for hashing
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := newHash()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	type summer interface {
+		Sum([]byte) []byte
+	}
+	s, ok := h.(summer)
+	if !ok {
+		return "", fmt.Errorf("hash does not implement Sum")
+	}
+	return hex.EncodeToString(s.Sum(nil)), nil
+}
+
+func sha256Writer() io.Writer { return sha256.New() }
+func md5Writer() io.Writer    { return md5.New() } // #nosec G401 -- checksum verification only
+
 // truncateString truncates a string to the specified length.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -598,4 +743,9 @@ func init() {
 	// Legacy custom filters flag (kept for backward compatibility)
 	downloadCmd.Flags().StringToStringVar(&customFilters, "filter", map[string]string{},
 		"custom filters (e.g., --filter extension=.txt)")
+
+	// Integrity verification
+	downloadCmd.Flags().StringVar(&expectedHash, "hash", "",
+		"expected file hash in <algo>:<hex> form (e.g. sha256:abc123..., md5:def456...); "+
+			"fails if the downloaded file does not match; only valid for single-file downloads")
 }

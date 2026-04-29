@@ -223,7 +223,7 @@ func (d *ZenodoDownloader) Download(ctx context.Context, req *downloaders.Downlo
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(req.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(req.OutputDir, 0o750); err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create output directory: %v", err))
 		result.Duration = time.Since(startTime)
 		return result, nil
@@ -568,8 +568,6 @@ func (d *ZenodoDownloader) shouldDownloadFile(file ZenodoFile, options *download
 		return true
 	}
 	return downloaders.ShouldDownload(file.Key, file.Size, options)
-
-	return true
 }
 
 // downloadFile downloads a single file from Zenodo.
@@ -578,10 +576,8 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 		return nil, fmt.Errorf("no download URL available for file %s", file.Key)
 	}
 
-	// Determine output path
 	outputPath := filepath.Join(outputDir, file.Key)
 
-	// Check if file already exists and should be skipped
 	if options != nil && options.SkipExisting {
 		if _, err := os.Stat(outputPath); err == nil {
 			if d.verbose {
@@ -597,55 +593,28 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 		}
 	}
 
-	// Create directory if needed
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", file.Links.Self, nil)
+	result, err := common.Fetch(ctx, file.Links.Self, outputPath, common.FetchOptions{
+		Client:       d.client,
+		ExtraHeaders: map[string]string{"User-Agent": "hapiq/1.0"},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("fetch %s: %w", file.Key, err)
 	}
-
-	req.Header.Set("User-Agent", "hapiq/1.0")
-
-	// Execute request
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	// Create output file
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
-
-	// Copy data
-	bytesWritten, err := io.Copy(outFile, resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write file: %w", err)
-	}
-
-	// Extract content type from response
-	contentType := resp.Header.Get("Content-Type")
 
 	return &downloaders.FileInfo{
 		Path:         outputPath,
 		OriginalName: file.Key,
 		SourceURL:    file.Links.Self,
-		ContentType:  contentType,
-		Size:         bytesWritten,
-		Checksum:     file.Checksum,
-		ChecksumType: "md5", // Zenodo typically uses MD5
+		ContentType:  result.ContentType,
+		Size:         result.N,
+		Checksum:     result.SHA256,
+		ChecksumType: "sha256",
 		DownloadTime: time.Now(),
+		CacheHit:     result.Hit,
 	}, nil
 }
 
@@ -668,7 +637,7 @@ func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult,
 			FilesDownloaded: len(result.Files),
 			FilesSkipped:    0, // TODO: Track this properly
 			FilesFailed:     len(result.Errors),
-			AverageSpeed:    float64(result.BytesDownloaded) / result.Duration.Seconds(),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			ResumedDownload: false, // TODO: Implement resume functionality
 		},
 	}

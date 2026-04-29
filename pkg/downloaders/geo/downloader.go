@@ -4,6 +4,8 @@ package geo
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
@@ -408,7 +411,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 			FilesDownloaded: len(result.Files),
 			FilesSkipped:    0,
 			FilesFailed:     0,
-			AverageSpeed:    float64(result.BytesDownloaded) / result.Duration.Seconds(),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			MaxConcurrent:   1,
 			ResumedDownload: false,
 		},
@@ -501,7 +504,28 @@ func (d *GEODownloader) downloadFile(ctx context.Context, url, targetPath string
 }
 
 // downloadFileWithProgress downloads a file with optional progress tracking.
+// On a cache hit the file is materialized directly and progress tracking is skipped.
 func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
+	c := cache.FromContext(ctx)
+
+	// Cache hit: materialize blob and return without a network round-trip.
+	if c != nil {
+		if sha256hex, sz, hit, err := c.Get(ctx, url); err == nil && hit {
+			if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+				return &downloaders.FileInfo{
+					Path:         targetPath,
+					OriginalName: filepath.Base(targetPath),
+					Size:         sz,
+					Checksum:     sha256hex,
+					ChecksumType: "sha256",
+					DownloadTime: time.Now(),
+					SourceURL:    url,
+					CacheHit:     true,
+				}, nil
+			}
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -517,43 +541,85 @@ func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targe
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	// Get content length if size wasn't provided
 	if size <= 0 && resp.ContentLength > 0 {
 		size = resp.ContentLength
 	}
 
-	// Create target file
-	file, err := os.Create(targetPath)
+	contentType := resp.Header.Get("Content-Type")
+	downloadTime := time.Now()
+
+	// When cache is available, stream into a tmp file inside the cache dir so
+	// that promotion is an atomic rename. sha256 is computed during streaming.
+	if c != nil {
+		tmpFile, tmpErr := c.NewTmpFile()
+		if tmpErr == nil {
+			h := sha256.New()
+			destWriter := io.MultiWriter(tmpFile, h)
+
+			var body io.Reader = resp.Body
+			if tracker != nil && size > 0 {
+				pr := common.NewProgressReader(resp.Body, size, filename, tracker, d.verbose)
+				defer pr.Close()
+				body = pr
+			}
+			copiedSize, copyErr := io.Copy(destWriter, body)
+			sha256hex := hex.EncodeToString(h.Sum(nil))
+			_ = tmpFile.Close()
+
+			if copyErr != nil {
+				_ = os.Remove(tmpFile.Name())
+				return nil, fmt.Errorf("failed to copy data: %w", copyErr)
+			}
+
+			if putErr := c.Put(ctx, url, tmpFile.Name(), sha256hex); putErr == nil {
+				if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+					return &downloaders.FileInfo{
+						Path:         targetPath,
+						OriginalName: filepath.Base(targetPath),
+						Size:         copiedSize,
+						Checksum:     sha256hex,
+						ChecksumType: "sha256",
+						DownloadTime: downloadTime,
+						SourceURL:    url,
+						ContentType:  contentType,
+					}, nil
+				}
+			}
+			// Cache promotion failed; salvage the tmp file as the target.
+			_ = os.Rename(tmpFile.Name(), targetPath)
+			return &downloaders.FileInfo{
+				Path:         targetPath,
+				OriginalName: filepath.Base(targetPath),
+				Size:         copiedSize,
+				Checksum:     sha256hex,
+				ChecksumType: "sha256",
+				DownloadTime: downloadTime,
+				SourceURL:    url,
+				ContentType:  contentType,
+			}, nil
+		}
+	}
+
+	// No cache (or tmp file creation failed): stream directly to targetPath.
+	file, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
-	downloadTime := time.Now()
-
 	var copiedSize int64
-
-	// Use progress reader if tracker is available and size is known
 	if tracker != nil && size > 0 {
-		progressReader := common.NewProgressReader(resp.Body, size, filename, tracker, d.verbose)
-		defer progressReader.Close()
-		copiedSize, err = io.Copy(file, progressReader)
+		pr := common.NewProgressReader(resp.Body, size, filename, tracker, d.verbose)
+		defer pr.Close()
+		copiedSize, err = io.Copy(file, pr)
 	} else {
-		// Fallback to simple copy
 		copiedSize, err = io.Copy(file, resp.Body)
 	}
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy data: %w", err)
 	}
 
-	// Calculate checksum
-	checksum, err := common.CalculateFileChecksum(targetPath)
-	if err != nil {
-		// Don't fail the download for checksum calculation errors
-		checksum = ""
-	}
-
+	checksum, _ := common.CalculateFileChecksum(targetPath)
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
@@ -562,6 +628,6 @@ func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targe
 		ChecksumType: "sha256",
 		DownloadTime: downloadTime,
 		SourceURL:    url,
-		ContentType:  resp.Header.Get("Content-Type"),
+		ContentType:  contentType,
 	}, nil
 }

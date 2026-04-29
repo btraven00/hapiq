@@ -226,7 +226,7 @@ func (d *EnsemblDownloader) downloadSpeciesList(ctx context.Context, url, target
 
 	// Save species list to file
 	speciesListPath := filepath.Join(targetDir, filepath.Base(url))
-	file, err := os.Create(speciesListPath)
+	file, err := os.Create(filepath.Clean(speciesListPath)) // #nosec G304 -- internal species list path
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +242,7 @@ func (d *EnsemblDownloader) downloadSpeciesList(ctx context.Context, url, target
 
 // parseSpeciesList parses the Ensembl species list file.
 func (d *EnsemblDownloader) parseSpeciesList(filePath string) ([]SpeciesInfo, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Clean(filePath)) // #nosec G304 -- internal species list path
 	if err != nil {
 		return nil, err
 	}
@@ -413,6 +413,9 @@ func (d *EnsemblDownloader) handleFungiAssembly(species SpeciesInfo, assembly st
 }
 
 // downloadFileWithProgress downloads a file with progress tracking.
+// TODO(cache): integrate local cache — Ensembl uses a custom ProtocolClient that
+// supports both HTTP and FTP. Cache integration requires wrapping protoClient.Get
+// with a cache-check/put layer similar to common.Fetch, computing sha256 inline.
 func (d *EnsemblDownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
 	resp, err := d.protoClient.Get(ctx, url)
 	if err != nil {
@@ -439,7 +442,7 @@ func (d *EnsemblDownloader) downloadFileWithProgress(ctx context.Context, url, t
 	}
 
 	// Create target file
-	file, err := os.Create(targetPath)
+	file, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}

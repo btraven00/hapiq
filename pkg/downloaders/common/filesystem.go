@@ -73,7 +73,7 @@ func (dc *DirectoryChecker) CheckAndPrepare(id string) (*downloaders.DirectorySt
 
 // CreateDirectory creates the target directory with proper permissions.
 func (dc *DirectoryChecker) CreateDirectory(path string) error {
-	return os.MkdirAll(path, 0o755)
+	return os.MkdirAll(path, 0o750)
 }
 
 // scanForConflicts identifies existing files that might conflict.
@@ -225,12 +225,12 @@ func SanitizeFilename(filename string) string {
 
 // EnsureDirectory creates a directory if it doesn't exist.
 func EnsureDirectory(path string) error {
-	return os.MkdirAll(path, 0o755)
+	return os.MkdirAll(path, 0o750)
 }
 
 // CalculateFileChecksum computes SHA256 checksum for a file.
 func CalculateFileChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Clean(filePath)) // #nosec G304 -- caller-controlled file
 	if err != nil {
 		return "", err
 	}
@@ -257,7 +257,7 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 		witness = mergeWitnessFiles(existing, witness)
 	}
 
-	file, err := os.Create(witnessPath)
+	file, err := os.Create(filepath.Clean(witnessPath)) // #nosec G304 -- internal witness path
 	if err != nil {
 		return fmt.Errorf("failed to create witness file: %w", err)
 	}
@@ -345,7 +345,7 @@ func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.Witness
 func LoadWitnessFile(targetDir string) (*downloaders.WitnessFile, error) {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
-	file, err := os.Open(witnessPath)
+	file, err := os.Open(filepath.Clean(witnessPath)) // #nosec G304 -- internal witness path
 	if err != nil {
 		return nil, fmt.Errorf("failed to open witness file: %w", err)
 	}

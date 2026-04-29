@@ -1,20 +1,19 @@
 //go:build !windows
 
-package common
+package cache
 
 import (
 	"math"
 	"syscall"
 )
 
-// getFreeSpace returns available disk space in bytes.
-func (dc *DirectoryChecker) getFreeSpace(path string) (int64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
+func diskFreeBytes(dir string) (int64, error) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
 		return 0, err
 	}
-	bavail := stat.Bavail
-	bsize := stat.Bsize
+	bavail := st.Bavail
+	bsize := st.Bsize
 	if bsize < 0 {
 		return 0, nil
 	}

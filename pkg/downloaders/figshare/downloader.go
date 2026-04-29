@@ -331,7 +331,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 			FilesDownloaded: len(result.Files),
 			FilesSkipped:    0,
 			FilesFailed:     0,
-			AverageSpeed:    float64(result.BytesDownloaded) / result.Duration.Seconds(),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			MaxConcurrent:   1,
 			ResumedDownload: false,
 		},
@@ -634,52 +634,20 @@ func (d *FigshareDownloader) confirmCollection(ctx context.Context, collection *
 
 // downloadFile downloads a single file with progress tracking.
 func (d *FigshareDownloader) downloadFile(ctx context.Context, url, targetPath string) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+	result, err := common.Fetch(ctx, url, targetPath, common.FetchOptions{Client: d.client})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("fetch %s: %w", filepath.Base(targetPath), err)
 	}
-
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	// Create target file
-	file, err := os.Create(targetPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %w", err)
-	}
-	defer file.Close()
-
-	// Copy with progress tracking
-	downloadTime := time.Now()
-
-	size, err := io.Copy(file, resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to copy data: %w", err)
-	}
-
-	// Calculate checksum
-	checksum, err := common.CalculateFileChecksum(targetPath)
-	if err != nil {
-		// Don't fail the download for checksum calculation errors
-		checksum = ""
-	}
-
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
-		Size:         size,
-		Checksum:     checksum,
+		Size:         result.N,
+		Checksum:     result.SHA256,
 		ChecksumType: "sha256",
-		DownloadTime: downloadTime,
+		DownloadTime: time.Now(),
 		SourceURL:    url,
-		ContentType:  resp.Header.Get("Content-Type"),
+		ContentType:  result.ContentType,
+		CacheHit:     result.Hit,
 	}, nil
 }
 
@@ -701,7 +669,7 @@ func (d *FigshareDownloader) downloadFileWithProgressTracking(ctx context.Contex
 	}
 
 	// Create target file
-	file, err := os.Create(targetPath)
+	file, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file: %w", err)
 	}

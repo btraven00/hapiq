@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/btraven00/hapiq/pkg/cache"
 )
 
 var (
@@ -38,39 +40,53 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hapiq.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hapiqrc)")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "quiet output (suppress verbose messages)")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "human", "output format (human, json)")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.
+// Search order (first match wins):
+//  1. --config <path> flag
+//  2. $HOME/.hapiqrc  (TOML)
+//  3. $HOME/.hapiq.yaml (legacy YAML)
+//  4. /etc/hapiq/config.toml
 func initConfig() {
+	cache.RegisterDefaults()
+
 	if cfgFile != "" {
-		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find home directory.
 		home, err := os.UserHomeDir()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".hapiq" (without extension).
+		// Primary: ~/.hapiqrc (TOML)
 		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".hapiq")
+		viper.SetConfigType("toml")
+		viper.SetConfigName(".hapiqrc")
+
+		// Fallback paths merged after the first-match read.
+		viper.AddConfigPath(home)
+		viper.AddConfigPath("/etc/hapiq")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	viper.AutomaticEnv()
 
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil && !quiet {
+	if err := viper.ReadInConfig(); err != nil {
+		// Try legacy ~/.hapiq.yaml before giving up.
+		home, _ := os.UserHomeDir()
+		viper.SetConfigType("yaml")
+		viper.SetConfigName(".hapiq")
+		viper.AddConfigPath(home)
+		if err2 := viper.ReadInConfig(); err2 == nil && !quiet {
+			fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		}
+		return
+	}
+
+	if !quiet {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
 }

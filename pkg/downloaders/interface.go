@@ -123,6 +123,7 @@ type FileInfo struct {
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
 	Size         int64     `json:"size"`
+	CacheHit     bool      `json:"cache_hit,omitempty"`
 }
 
 // DatasetRecord captures provenance for a single dataset/accession within a
@@ -165,6 +166,7 @@ type FileWitness struct {
 	SourceURL    string    `json:"source_url"`
 	ContentType  string    `json:"content_type,omitempty"`
 	Size         int64     `json:"size"`
+	CacheHit     bool      `json:"cache_hit,omitempty"`
 }
 
 // DownloadStats contains performance and operational statistics.
@@ -179,6 +181,14 @@ type DownloadStats struct {
 	AverageSpeed    float64       `json:"average_speed_bps"` // Bytes per second
 	MaxConcurrent   int           `json:"max_concurrent"`
 	ResumedDownload bool          `json:"resumed_download"`
+}
+
+// Speed returns bytes/second, returning 0 instead of +Inf when duration is zero.
+func Speed(bytes int64, d time.Duration) float64 {
+	if d <= 0 {
+		return 0
+	}
+	return float64(bytes) / d.Seconds()
 }
 
 // Verification contains integrity verification information.

@@ -3,7 +3,6 @@ package biostudies
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -257,42 +256,20 @@ func (d *BioStudiesDownloader) Download(ctx context.Context, req *downloaders.Do
 }
 
 func (d *BioStudiesDownloader) downloadFile(ctx context.Context, rawURL, targetPath string) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
+	result, err := common.Fetch(ctx, rawURL, targetPath, common.FetchOptions{Client: d.client})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
-	}
-
-	f, err := os.Create(targetPath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	written, err := io.Copy(f, resp.Body)
-	if err != nil {
-		_ = os.Remove(targetPath)
-		return nil, fmt.Errorf("write %s: %w", filepath.Base(targetPath), err)
-	}
-
-	checksum, _ := common.CalculateFileChecksum(targetPath)
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
-		Size:         written,
-		Checksum:     checksum,
+		Size:         result.N,
+		Checksum:     result.SHA256,
 		ChecksumType: "sha256",
 		SourceURL:    rawURL,
 		DownloadTime: time.Now(),
-		ContentType:  resp.Header.Get("Content-Type"),
+		ContentType:  result.ContentType,
+		CacheHit:     result.Hit,
 	}, nil
 }
 
