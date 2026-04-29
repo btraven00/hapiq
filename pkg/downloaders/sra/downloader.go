@@ -286,6 +286,9 @@ func (d *SRADownloader) dryRun(runs []RunInfo, opts *downloaders.DownloadOptions
 }
 
 // downloadWithMD5 downloads a file and verifies the ENA-provided MD5.
+// TODO(cache): integrate local cache — requires computing sha256 in parallel with md5
+// during streaming, then calling cache.Put with the sha256. common.Fetch cannot be
+// used directly because ENA supplies MD5 checksums that must be verified inline.
 func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, expectedMD5 string) (*downloaders.FileInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {

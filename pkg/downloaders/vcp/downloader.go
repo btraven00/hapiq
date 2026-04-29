@@ -3,7 +3,6 @@ package vcp
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -233,62 +232,32 @@ func collectFiles(rec *DatasetRecord) []vcpFile {
 }
 
 func (d *VCPDownloader) downloadFile(ctx context.Context, rawURL, targetPath string) (*downloaders.FileInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
+	// Pre-flight HEAD to surface auth errors before touching the cache.
+	head, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
+	if hresp, herr := d.c.http.Do(head); herr == nil {
+		_ = hresp.Body.Close()
+		if hresp.StatusCode == http.StatusForbidden || hresp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("access denied for %s — set VCP_TOKEN for private datasets", filepath.Base(rawURL))
+		}
+	}
 
-	resp, err := d.c.http.Do(req)
+	result, err := common.Fetch(ctx, rawURL, targetPath, common.FetchOptions{Client: d.c.http})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("access denied for %s — set VCP_TOKEN for private datasets", filepath.Base(rawURL))
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
-	}
-
-	// Capture the S3 ETag for integrity tracking. For single-part uploads it
-	// is the MD5 hex digest; for multi-part uploads it is "<md5>-<parts>" and
-	// is still useful as a fingerprint even though it's not a plain MD5.
-	etag := strings.Trim(resp.Header.Get("ETag"), `"`)
-
-	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	written, err := io.Copy(f, resp.Body)
-	if err != nil {
-		_ = os.Remove(targetPath)
-		return nil, fmt.Errorf("write %s: %w", filepath.Base(targetPath), err)
-	}
-
-	// Compute SHA-256 locally for the witness file.
-	sha256sum, _ := common.CalculateFileChecksum(targetPath)
-
-	checksumType := "sha256"
-	checksum := sha256sum
-	// If we also have a clean single-part ETag (no dashes = no multi-part),
-	// record the S3 ETag as the primary checksum so users can cross-check.
-	if etag != "" && !strings.Contains(etag, "-") {
-		checksumType = "md5(s3-etag)"
-		checksum = etag
-	}
-
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
-		Size:         written,
-		Checksum:     checksum,
-		ChecksumType: checksumType,
+		Size:         result.N,
+		Checksum:     result.SHA256,
+		ChecksumType: "sha256",
 		SourceURL:    rawURL,
 		DownloadTime: time.Now(),
-		ContentType:  resp.Header.Get("Content-Type"),
+		ContentType:  result.ContentType,
+		CacheHit:     result.Hit,
 	}, nil
 }
 

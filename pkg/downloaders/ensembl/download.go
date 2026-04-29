@@ -413,6 +413,9 @@ func (d *EnsemblDownloader) handleFungiAssembly(species SpeciesInfo, assembly st
 }
 
 // downloadFileWithProgress downloads a file with progress tracking.
+// TODO(cache): integrate local cache — Ensembl uses a custom ProtocolClient that
+// supports both HTTP and FTP. Cache integration requires wrapping protoClient.Get
+// with a cache-check/put layer similar to common.Fetch, computing sha256 inline.
 func (d *EnsemblDownloader) downloadFileWithProgress(ctx context.Context, url, targetPath, filename string, size int64, tracker *common.ProgressTracker) (*downloaders.FileInfo, error) {
 	resp, err := d.protoClient.Get(ctx, url)
 	if err != nil {
