@@ -13,10 +13,13 @@ and no global config. Each entry is a flat record:
 | field        | required | type             | meaning                                                         |
 |--------------|----------|------------------|-----------------------------------------------------------------|
 | `identifier` | yes      | string           | folder name created under `--parent-dir`                        |
-| `accession`  | yes      | string           | canonical ID in `source:id` form (e.g. `geo:GSE123456`)         |
+| `accession`  | yes*     | string           | canonical ID in `source:id` form (e.g. `geo:GSE123456`)         |
+| `url`        | yes*     | string           | direct HTTP/HTTPS URL to fetch (alternative to `accession`)     |
 | `hash`       | no       | string           | shorthand: `<algo>:<hex>` for the sole downloaded file          |
 | `files`      | no       | list of `{name, hash}` | explicit list of expected files, paths relative to entry folder |
 | `options`    | no       | object           | per-entry download filters (see below)                          |
+
+\* Exactly one of `accession` or `url` is required; setting both is an error.
 
 Unknown fields are rejected at load time — the schema is closed on purpose.
 
@@ -68,7 +71,16 @@ A flat per-entry subset of the `hapiq download` flags:
   hash: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
   options:
     include_ext: [.h5ad]
+
+- identifier: reference-genome
+  url: https://example.com/genome.fa.gz
+  hash: sha256:abc123...
 ```
+
+The `url` field accepts any `http://` or `https://` address. The filename is
+taken from the URL path basename, or from the server's `Content-Disposition`
+header when present. A `hapiq.json` witness file is written as usual.
+Downloads go through the local cache when it is enabled (`hapiq --cache on`).
 
 ## Commands
 
@@ -91,7 +103,7 @@ hapiq manifest gen ./scratch/pbmc3k >> manifest.yaml
 
 Iterates every entry in the manifest. For each one:
 
-1. Splits `accession` into `source` and `id`.
+1. Resolves the source and ID from `accession` (split on first `:`) or `url`.
 2. Validates and fetches metadata via the matching downloader.
 3. Downloads into `<parent-dir>/<identifier>` (created if absent),
    applying any per-entry `options` as filters.
