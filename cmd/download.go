@@ -55,6 +55,7 @@ var (
 	limitFiles           int
 	includeSRA           bool
 	expectedHash         string
+	forceOverwrite       bool
 )
 
 // downloadCmd represents the download command.
@@ -287,6 +288,7 @@ func createDownloadRequest(
 		Resume:               resumeDownload,
 		SkipExisting:         skipExisting,
 		NonInteractive:       nonInteractive,
+		Force:                forceOverwrite,
 		CustomFilters:        customFilters,
 		IncludeExts:          splitCSV(includeExts),
 		ExcludeExts:          splitCSV(excludeExts),
@@ -734,6 +736,7 @@ func init() {
 	downloadCmd.Flags().BoolVar(&resumeDownload, "resume", false, "resume interrupted downloads")
 	downloadCmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "skip files that already exist")
 	downloadCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "non-interactive mode (auto-confirm prompts)")
+	downloadCmd.Flags().BoolVar(&forceOverwrite, "force", false, "overwrite existing files without prompting")
 
 	// Network and timeout flags
 	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,

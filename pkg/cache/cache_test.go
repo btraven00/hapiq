@@ -214,6 +214,58 @@ func TestFromContextNil(t *testing.T) {
 	}
 }
 
+// TestRematerializeDoesNotCorruptBlob is a regression test for the hardlink
+// self-truncation bug: when a blob and its materialized copy share the same
+// inode, a naive copyFile(blob, dest) would os.Create(dest), truncating the
+// shared inode to 0 bytes before reading it. After the fix, a second
+// Materialize call must produce intact content AND leave the blob healthy so
+// that a subsequent cache Get still returns a hit.
+func TestRematerializeDoesNotCorruptBlob(t *testing.T) {
+	c := openTestCache(t)
+	ctx := context.Background()
+	content := []byte("must survive two materializations")
+
+	tmpPath, hash := writeTmp(t, c, content)
+	const rawURL = "https://example.com/remat"
+	if err := c.Put(ctx, rawURL, tmpPath, hash); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	destDir := t.TempDir()
+	destPath := filepath.Join(destDir, "output")
+
+	// First materialize — creates hardlink or copy.
+	if err := c.Materialize(hash, destPath); err != nil {
+		t.Fatalf("first Materialize: %v", err)
+	}
+
+	// Second materialize to the same path — this is the bug trigger.
+	if err := c.Materialize(hash, destPath); err != nil {
+		t.Fatalf("second Materialize: %v", err)
+	}
+
+	// File content must be intact.
+	got, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("read after second Materialize: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("content corrupted after second Materialize: got %q, want %q", got, content)
+	}
+
+	// The blob must still be retrievable from cache (blob file must not be zeroed).
+	_, sz, hit, err := c.Get(ctx, rawURL)
+	if err != nil {
+		t.Fatalf("Get after re-materialize: %v", err)
+	}
+	if !hit {
+		t.Fatal("cache miss after re-materialize: blob was corrupted or evicted")
+	}
+	if sz != int64(len(content)) {
+		t.Errorf("blob size after re-materialize: got %d, want %d", sz, len(content))
+	}
+}
+
 func TestIsPinnedAfterHardlink(t *testing.T) {
 	c := openTestCache(t)
 	ctx := context.Background()

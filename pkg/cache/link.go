@@ -23,6 +23,11 @@ func tryLink(src, dst string, strategy Strategy) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
+	// Remove dst before linking. This prevents two failure modes:
+	//   1. os.Link / os.Symlink returning EEXIST when dst already exists.
+	//   2. copyFile truncating the shared inode when src and dst are hardlinks
+	//      to the same blob (the typical case after a first Materialize call).
+	_ = os.Remove(dst)
 	switch strategy {
 	case StrategyHardlink:
 		return os.Link(src, dst)

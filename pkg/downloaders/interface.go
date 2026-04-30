@@ -55,6 +55,7 @@ type DownloadOptions struct {
 	Resume               bool              `json:"resume"`
 	SkipExisting         bool              `json:"skip_existing"`
 	NonInteractive       bool              `json:"non_interactive"`
+	Force                bool              `json:"force"` // overwrite existing files without prompting
 }
 
 // ValidationResult contains the outcome of ID validation.

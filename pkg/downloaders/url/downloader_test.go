@@ -271,6 +271,78 @@ func TestDownload_ServerError(t *testing.T) {
 	}
 }
 
+func TestDownload_ForceOverwritesExisting(t *testing.T) {
+	const newBody = "new content"
+	getCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getCount++
+			_, _ = w.Write([]byte(newBody))
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	// Pre-create the target file with different content.
+	_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("old content"), 0o644)
+
+	d := New(WithTimeout(5 * time.Second))
+	ctx := context.Background()
+	req := &downloaders.DownloadRequest{
+		ID:        srv.URL + "/file.txt",
+		OutputDir: dir,
+		Options:   &downloaders.DownloadOptions{Force: true},
+	}
+
+	result, err := d.Download(ctx, req)
+	if err != nil {
+		t.Fatalf("Download() error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Download() Success=false, errors: %v", result.Errors)
+	}
+	if getCount != 1 {
+		t.Errorf("expected 1 GET with --force, got %d", getCount)
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "file.txt"))
+	if string(got) != newBody {
+		t.Errorf("file not overwritten: got %q, want %q", string(got), newBody)
+	}
+}
+
+func TestDownload_NonInteractiveOverwritesExisting(t *testing.T) {
+	const newBody = "new content"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(newBody))
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("old content"), 0o644)
+
+	d := New(WithTimeout(5 * time.Second))
+	ctx := context.Background()
+	req := &downloaders.DownloadRequest{
+		ID:        srv.URL + "/file.txt",
+		OutputDir: dir,
+		Options:   &downloaders.DownloadOptions{NonInteractive: true},
+	}
+
+	result, err := d.Download(ctx, req)
+	if err != nil {
+		t.Fatalf("Download() error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Download() Success=false")
+	}
+	got, _ := os.ReadFile(filepath.Join(dir, "file.txt"))
+	if string(got) != newBody {
+		t.Errorf("NonInteractive should overwrite: got %q, want %q", string(got), newBody)
+	}
+}
+
 func TestFilenameFromURL(t *testing.T) {
 	tests := []struct {
 		rawURL string

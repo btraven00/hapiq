@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	fetchOutputDir string
-	fetchDryRun    bool
-	fetchHash      string
+	fetchOutputDir  string
+	fetchDryRun     bool
+	fetchHash       string
+	fetchForce      bool
 )
 
 var fetchCmd = &cobra.Command{
@@ -91,8 +92,10 @@ func runFetch(_ *cobra.Command, args []string) error {
 		ID:        rawURL,
 		OutputDir: fetchOutputDir,
 		Options: &downloaders.DownloadOptions{
-			DryRun:       fetchDryRun,
-			SkipExisting: skipExisting,
+			DryRun:         fetchDryRun,
+			SkipExisting:   skipExisting,
+			NonInteractive: nonInteractive,
+			Force:          fetchForce,
 		},
 		Metadata: meta,
 	}
@@ -133,6 +136,10 @@ func init() {
 		"expected file hash in <algo>:<hex> form (e.g. sha256:abc123...)")
 	fetchCmd.Flags().BoolVar(&skipExisting, "skip-existing", false,
 		"skip download if the file already exists")
+	fetchCmd.Flags().BoolVar(&fetchForce, "force", false,
+		"overwrite existing file without prompting")
+	fetchCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false,
+		"non-interactive mode (auto-confirm prompts)")
 	fetchCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"timeout in seconds")
 }

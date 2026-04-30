@@ -115,10 +115,21 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	targetPath := filepath.Join(req.OutputDir, common.SanitizeFilename(filename))
 
-	if opts != nil && opts.SkipExisting {
-		if _, err := os.Stat(targetPath); err == nil {
+	if _, statErr := os.Stat(targetPath); statErr == nil {
+		switch {
+		case opts != nil && opts.SkipExisting:
 			result.Success = true
 			return result, nil
+		case opts != nil && (opts.Force || opts.NonInteractive):
+			// Force or --yes: overwrite silently.
+		default:
+			confirmed, err := common.AskUserConfirmation(
+				fmt.Sprintf("file %q already exists. Overwrite?", filename),
+			)
+			if err != nil || !confirmed {
+				result.Success = true
+				return result, nil
+			}
 		}
 	}
 
