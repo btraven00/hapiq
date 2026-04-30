@@ -62,6 +62,8 @@ go build -o hapiq .
 | `scperturb` | `AuthorYear` or `AuthorYear_SubsetID` (e.g. `NormanWeissman2019`) | scPerturb compendium (Peidli et al., Nature Methods 2024); files via Zenodo |
 | `biostudies` | `S-<COLLECTION><digits>`, `E-<TYPE>-<digits>` (e.g. `S-BSST1502`, `E-MTAB-8077`) | EBI BioStudies; combine with `--include-ext` / `--filename-glob` to target count matrices |
 | `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
+| `experimenthub` | `EH<digits>` (e.g. `EH1039`) | Bioconductor ExperimentHub; metadata catalog cached locally for a week |
+| `url` | Any `http://` or `https://` URL | Direct single-file fetch; filename from `Content-Disposition` or URL path |
 
 `ncbi` is an alias for `geo`. `ena` is an alias for `sra`.
 
@@ -184,6 +186,7 @@ Applied per file before anything is written to disk.
 | `--parallel N` | 8 | Concurrent downloads |
 | `--resume` | false | Resume interrupted downloads |
 | `--skip-existing` | false | Skip files that already exist locally |
+| `--force` | false | Overwrite existing files without prompting |
 | `-y, --yes` | false | Non-interactive mode (auto-confirm prompts) |
 | `-t, --timeout N` | 300 | Timeout in seconds |
 
@@ -235,9 +238,41 @@ hapiq download scperturb NormanWeissman2019 --out ./data --dry-run
 hapiq download scperturb NormanWeissman2019 --out ./data
 # single dataset variant
 hapiq download scperturb NormanWeissman2019_filtered --out ./data
+
+# Bioconductor ExperimentHub
+hapiq download experimenthub EH1039 --out ./data
+
+# Direct URL (single file)
+hapiq download url https://example.com/data.h5ad --out ./data
 ```
 
 Each download writes a `hapiq.json` witness file containing the full metadata, per-file checksums (SHA-256), and download statistics for reproducibility.
+
+---
+
+### `hapiq fetch`
+
+Convenience shorthand for downloading a single file from a direct HTTP/HTTPS URL. Equivalent to `hapiq download url <url> --out <dir>`.
+
+```
+hapiq fetch <url> --out <dir> [flags]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--out <dir>` | Output directory (required) |
+| `--dry-run` | Show what would be downloaded without writing anything |
+| `--force` | Overwrite an existing file without prompting |
+| `--skip-existing` | Skip the download if the file already exists |
+| `-y, --yes` | Non-interactive mode (auto-confirm prompts) |
+| `--hash <algo>:<hex>` | Verify the downloaded file against this checksum |
+| `-t, --timeout N` | Timeout in seconds (default 300) |
+
+```bash
+hapiq fetch https://example.com/data.h5ad --out ./data
+hapiq fetch https://example.com/data.h5ad --out ./data --hash sha256:abc123...
+hapiq fetch https://example.com/data.h5ad --out ./data --force
+```
 
 ---
 
