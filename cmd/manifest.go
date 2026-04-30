@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/manifest"
 )
@@ -22,8 +24,8 @@ var manifestCmd = &cobra.Command{
 	Use:   "manifest",
 	Short: "Declare and run batch downloads from a YAML manifest",
 	Long: `A manifest is a YAML file listing datasets to download. Each entry pairs
-a folder identifier with a canonical accession ("source:id") and optional
-expected files with hashes for verification.
+a folder identifier with either a canonical accession ("source:id") or a
+direct URL, plus optional expected files with hashes for verification.
 
 Example manifest:
 
@@ -35,6 +37,9 @@ Example manifest:
   - identifier: tabula-sapiens
     accession: hca:cc95ff89-2e68-4a08-a234-480eca21ce79
     hash: sha256:def456...   # shorthand: expect exactly one file
+  - identifier: reference-genome
+    url: https://example.com/genome.fa.gz
+    hash: sha256:abc123...
 `,
 }
 
@@ -90,6 +95,16 @@ func runManifestGet(_ *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
 	defer cancel()
 
+	if viper.GetString("cache.mode") == "on" {
+		cfg := cache.ConfigFromViper()
+		if c, err := cache.Open(cfg); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
+		} else {
+			defer c.Close()
+			ctx = cache.WithCache(ctx, c)
+		}
+	}
+
 	var failed int
 	for i := range entries {
 		e := &entries[i]
@@ -110,7 +125,7 @@ func runManifestGet(_ *cobra.Command, args []string) error {
 }
 
 func runEntry(ctx context.Context, parent string, e *manifest.Entry) error {
-	source, id, err := manifest.SplitAccession(e.Accession)
+	source, id, err := manifest.ResolveSource(*e)
 	if err != nil {
 		return err
 	}

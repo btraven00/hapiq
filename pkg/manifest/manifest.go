@@ -26,7 +26,8 @@ import (
 // Entry declares one dataset to download into <parent>/<identifier>.
 type Entry struct {
 	Identifier string   `yaml:"identifier"`
-	Accession  string   `yaml:"accession"`
+	Accession  string   `yaml:"accession,omitempty"`
+	URL        string   `yaml:"url,omitempty"`
 	Hash       string   `yaml:"hash,omitempty"`
 	Files      []File   `yaml:"files,omitempty"`
 	Options    *Options `yaml:"options,omitempty"`
@@ -71,14 +72,28 @@ func Load(path string) ([]Entry, error) {
 		if e.Identifier == "" {
 			return nil, fmt.Errorf("entry[%d]: missing identifier", i)
 		}
-		if e.Accession == "" {
-			return nil, fmt.Errorf("entry[%d] %q: missing accession", i, e.Identifier)
+		if e.Accession != "" && e.URL != "" {
+			return nil, fmt.Errorf("entry[%d] %q: set either 'accession' or 'url', not both", i, e.Identifier)
 		}
-		if _, _, err := SplitAccession(e.Accession); err != nil {
-			return nil, fmt.Errorf("entry[%d] %q: %w", i, e.Identifier, err)
+		if e.Accession == "" && e.URL == "" {
+			return nil, fmt.Errorf("entry[%d] %q: missing accession or url", i, e.Identifier)
+		}
+		if e.Accession != "" {
+			if _, _, err := SplitAccession(e.Accession); err != nil {
+				return nil, fmt.Errorf("entry[%d] %q: %w", i, e.Identifier, err)
+			}
 		}
 	}
 	return entries, nil
+}
+
+// ResolveSource returns (source, id) for an entry, handling both the
+// "accession: source:id" form and the "url: https://..." shorthand.
+func ResolveSource(e Entry) (source, id string, err error) {
+	if e.URL != "" {
+		return "url", e.URL, nil
+	}
+	return SplitAccession(e.Accession)
 }
 
 // SplitAccession parses "source:id" into its parts.
@@ -103,7 +118,11 @@ func FromWitness(witnessPath string) (*Entry, error) {
 	}
 	entry := &Entry{
 		Identifier: filepath.Base(dir),
-		Accession:  fmt.Sprintf("%s:%s", w.Source, w.OriginalID),
+	}
+	if w.Source == "url" {
+		entry.URL = w.OriginalID
+	} else {
+		entry.Accession = fmt.Sprintf("%s:%s", w.Source, w.OriginalID)
 	}
 	for _, f := range w.Files {
 		name := f.Path

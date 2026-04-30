@@ -28,6 +28,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/hca"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
+	urldownloader "github.com/btraven00/hapiq/pkg/downloaders/url"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
 )
@@ -571,6 +572,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(ehDownloader); err != nil {
 		return fmt.Errorf("failed to register ExperimentHub downloader: %w", err)
+	}
+
+	// Register URL downloader (direct HTTP/HTTPS fetch)
+	urlDL := urldownloader.New(
+		urldownloader.WithVerbose(!quiet),
+		urldownloader.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(urlDL); err != nil {
+		return fmt.Errorf("failed to register URL downloader: %w", err)
 	}
 
 	// Register aliases
