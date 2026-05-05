@@ -163,7 +163,9 @@ func runDownload(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("no files downloaded")
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
+	if countCacheHits(result) < len(result.Files) {
+		_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
+	}
 	return nil
 }
 
