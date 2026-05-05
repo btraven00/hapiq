@@ -129,6 +129,42 @@ path.
 For sha256, hapiq reuses the hash already computed during streaming — no
 second read of the file. For md5, one additional read is required.
 
+## Shared group cache
+
+To share a single cache across multiple users (e.g. a lab server), create a
+dedicated directory owned by a shared group and set the setgid bit so that
+every blob written into it inherits the group automatically:
+
+```bash
+sudo mkdir -p /home/hapiq
+sudo chown -R root:robinsonlab /home/hapiq
+sudo chmod 2775 /home/hapiq
+```
+
+Permission breakdown:
+- `2` (setgid) — new files and subdirectories inherit the `robinsonlab` group
+- `7` (owner) — root has full access
+- `7` (group) — all `robinsonlab` members can read and write
+- `5` (other) — everyone else can read but not write
+
+Then point the system-wide config at that directory
+(`/etc/hapiq/config.toml` is searched automatically):
+
+```bash
+sudo mkdir -p /etc/hapiq
+sudo tee /etc/hapiq/config.toml <<'EOF'
+[cache]
+mode = "on"
+dir  = "/home/hapiq"
+EOF
+```
+
+Any user in `robinsonlab` who runs `hapiq download` will now read from and
+write to the shared store without any per-user configuration.
+
+If you want to restrict access to group members only (no world-readable blobs),
+use mode `2770` instead of `2775`.
+
 ## Supported sources
 
 Caching is active for **Zenodo**, **Figshare**, and **scPerturb** downloads.
