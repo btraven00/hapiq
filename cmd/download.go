@@ -76,6 +76,7 @@ Supported sources:
   experimenthub - Bioconductor ExperimentHub (EH<digits>)
   biostudies  - EBI BioStudies (S-<COLL><digits>, E-<TYPE>-<digits>)
   hca         - Human Cell Atlas Data Portal (project UUID)
+  url         - Direct HTTP/HTTPS download (URL is the ID)
 
 Examples:
   hapiq download geo GSE123456 --out ./datasets
@@ -87,7 +88,8 @@ Examples:
   hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet
   hapiq download biostudies S-BSST1502 --out ./data
   hapiq download biostudies E-MTAB-8077 --out ./data --include-ext .mtx,.h5,.h5ad
-  hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad`,
+  hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad
+  hapiq download url https://example.com/data.h5ad --out ./data`,
 	Args: cobra.ExactArgs(requiredArgsCount),
 	RunE: runDownload,
 }
