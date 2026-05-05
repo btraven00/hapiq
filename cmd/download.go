@@ -26,6 +26,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/hca"
+	"github.com/btraven00/hapiq/pkg/downloaders/scanpy"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
 	urldownloader "github.com/btraven00/hapiq/pkg/downloaders/url"
@@ -76,6 +77,7 @@ Supported sources:
   experimenthub - Bioconductor ExperimentHub (EH<digits>)
   biostudies  - EBI BioStudies (S-<COLL><digits>, E-<TYPE>-<digits>)
   hca         - Human Cell Atlas Data Portal (project UUID)
+  scanpy      - Curated scanpy.datasets entries (e.g. pbmc3k, paul15, visium_sge/<sample_id>, ebi_expression_atlas/<accession>)
   url         - Direct HTTP/HTTPS download (URL is the ID)
 
 Examples:
@@ -89,7 +91,9 @@ Examples:
   hapiq download biostudies S-BSST1502 --out ./data
   hapiq download biostudies E-MTAB-8077 --out ./data --include-ext .mtx,.h5,.h5ad
   hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad
-  hapiq download url https://example.com/data.h5ad --out ./data`,
+  hapiq download url https://example.com/data.h5ad --out ./data
+  hapiq download scanpy pbmc3k --out ./data
+  hapiq download scanpy visium_sge/V1_Human_Heart --out ./data`,
 	Args: cobra.ExactArgs(requiredArgsCount),
 	RunE: runDownload,
 }
@@ -578,6 +582,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(ehDownloader); err != nil {
 		return fmt.Errorf("failed to register ExperimentHub downloader: %w", err)
+	}
+
+	// Register scanpy downloader (curated scanpy.datasets entries)
+	scanpyDL := scanpy.New(
+		scanpy.WithVerbose(!quiet),
+		scanpy.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(scanpyDL); err != nil {
+		return fmt.Errorf("failed to register scanpy downloader: %w", err)
 	}
 
 	// Register URL downloader (direct HTTP/HTTPS fetch)
