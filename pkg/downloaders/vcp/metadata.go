@@ -102,8 +102,9 @@ func s3ToHTTPS(s3URI string) string {
 
 // client holds an HTTP client and optional auth token.
 type client struct {
-	http     *http.Client
-	token    string // JWT bearer token; empty = public endpoints
+	http    *http.Client
+	token   string // JWT bearer token; empty = public endpoints
+	baseURL string // overrides apiBase; used in tests
 }
 
 func newClient(token string, timeout time.Duration) *client {
@@ -145,10 +146,14 @@ func (c *client) get(ctx context.Context, rawURL string, params url.Values) ([]b
 
 // endpoint returns the right path prefix depending on whether we have a token.
 func (c *client) endpoint(path string) string {
-	if c.token != "" {
-		return apiBase + "/" + path
+	base := c.baseURL
+	if base == "" {
+		base = apiBase
 	}
-	return apiBase + "/public/" + path
+	if c.token != "" {
+		return base + "/" + path
+	}
+	return base + "/public/" + path
 }
 
 // search queries the VCP dataset search API.

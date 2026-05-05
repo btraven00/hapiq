@@ -30,7 +30,7 @@ type Option func(*VCPDownloader)
 func WithTimeout(t time.Duration) Option {
 	return func(d *VCPDownloader) {
 		d.timeout = t
-		d.c = newClient(d.c.token, t)
+		d.c.http.Timeout = t
 	}
 }
 
@@ -41,6 +41,11 @@ func WithVerbose(v bool) Option { return func(d *VCPDownloader) { d.verbose = v 
 // If empty, public endpoints are used (no authentication).
 func WithToken(token string) Option {
 	return func(d *VCPDownloader) { d.c.token = token }
+}
+
+// WithBaseURL overrides the VCP API base URL. Intended for tests.
+func WithBaseURL(u string) Option {
+	return func(d *VCPDownloader) { d.c.baseURL = u }
 }
 
 // NewVCPDownloader creates a new VCPDownloader.
@@ -130,7 +135,7 @@ func (d *VCPDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		if !downloaders.ShouldDownload(f.name, f.size, opts) {
 			continue
 		}
-		if opts != nil && opts.SkipExisting {
+		if opts == nil || !opts.Force {
 			if _, err := os.Stat(filepath.Join(req.OutputDir, f.name)); err == nil {
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing: %s\n", f.name)
