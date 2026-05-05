@@ -251,8 +251,40 @@ func init() {
 	cacheGCCmd.Flags().BoolVar(&cacheGCDryRun, "dry-run", false, "show what would be evicted without removing")
 	cacheGCCmd.Flags().StringVar(&cacheGCKeep, "keep", "", "spare blobs accessed within this duration (e.g. 7d, 24h)")
 
-	cacheCmd.AddCommand(cacheInfoCmd, cacheListCmd, cacheVerifyCmd, cacheGCCmd, cacheEvictCmd, cachePruneURLsCmd)
+	cacheCmd.AddCommand(cacheInfoCmd, cacheListCmd, cacheVerifyCmd, cacheGCCmd, cacheEvictCmd, cachePruneURLsCmd, cacheConfigCmd)
 	rootCmd.AddCommand(cacheCmd)
+}
+
+var cacheConfigCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Show resolved cache configuration and config file source",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg := cache.ConfigFromViper()
+		if cacheDirFlag != "" {
+			cfg.Dir = cacheDirFlag
+		}
+		if cfg.Dir == "" {
+			cfg.Dir = cache.DefaultDir()
+		}
+
+		cfgFile := viper.ConfigFileUsed()
+		if cfgFile == "" {
+			cfgFile = "(none found — using defaults)"
+		}
+
+		fmt.Printf("Config file:    %s\n", cfgFile)
+		fmt.Printf("cache.mode:     %s\n", cfg.Mode)
+		fmt.Printf("cache.dir:      %s\n", cfg.Dir)
+		fmt.Printf("cache.link_strategy: %s\n", cfg.LinkStrategy)
+		if cfg.MaxSize > 0 {
+			fmt.Printf("cache.max_size: %s\n", common.FormatBytes(cfg.MaxSize))
+		} else {
+			fmt.Printf("cache.max_size: (none)\n")
+		}
+		fmt.Printf("cache.min_free_disk: %s\n", common.FormatBytes(cfg.MinFreeDisk))
+		fmt.Printf("cache.quota_policy:  %s\n", cfg.QuotaPolicy)
+		return nil
+	},
 }
 
 // openCacheForCmd opens the cache using the resolved config, with --cache-dir override.
