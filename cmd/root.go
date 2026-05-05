@@ -94,6 +94,7 @@ func initConfig() {
 	}
 
 	// 3. /etc/hapiq/config.toml (system-wide)
+	viper.SetConfigType("toml")
 	viper.SetConfigFile("/etc/hapiq/config.toml")
 	if err := viper.ReadInConfig(); err == nil && !quiet {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
