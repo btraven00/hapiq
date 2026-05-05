@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -167,7 +168,7 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 
 	// Create witness file
 	witness := &downloaders.WitnessFile{
-		HapiqVersion: "dev",
+		HapiqVersion: version.String(),
 		DownloadTime: time.Now(),
 		Source:       d.GetSourceType(),
 		OriginalID:   fmt.Sprintf("%s:%s:%s", req.Database, req.Version, req.Content),

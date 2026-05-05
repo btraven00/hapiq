@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -166,7 +167,7 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		req.Metadata.FileCount = 1
 
 		witness := &downloaders.WitnessFile{
-			HapiqVersion: "dev",
+			HapiqVersion: version.String(),
 			DownloadTime: start,
 			Source:       d.GetSourceType(),
 			OriginalID:   req.ID,

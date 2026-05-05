@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -621,7 +622,7 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 // createWitnessFile creates a witness file for provenance tracking.
 func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult, req *downloaders.DownloadRequest) *downloaders.WitnessFile {
 	witness := &downloaders.WitnessFile{
-		HapiqVersion: "1.0", // This should ideally come from a version constant
+		HapiqVersion: version.String(),
 		Source:       d.GetSourceType(),
 		OriginalID:   req.ID,
 		ResolvedURL:  fmt.Sprintf("%s/record/%s", d.baseURL, req.ID),

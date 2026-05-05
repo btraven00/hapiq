@@ -18,6 +18,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -395,7 +396,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	// Create witness file
 	witness := &downloaders.WitnessFile{
-		HapiqVersion: "dev", // This should come from version info
+		HapiqVersion: version.String(),
 		DownloadTime: startTime,
 		Source:       d.GetSourceType(),
 		OriginalID:   req.ID,
