@@ -27,9 +27,7 @@ provenance tracking. Point it at a source and ID; it handles the rest.
 Supported sources: geo, figshare, zenodo, ensembl
 
 "Hapiq" means "the one who fetches" in Quechua.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
