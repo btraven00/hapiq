@@ -61,7 +61,7 @@ func ConfigFromViper() Config {
 		Dir:          dir,
 		LinkStrategy: strategy,
 		MaxSize:      ParseSizeDefault(viper.GetString("cache.max_size"), 0),
-		MinFreeDisk:  ParseSizeDefault(viper.GetString("cache.min_free_disk"), 5*1024*1024*1024),
+		MinFreeDisk:  ParseSizeDefault(viper.GetString("cache.min_free_disk"), 5_000_000_000), // 5GB SI, matches RegisterDefaults
 		QuotaPolicy:  policy,
 	}
 }

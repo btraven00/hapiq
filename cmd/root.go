@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -59,6 +61,17 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if cfgFile != "" {
+		// Sniff the type from the extension. The documented hapiq config name
+		// is the extensionless "~/.hapiqrc" (TOML), and viper cannot infer
+		// the type without help — default to TOML for unknown extensions.
+		switch strings.ToLower(filepath.Ext(cfgFile)) {
+		case ".yaml", ".yml":
+			viper.SetConfigType("yaml")
+		case ".json":
+			viper.SetConfigType("json")
+		default:
+			viper.SetConfigType("toml")
+		}
 		viper.SetConfigFile(cfgFile)
 		if err := viper.ReadInConfig(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "warning: config file %s: %v\n", cfgFile, err)

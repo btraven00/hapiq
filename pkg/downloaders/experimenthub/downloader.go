@@ -11,6 +11,8 @@ package experimenthub
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"mime"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -249,6 +252,28 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 }
 
 func (d *ExperimentHubDownloader) downloadFile(ctx context.Context, url, targetPath, fallbackName string) (*downloaders.FileInfo, string, error) {
+	c := cache.FromContext(ctx)
+
+	// Cache hit: materialize the blob to targetPath without a network round-trip.
+	// Content-Disposition rewriting is skipped on hits because the cache key is
+	// the URL only; the caller's targetPath is authoritative.
+	if c != nil {
+		if sha256hex, sz, hit, err := c.Get(ctx, url); err == nil && hit {
+			if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+				return &downloaders.FileInfo{
+					Path:         targetPath,
+					OriginalName: fallbackName,
+					Size:         sz,
+					Checksum:     sha256hex,
+					ChecksumType: "sha256",
+					SourceURL:    url,
+					DownloadTime: time.Now(),
+					CacheHit:     true,
+				}, fallbackName, nil
+			}
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, "", err
@@ -272,6 +297,50 @@ func (d *ExperimentHubDownloader) downloadFile(ctx context.Context, url, targetP
 		}
 	}
 
+	contentType := resp.Header.Get("Content-Type")
+	downloadTime := time.Now()
+
+	if c != nil {
+		tmpFile, tmpErr := c.NewTmpFile()
+		if tmpErr == nil {
+			h := sha256.New()
+			written, copyErr := io.Copy(io.MultiWriter(tmpFile, h), resp.Body)
+			sha256hex := hex.EncodeToString(h.Sum(nil))
+			_ = tmpFile.Close()
+
+			if copyErr != nil {
+				_ = os.Remove(tmpFile.Name())
+				return nil, "", fmt.Errorf("write %s: %w", filepath.Base(targetPath), copyErr)
+			}
+
+			if putErr := c.Put(ctx, url, tmpFile.Name(), sha256hex); putErr == nil {
+				if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
+					return &downloaders.FileInfo{
+						Path:         targetPath,
+						Size:         written,
+						Checksum:     sha256hex,
+						ChecksumType: "sha256",
+						SourceURL:    url,
+						DownloadTime: downloadTime,
+						ContentType:  contentType,
+					}, name, nil
+				}
+			}
+			// Cache promotion failed; salvage the tmp file as the target.
+			_ = os.Rename(tmpFile.Name(), targetPath)
+			return &downloaders.FileInfo{
+				Path:         targetPath,
+				Size:         written,
+				Checksum:     sha256hex,
+				ChecksumType: "sha256",
+				SourceURL:    url,
+				DownloadTime: downloadTime,
+				ContentType:  contentType,
+			}, name, nil
+		}
+	}
+
+	// No cache (or tmp creation failed): stream directly to targetPath.
 	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- caller-controlled target path
 	if err != nil {
 		return nil, "", err
@@ -288,8 +357,8 @@ func (d *ExperimentHubDownloader) downloadFile(ctx context.Context, url, targetP
 		Path:         targetPath,
 		Size:         written,
 		SourceURL:    url,
-		DownloadTime: time.Now(),
-		ContentType:  resp.Header.Get("Content-Type"),
+		DownloadTime: downloadTime,
+		ContentType:  contentType,
 	}, name, nil
 }
 

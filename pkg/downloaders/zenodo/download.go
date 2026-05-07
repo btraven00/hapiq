@@ -5,8 +5,6 @@ package zenodo
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,97 +141,6 @@ func (dm *DownloadManager) downloadWorker(ctx context.Context, wg *sync.WaitGrou
 			return
 		}
 	}
-}
-
-// DownloadWithResume attempts to resume a partial download.
-func (d *ZenodoDownloader) DownloadWithResume(ctx context.Context, file ZenodoFile, outputPath string, options *downloaders.DownloadOptions) (*downloaders.FileInfo, error) {
-	if file.Links.Self == "" {
-		return nil, fmt.Errorf("no download URL available for file %s", file.Key)
-	}
-
-	// Check if partial file exists
-	var startByte int64 = 0
-	if options != nil && options.Resume {
-		if info, err := os.Stat(outputPath); err == nil {
-			startByte = info.Size()
-			if d.verbose {
-				_, _ = fmt.Fprintf(os.Stderr, "Resuming download of %s from byte %d\n", file.Key, startByte)
-			}
-		}
-	}
-
-	// Create HTTP request with range header for resume
-	req, err := http.NewRequestWithContext(ctx, "GET", file.Links.Self, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", "hapiq/1.0")
-	if startByte > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", startByte))
-	}
-
-	// Execute request
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("download request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if startByte > 0 {
-		if resp.StatusCode != 206 { // Partial Content
-			if resp.StatusCode == 200 {
-				// Server doesn't support range requests, start over
-				startByte = 0
-				if d.verbose {
-					_, _ = fmt.Fprintf(os.Stderr, "Server doesn't support range requests, restarting download of %s\n", file.Key)
-				}
-			} else {
-				return nil, fmt.Errorf("resume failed with status %d", resp.StatusCode)
-			}
-		}
-	} else if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	// Create or open output file
-	var outFile *os.File
-	if startByte > 0 && resp.StatusCode == 206 {
-		outFile, err = os.OpenFile(filepath.Clean(outputPath), os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- caller-controlled output path
-	} else {
-		// Create directory if needed
-		if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
-			return nil, fmt.Errorf("failed to create directory: %w", err)
-		}
-		outFile, err = os.Create(filepath.Clean(outputPath)) // #nosec G304 -- caller-controlled output path
-		startByte = 0
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to open output file: %w", err)
-	}
-	defer outFile.Close()
-
-	// Copy data with progress tracking
-	bytesWritten, err := io.Copy(outFile, resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write file: %w", err)
-	}
-
-	totalSize := startByte + bytesWritten
-	contentType := resp.Header.Get("Content-Type")
-
-	return &downloaders.FileInfo{
-		Path:         outputPath,
-		OriginalName: file.Key,
-		SourceURL:    file.Links.Self,
-		ContentType:  contentType,
-		Size:         totalSize,
-		Checksum:     file.Checksum,
-		ChecksumType: "md5", // Zenodo typically uses MD5
-		DownloadTime: time.Now(),
-	}, nil
 }
 
 // ValidateDownload verifies the integrity of a downloaded file.
