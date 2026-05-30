@@ -343,6 +343,54 @@ func TestDownload_NonInteractiveOverwritesExisting(t *testing.T) {
 	}
 }
 
+// TestDownload_ContentDispositionOnGET reproduces the case where the server
+// advertises the real filename only on the GET response (e.g. a storage backend
+// reached via redirect), not on the pre-fetch HEAD. The downloaded file must be
+// named after the Content-Disposition filename, not the URL path basename.
+func TestDownload_ContentDispositionOnGET(t *testing.T) {
+	const body = "payload"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// HEAD intentionally omits Content-Disposition; only GET sets it.
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Disposition", `attachment; filename="real_name.zip"`)
+			_, _ = w.Write([]byte(body))
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(WithTimeout(5 * time.Second))
+	req := &downloaders.DownloadRequest{
+		ID:        srv.URL + "/6154417", // extensionless basename, like a Dataverse datafile id
+		OutputDir: dir,
+		Options:   &downloaders.DownloadOptions{NonInteractive: true},
+	}
+
+	result, err := d.Download(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Download() error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Download() Success=false, errors: %v", result.Errors)
+	}
+
+	// File should be renamed to the Content-Disposition filename.
+	got, err := os.ReadFile(filepath.Join(dir, "real_name.zip"))
+	if err != nil {
+		t.Fatalf("expected file named after Content-Disposition: %v", err)
+	}
+	if string(got) != body {
+		t.Errorf("content = %q, want %q", string(got), body)
+	}
+	// The URL-basename fallback must NOT be left behind.
+	if _, err := os.Stat(filepath.Join(dir, "6154417")); err == nil {
+		t.Error("stale URL-basename file should not exist after rename")
+	}
+	if len(result.Files) != 1 || filepath.Base(result.Files[0].Path) != "real_name.zip" {
+		t.Errorf("result file path = %+v, want basename real_name.zip", result.Files)
+	}
+}
+
 func TestFilenameFromURL(t *testing.T) {
 	tests := []struct {
 		rawURL string
