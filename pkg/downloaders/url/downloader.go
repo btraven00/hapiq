@@ -2,23 +2,21 @@
 // directly from an arbitrary HTTP(S) URL. The "ID" is the URL itself.
 // In manifests use the dedicated url: field:
 //
-//	- identifier: my-file
-//	  url: https://example.com/file.csv
+//   - identifier: my-file
+//     url: https://example.com/file.csv
 package url
 
 import (
 	"context"
 	"fmt"
-	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -144,6 +142,22 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		return result, nil
 	}
 
+	// The GET response may reveal a better filename via Content-Disposition than
+	// the pre-fetch HEAD did (common with storage backends that only set the
+	// header on a redirect target). If so, rename the downloaded file to it.
+	if fr.Filename != "" {
+		if better := common.SanitizeFilename(fr.Filename); better != "" && better != filepath.Base(targetPath) {
+			newPath := filepath.Join(req.OutputDir, better)
+			if err := os.Rename(targetPath, newPath); err == nil {
+				targetPath = newPath
+				filename = fr.Filename
+			} else {
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("could not rename to %q: %v", better, err))
+			}
+		}
+	}
+
 	fi := downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filename,
@@ -200,12 +214,8 @@ func resolveFilename(ctx context.Context, rawURL string, client *http.Client) st
 	if err == nil {
 		if resp, err := client.Do(req); err == nil {
 			_ = resp.Body.Close()
-			if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-				if _, params, err := mime.ParseMediaType(cd); err == nil {
-					if v := strings.TrimSpace(params["filename"]); v != "" {
-						return v
-					}
-				}
+			if v := common.FilenameFromContentDisposition(resp.Header.Get("Content-Disposition")); v != "" {
+				return v
 			}
 		}
 	}

@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/btraven00/hapiq/pkg/cache"
 )
@@ -27,6 +29,12 @@ type FetchResult struct {
 	ContentType string
 	// SHA256 is the hex-encoded sha256 of the file content.
 	SHA256 string
+	// Filename is the filename advertised by the GET response's
+	// Content-Disposition header, if any (empty on cache hit or when the
+	// server provides none). Callers may use it to rename the destination,
+	// since the final filename is often only revealed after redirects that a
+	// pre-fetch HEAD request does not expose.
+	Filename string
 	// N is the number of bytes in the file.
 	N int64
 	// Hit is true when the file was served from the local cache.
@@ -68,6 +76,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 	var tmpPath string
 	var sha256hex string
 	var contentType string
+	var filename string
 	var n int64
 
 	if c != nil {
@@ -78,7 +87,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		}
 		tmpPath = tmpFile.Name()
 
-		n, sha256hex, contentType, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, tmpFile)
+		n, sha256hex, contentType, filename, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, tmpFile)
 		if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
@@ -104,7 +113,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		if err != nil {
 			return FetchResult{}, err
 		}
-		n, sha256hex, contentType, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, f)
+		n, sha256hex, contentType, filename, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, f)
 		_ = f.Close()
 		if err != nil {
 			_ = os.Remove(destPath)
@@ -115,6 +124,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 	return FetchResult{
 		ContentType: contentType,
 		SHA256:      sha256hex,
+		Filename:    filename,
 		N:           n,
 		Hit:         false,
 	}, nil
@@ -126,21 +136,26 @@ func directFetch(ctx context.Context, client *http.Client, rawURL, destPath stri
 	if err != nil {
 		return FetchResult{}, err
 	}
-	n, sha256hex, ct, err := streamToFile(ctx, client, rawURL, extra, f)
+	n, sha256hex, ct, filename, err := streamToFile(ctx, client, rawURL, extra, f)
 	_ = f.Close()
 	if err != nil {
 		_ = os.Remove(destPath)
 		return FetchResult{}, err
 	}
-	return FetchResult{ContentType: ct, SHA256: sha256hex, N: n}, nil
+	return FetchResult{ContentType: ct, SHA256: sha256hex, Filename: filename, N: n}, nil
 }
 
 // streamToFile makes a GET request and copies the body into w, computing sha256
-// as it goes. Returns (bytes written, sha256hex, Content-Type, error).
-func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra map[string]string, w io.Writer) (int64, string, string, error) {
+// as it goes. Returns (bytes written, sha256hex, Content-Type, filename, error),
+// where filename is parsed from the GET response's Content-Disposition header
+// (empty when the server provides none). The GET response is authoritative: it
+// reflects the final hop after any redirects, which a pre-fetch HEAD often does
+// not (e.g. storage backends that only set Content-Disposition on the redirect
+// target).
+func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra map[string]string, w io.Writer) (int64, string, string, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
 	if err != nil {
-		return 0, "", "", err
+		return 0, "", "", "", err
 	}
 	for k, v := range extra {
 		req.Header.Set(k, v)
@@ -148,20 +163,29 @@ func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, "", "", err
+		return 0, "", "", "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, "", "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
+		return 0, "", "", "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
 	}
 
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(w, h), resp.Body)
 	if err != nil {
-		return 0, "", "", fmt.Errorf("read body: %w", err)
+		return 0, "", "", "", fmt.Errorf("read body: %w", err)
 	}
 
-	return n, hex.EncodeToString(h.Sum(nil)), resp.Header.Get("Content-Type"), nil
+	filename := FilenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
+	return n, hex.EncodeToString(h.Sum(nil)), resp.Header.Get("Content-Type"), filename, nil
 }
 
+// FilenameFromContentDisposition extracts the filename parameter from a
+// Content-Disposition header value, returning "" if absent or unparseable.
+func FilenameFromContentDisposition(cd string) string {
+	if _, params, err := mime.ParseMediaType(cd); err == nil {
+		return strings.TrimSpace(params["filename"])
+	}
+	return ""
+}
