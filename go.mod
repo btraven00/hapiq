@@ -1,6 +1,6 @@
 module github.com/btraven00/hapiq
 
-go 1.25.9
+go 1.25.10
 
 require (
 	github.com/jlaffaye/ftp v0.2.0
