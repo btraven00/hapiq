@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -23,21 +24,24 @@ CREATE TABLE IF NOT EXISTS urls (
   sha256        TEXT NOT NULL REFERENCES blobs(sha256),
   etag          TEXT,
   last_modified TEXT,
-  fetched_at    INTEGER NOT NULL
+  fetched_at    INTEGER NOT NULL,
+  filename      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS urls_by_hash ON urls(sha256);
 `
 
 type dbStmts struct {
-	getByURL   *sql.Stmt
-	insertBlob *sql.Stmt
-	insertURL  *sql.Stmt
-	touchBlob  *sql.Stmt
-	deleteURLs *sql.Stmt
-	deleteBlob *sql.Stmt
-	totalSize  *sql.Stmt
-	listLRU    *sql.Stmt
+	getByURL    *sql.Stmt
+	insertBlob  *sql.Stmt
+	insertURL   *sql.Stmt
+	setFilename *sql.Stmt
+	getFilename *sql.Stmt
+	touchBlob   *sql.Stmt
+	deleteURLs  *sql.Stmt
+	deleteBlob  *sql.Stmt
+	totalSize   *sql.Stmt
+	listLRU     *sql.Stmt
 }
 
 func openDB(dir string) (*sql.DB, *dbStmts, error) {
@@ -66,6 +70,14 @@ func openDB(dir string) (*sql.DB, *dbStmts, error) {
 		return nil, nil, fmt.Errorf("apply schema: %w", err)
 	}
 
+	// Migrate databases created before urls.filename existed. ADD COLUMN is a
+	// no-op error ("duplicate column name") once applied, which we ignore.
+	if _, err := db.Exec(`ALTER TABLE urls ADD COLUMN filename TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		_ = db.Close()
+		return nil, nil, fmt.Errorf("migrate urls.filename: %w", err)
+	}
+
 	s, err := prepareStmts(db)
 	if err != nil {
 		_ = db.Close()
@@ -85,6 +97,8 @@ func prepareStmts(db *sql.DB) (*dbStmts, error) {
 		{&s.getByURL, `SELECT b.sha256, b.size FROM urls u JOIN blobs b ON b.sha256 = u.sha256 WHERE u.url = ?`},
 		{&s.insertBlob, `INSERT OR IGNORE INTO blobs(sha256, size, created_at, last_used, ref_count) VALUES(?,?,?,?,0)`},
 		{&s.insertURL, `INSERT OR REPLACE INTO urls(url, sha256, etag, last_modified, fetched_at) VALUES(?,?,?,?,?)`},
+		{&s.setFilename, `UPDATE urls SET filename = ? WHERE url = ?`},
+		{&s.getFilename, `SELECT filename FROM urls WHERE url = ?`},
 		{&s.touchBlob, `UPDATE blobs SET last_used = ? WHERE sha256 = ?`},
 		{&s.deleteURLs, `DELETE FROM urls WHERE sha256 = ?`},
 		{&s.deleteBlob, `DELETE FROM blobs WHERE sha256 = ?`},
@@ -105,6 +119,7 @@ func prepareStmts(db *sql.DB) (*dbStmts, error) {
 func (s *dbStmts) close() {
 	for _, stmt := range []*sql.Stmt{
 		s.getByURL, s.insertBlob, s.insertURL,
+		s.setFilename, s.getFilename,
 		s.touchBlob, s.deleteURLs, s.deleteBlob,
 		s.totalSize, s.listLRU,
 	} {

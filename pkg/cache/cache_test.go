@@ -39,6 +39,46 @@ func writeTmp(t *testing.T, c *cache.Cache, content []byte) (path, sha256hex str
 	return f.Name(), hex.EncodeToString(h[:])
 }
 
+func TestRecordAndGetFilename(t *testing.T) {
+	c := openTestCache(t)
+	ctx := context.Background()
+
+	const rawURL = "https://example.com/api/access/datafile/6154417"
+	tmpPath, hash := writeTmp(t, c, []byte("zip bytes"))
+	if err := c.Put(ctx, rawURL, tmpPath, hash); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	// No filename recorded yet.
+	if fn, err := c.Filename(ctx, rawURL); err != nil || fn != "" {
+		t.Fatalf("Filename before record = (%q, %v), want (\"\", nil)", fn, err)
+	}
+
+	if err := c.RecordFilename(ctx, rawURL, "adamson.zip"); err != nil {
+		t.Fatalf("RecordFilename: %v", err)
+	}
+	fn, err := c.Filename(ctx, rawURL)
+	if err != nil {
+		t.Fatalf("Filename: %v", err)
+	}
+	if fn != "adamson.zip" {
+		t.Errorf("Filename = %q, want %q", fn, "adamson.zip")
+	}
+
+	// Empty filename is a no-op and must not clobber the recorded value.
+	if err := c.RecordFilename(ctx, rawURL, ""); err != nil {
+		t.Fatalf("RecordFilename(\"\"): %v", err)
+	}
+	if fn, _ := c.Filename(ctx, rawURL); fn != "adamson.zip" {
+		t.Errorf("Filename after empty record = %q, want unchanged %q", fn, "adamson.zip")
+	}
+
+	// Unknown URL returns empty, not an error.
+	if fn, err := c.Filename(ctx, "https://example.com/unknown"); err != nil || fn != "" {
+		t.Errorf("Filename(unknown) = (%q, %v), want (\"\", nil)", fn, err)
+	}
+}
+
 func TestPutThenGet(t *testing.T) {
 	c := openTestCache(t)
 	ctx := context.Background()

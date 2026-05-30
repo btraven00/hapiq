@@ -64,10 +64,14 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 			if err := c.Materialize(hash, destPath); err != nil {
 				return FetchResult{}, fmt.Errorf("materialize: %w", err)
 			}
+			// No HTTP response on a hit; recover the filename recorded at store time
+			// so callers can still name the file by its Content-Disposition.
+			cachedName, _ := c.Filename(ctx, rawURL)
 			return FetchResult{
-				SHA256: hash,
-				N:      size,
-				Hit:    true,
+				SHA256:   hash,
+				N:        size,
+				Filename: cachedName,
+				Hit:      true,
 			}, nil
 		}
 	}
@@ -103,6 +107,9 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 			_ = os.Remove(tmpPath)
 			return directFetch(ctx, client, rawURL, destPath, opts.ExtraHeaders)
 		}
+
+		// Persist the resolved filename so a later cache hit can reproduce it.
+		_ = c.RecordFilename(ctx, rawURL, filename)
 
 		if err := c.Materialize(sha256hex, destPath); err != nil {
 			return FetchResult{}, fmt.Errorf("materialize: %w", err)

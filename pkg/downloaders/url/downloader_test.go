@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
@@ -388,6 +389,71 @@ func TestDownload_ContentDispositionOnGET(t *testing.T) {
 	}
 	if len(result.Files) != 1 || filepath.Base(result.Files[0].Path) != "real_name.zip" {
 		t.Errorf("result file path = %+v, want basename real_name.zip", result.Files)
+	}
+}
+
+// TestDownload_ContentDispositionFromCacheHit verifies that the
+// Content-Disposition filename survives a cache hit, where no HTTP GET occurs
+// and the filename must be recovered from the cache index.
+func TestDownload_ContentDispositionFromCacheHit(t *testing.T) {
+	const body = "payload"
+	getCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getCount++
+			w.Header().Set("Content-Disposition", `attachment; filename="real_name.zip"`)
+			_, _ = w.Write([]byte(body))
+		}
+	}))
+	defer srv.Close()
+
+	c, err := cache.Open(cache.Config{Dir: t.TempDir(), LinkStrategy: cache.StrategyCopy})
+	if err != nil {
+		t.Fatalf("cache.Open: %v", err)
+	}
+	defer c.Close()
+	ctx := cache.WithCache(context.Background(), c)
+
+	d := New(WithTimeout(5 * time.Second))
+	url := srv.URL + "/6154417"
+
+	// First download: cache miss, performs the GET, records the filename.
+	dir1 := t.TempDir()
+	r1, err := d.Download(ctx, &downloaders.DownloadRequest{
+		ID: url, OutputDir: dir1,
+		Options: &downloaders.DownloadOptions{NonInteractive: true},
+	})
+	if err != nil || !r1.Success {
+		t.Fatalf("first Download failed: err=%v result=%+v", err, r1)
+	}
+	if _, err := os.Stat(filepath.Join(dir1, "real_name.zip")); err != nil {
+		t.Fatalf("first download not named from Content-Disposition: %v", err)
+	}
+	if getCount != 1 {
+		t.Fatalf("expected 1 GET on miss, got %d", getCount)
+	}
+
+	// Second download into a fresh dir: cache hit (no GET) must still produce
+	// the Content-Disposition filename, not the URL basename.
+	dir2 := t.TempDir()
+	r2, err := d.Download(ctx, &downloaders.DownloadRequest{
+		ID: url, OutputDir: dir2,
+		Options: &downloaders.DownloadOptions{NonInteractive: true},
+	})
+	if err != nil || !r2.Success {
+		t.Fatalf("second Download failed: err=%v result=%+v", err, r2)
+	}
+	if getCount != 1 {
+		t.Errorf("expected no further GET on cache hit, got %d total", getCount)
+	}
+	if len(r2.Files) != 1 || !r2.Files[0].CacheHit {
+		t.Errorf("expected a cache hit on second download, got %+v", r2.Files)
+	}
+	if _, err := os.Stat(filepath.Join(dir2, "real_name.zip")); err != nil {
+		t.Errorf("cache-hit download not named from Content-Disposition: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir2, "6154417")); err == nil {
+		t.Error("stale URL-basename file should not exist after cache-hit rename")
 	}
 }
 

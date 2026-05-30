@@ -145,6 +145,39 @@ func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) erro
 	return nil
 }
 
+// RecordFilename associates a resolved filename with rawURL. This is best-effort
+// metadata (e.g. from a Content-Disposition header) used to name materialized
+// files on a later cache hit, where no HTTP response is available. A no-op when
+// filename is empty or the URL has no index row yet.
+func (c *Cache) RecordFilename(ctx context.Context, rawURL, filename string) error {
+	if filename == "" {
+		return nil
+	}
+	canonical, err := canonicalizeURL(rawURL)
+	if err != nil {
+		return err
+	}
+	_, err = c.s.setFilename.ExecContext(ctx, filename, canonical)
+	return err
+}
+
+// Filename returns the filename recorded for rawURL via RecordFilename, or ""
+// if none is known (unindexed URL, or recorded before this column existed).
+func (c *Cache) Filename(ctx context.Context, rawURL string) (string, error) {
+	canonical, err := canonicalizeURL(rawURL)
+	if err != nil {
+		return "", err
+	}
+	var fn sql.NullString
+	row := c.s.getFilename.QueryRowContext(ctx, canonical)
+	if err := row.Scan(&fn); err == sql.ErrNoRows {
+		return "", nil
+	} else if err != nil {
+		return "", fmt.Errorf("cache filename lookup: %w", err)
+	}
+	return fn.String, nil
+}
+
 // Materialize links or copies the blob identified by sha256hex to destPath,
 // using the strategy configured in cfg.LinkStrategy.
 func (c *Cache) Materialize(sha256hex, destPath string) error {
