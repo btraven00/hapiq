@@ -478,6 +478,52 @@ func TestFilenameFromURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		rawURL string
+		want   string
+	}{
+		{
+			"figshare web host rewritten to api host",
+			"https://figshare.com/ndownloader/files/44477939",
+			"https://ndownloader.figshare.com/files/44477939",
+		},
+		{
+			"figshare www prefix rewritten",
+			"https://www.figshare.com/ndownloader/files/44477939",
+			"https://ndownloader.figshare.com/files/44477939",
+		},
+		{
+			"figshare api host left unchanged",
+			"https://ndownloader.figshare.com/files/44477939",
+			"https://ndownloader.figshare.com/files/44477939",
+		},
+		{
+			"non-ndownloader figshare path left unchanged",
+			"https://figshare.com/articles/dataset/foo/24049200",
+			"https://figshare.com/articles/dataset/foo/24049200",
+		},
+		{
+			"unrelated host left unchanged",
+			"https://example.com/ndownloader/files/1",
+			"https://example.com/ndownloader/files/1",
+		},
+		{
+			"unparseable url returned verbatim",
+			"://not a url",
+			"://not a url",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeURL(tt.rawURL); got != tt.want {
+				t.Errorf("normalizeURL(%q) = %q, want %q", tt.rawURL, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestOptions(t *testing.T) {
 	d := New(WithVerbose(true), WithTimeout(30*time.Second))
 	if !d.verbose {

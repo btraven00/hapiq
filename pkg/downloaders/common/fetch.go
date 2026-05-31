@@ -11,8 +11,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/btraven00/hapiq/pkg/cache"
+)
+
+// Tunables for polling a server that answers 202 Accepted, meaning the resource
+// is being generated server-side (e.g. figshare large-file downloads). The GET
+// is re-issued after a growing backoff until a final status arrives, the budget
+// is exhausted, or the context is cancelled. Declared as vars so tests can
+// shrink the delays.
+var (
+	acceptedInitialBackoff = 2 * time.Second
+	acceptedMaxBackoff     = 30 * time.Second
+	acceptedMaxRetries     = 30
 )
 
 // FetchOptions parameterises Fetch.
@@ -160,15 +172,7 @@ func directFetch(ctx context.Context, client *http.Client, rawURL, destPath stri
 // not (e.g. storage backends that only set Content-Disposition on the redirect
 // target).
 func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra map[string]string, w io.Writer) (int64, string, string, string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
-	if err != nil {
-		return 0, "", "", "", err
-	}
-	for k, v := range extra {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := getWaitingForReady(ctx, client, rawURL, extra)
 	if err != nil {
 		return 0, "", "", "", err
 	}
@@ -186,6 +190,55 @@ func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra
 
 	filename := FilenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
 	return n, hex.EncodeToString(h.Sum(nil)), resp.Header.Get("Content-Type"), filename, nil
+}
+
+// getWaitingForReady issues a GET for rawURL, transparently polling while the
+// server answers 202 Accepted (the resource is still being generated). It
+// returns the first response whose status is not 202, an error if the polling
+// budget is exhausted while still 202, or the context error on cancellation.
+// The caller owns resp.Body.
+func getWaitingForReady(ctx context.Context, client *http.Client, rawURL string, extra map[string]string) (*http.Response, error) {
+	backoff := acceptedInitialBackoff
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", rawURL, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range extra {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusAccepted {
+			return resp, nil
+		}
+
+		// 202: resource not ready yet. Drain and close the body so the
+		// connection can be reused, then back off before retrying.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+
+		if attempt >= acceptedMaxRetries {
+			return nil, fmt.Errorf("server still returns HTTP 202 (resource not ready) after %d attempts for %s", attempt+1, rawURL)
+		}
+
+		_, _ = fmt.Fprintf(os.Stderr, "waiting for server to prepare %s (HTTP 202), retrying in %s...\n", rawURL, backoff)
+
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+
+		if backoff *= 2; backoff > acceptedMaxBackoff {
+			backoff = acceptedMaxBackoff
+		}
+	}
 }
 
 // FilenameFromContentDisposition extracts the filename parameter from a
