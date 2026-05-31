@@ -648,9 +648,14 @@ func verifyExpectedHash(result *downloaders.DownloadResult, outputDir, spec stri
 
 	f := files[0]
 
-	// Resolve to an absolute path (some downloaders store relative paths).
+	// Resolve the path the downloader actually wrote. Downloaders store the
+	// full destination in Path (already joined with the output dir), which may
+	// be absolute or relative to the working directory. Use it verbatim when it
+	// resolves to an existing file; only fall back to joining with outputDir
+	// when it does not (e.g. a downloader that stored a bare basename), so we
+	// never double-join the output dir onto an already-joined relative path.
 	absPath := f.Path
-	if !filepath.IsAbs(absPath) {
+	if _, err := os.Stat(absPath); err != nil && !filepath.IsAbs(absPath) {
 		absPath = filepath.Join(outputDir, absPath)
 	}
 
