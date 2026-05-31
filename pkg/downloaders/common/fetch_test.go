@@ -2,8 +2,12 @@ package common
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -89,6 +93,60 @@ func TestGetWaitingForReady_ContextCancelled(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("error = %v, want context.Canceled", err)
+	}
+}
+
+// TestFetch_202IntegrationWritesFile drives the full public Fetch pipeline
+// (no cache) against a server that answers 202 twice before serving the bytes,
+// the way figshare's web download host behaves. It asserts Fetch transparently
+// polls and ends up with the correct file content, hash, and Content-Disposition
+// filename on disk.
+func TestFetch_202IntegrationWritesFile(t *testing.T) {
+	withFastBackoff(t)
+
+	const body = "scfoundation norman h5ad payload"
+	want := sha256.Sum256([]byte(body))
+	wantHex := hex.EncodeToString(want[:])
+
+	var gets int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.AddInt32(&gets, 1) <= 2 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="real.h5ad"`)
+		_, _ = io.WriteString(w, body)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out.bin")
+	fr, err := Fetch(context.Background(), srv.URL, dest, FetchOptions{Client: srv.Client()})
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+
+	if fr.SHA256 != wantHex {
+		t.Errorf("SHA256 = %q, want %q", fr.SHA256, wantHex)
+	}
+	if fr.N != int64(len(body)) {
+		t.Errorf("N = %d, want %d", fr.N, len(body))
+	}
+	if fr.Filename != "real.h5ad" {
+		t.Errorf("Filename = %q, want %q", fr.Filename, "real.h5ad")
+	}
+	if fr.Hit {
+		t.Error("Hit = true, want false (cache miss)")
+	}
+	got, readErr := os.ReadFile(dest)
+	if readErr != nil {
+		t.Fatalf("reading written file: %v", readErr)
+	}
+	if string(got) != body {
+		t.Errorf("file content = %q, want %q", got, body)
+	}
+	if n := atomic.LoadInt32(&gets); n != 3 {
+		t.Errorf("server GETs = %d, want 3 (two 202s then 200)", n)
 	}
 }
 
