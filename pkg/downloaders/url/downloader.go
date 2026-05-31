@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/btraven00/hapiq/internal/version"
@@ -91,7 +92,7 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	start := time.Now()
 	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
 
-	rawURL := req.ID
+	rawURL := normalizeURL(req.ID)
 
 	// Resolve the filename once: prefer Content-Disposition from a HEAD request,
 	// fall back to the URL path basename.
@@ -220,6 +221,28 @@ func resolveFilename(ctx context.Context, rawURL string, client *http.Client) st
 		}
 	}
 	return filenameFromURL(rawURL)
+}
+
+// normalizeURL rewrites known-problematic download URLs to an equivalent that
+// serves bytes directly. Currently it maps figshare's web download host
+// (https://figshare.com/ndownloader/files/<id>), which answers HTTP 202 while
+// it generates the file server-side, to the API host
+// (https://ndownloader.figshare.com/files/<id>), which streams the bytes
+// without the 202 dance. Any URL it does not recognise is returned unchanged.
+func normalizeURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	host := strings.TrimPrefix(u.Host, "www.")
+	if host == "figshare.com" && strings.HasPrefix(u.Path, "/ndownloader/") {
+		u.Host = "ndownloader.figshare.com"
+		u.Path = strings.TrimPrefix(u.Path, "/ndownloader")
+		return u.String()
+	}
+
+	return rawURL
 }
 
 // filenameFromURL derives a filename from a URL's path component.
