@@ -19,6 +19,7 @@ import (
 	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
+	"github.com/btraven00/hapiq/pkg/downloaders/sharepoint"
 )
 
 // URLDownloader downloads a single file from a user-supplied HTTP(S) URL.
@@ -66,13 +67,24 @@ func (d *URLDownloader) Validate(_ context.Context, id string) (*downloaders.Val
 
 // GetMetadata issues a HEAD request to retrieve size and content-type.
 func (d *URLDownloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
+	headURL, nameHint, err := d.resolveURL(ctx, id)
+	if err != nil {
+		// Resolution failed (e.g. a sign-in-only share link); return what we can.
+		return &downloaders.Metadata{
+			Source: d.GetSourceType(), ID: id, Title: filenameFromURL(id), FileCount: 1,
+		}, nil
+	}
+	title := nameHint
+	if title == "" {
+		title = filenameFromURL(headURL)
+	}
 	meta := &downloaders.Metadata{
 		Source:    d.GetSourceType(),
 		ID:        id,
-		Title:     filenameFromURL(id),
+		Title:     title,
 		FileCount: 1,
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, id, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, headURL, http.NoBody)
 	if err != nil {
 		return meta, nil
 	}
@@ -92,11 +104,19 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	start := time.Now()
 	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
 
-	rawURL := normalizeURL(req.ID)
+	rawURL, nameHint, err := d.resolveURL(ctx, req.ID)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, nil
+	}
 
-	// Resolve the filename once: prefer Content-Disposition from a HEAD request,
-	// fall back to the URL path basename.
-	filename := resolveFilename(ctx, rawURL, d.client)
+	// Resolve the filename once. A resolver-supplied hint (e.g. SharePoint) wins;
+	// otherwise prefer Content-Disposition from a HEAD request, falling back to
+	// the URL path basename.
+	filename := nameHint
+	if filename == "" {
+		filename = resolveFilename(ctx, rawURL, d.client)
+	}
 
 	opts := req.Options
 	if opts != nil && opts.DryRun {
@@ -243,6 +263,21 @@ func normalizeURL(rawURL string) string {
 	}
 
 	return rawURL
+}
+
+// resolveURL turns a user-supplied ID into a byte-serving download URL. For
+// SharePoint share links it follows the link to discover the real path and
+// returns a filename hint; for everything else it applies normalizeURL and
+// returns no hint.
+func (d *URLDownloader) resolveURL(ctx context.Context, id string) (downloadURL, nameHint string, err error) {
+	if sharepoint.IsShareURL(id) {
+		dl, name, err := sharepoint.Resolve(ctx, d.client, id)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve sharepoint link: %w", err)
+		}
+		return dl, name, nil
+	}
+	return normalizeURL(id), "", nil
 }
 
 // filenameFromURL derives a filename from a URL's path component.
