@@ -276,7 +276,13 @@ func (d *URLDownloader) downloadDirectory(ctx context.Context, dirURL string, re
 func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outputDir string, opts *downloaders.DownloadOptions) (*downloaders.FileInfo, []string, error) {
 	var warnings []string
 
-	targetPath := filepath.Join(outputDir, common.SanitizeFilename(filename))
+	// This is the line that turns a remote-supplied name into a write, so it
+	// does not delegate its own safety: SanitizeFilename maps separators to
+	// "_" already, and safeJoin then proves the result is inside outputDir.
+	targetPath, err := safeJoin(outputDir, common.SanitizeFilename(filename))
+	if err != nil {
+		return nil, warnings, err
+	}
 
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		switch {
@@ -311,7 +317,7 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	// The bytes on disk are sniffed rather than the response header trusted: a
 	// cache hit carries no Content-Type (and an index page cached before this
 	// check existed would otherwise sail through on every later run).
-	if filepath.Ext(filename) == "" && fileLooksLikeHTML(targetPath) {
+	if filepath.Ext(filename) == "" && fileLooksLikeHTML(outputDir, filepath.Base(targetPath)) {
 		_ = os.Remove(targetPath)
 		return nil, warnings, fmt.Errorf(
 			"%s served an HTML page, not a file — if it is a directory, ask for it "+
@@ -323,7 +329,12 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	// header on a redirect target). If so, rename the downloaded file to it.
 	if fr.Filename != "" {
 		if better := common.SanitizeFilename(fr.Filename); better != "" && better != filepath.Base(targetPath) {
-			newPath := filepath.Join(outputDir, better)
+			// Also remote input: the header names this file, so the rename
+			// target gets the same containment proof as the original write.
+			newPath, err := safeJoin(outputDir, better)
+			if err != nil {
+				return nil, warnings, err
+			}
 			if err := os.Rename(targetPath, newPath); err == nil {
 				targetPath = newPath
 				filename = fr.Filename

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -75,14 +76,74 @@ func (d *URLDownloader) listDirectory(ctx context.Context, rawURL string) ([]ind
 	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		return nil, fmt.Errorf("listing %s: parse JSON index: %w", rawURL, err)
 	}
+
+	// Entry names are remote input and are about to become both a filesystem
+	// path and a URL path. Vet them here, at the one place they enter the
+	// program, rather than relying on a sanitizer further downstream: a name
+	// like "../../.ssh/authorized_keys" must never reach a file write, and one
+	// bad name means the listing is not trustworthy, so the whole thing fails.
+	for _, e := range entries {
+		if e.isDir() {
+			continue
+		}
+		if !isPlainName(e.Name) {
+			return nil, fmt.Errorf(
+				"listing %s: refusing entry %q — a directory index may only name files "+
+					"inside itself, not paths", rawURL, e.Name)
+		}
+	}
+
 	return entries, nil
 }
 
-// fileLooksLikeHTML sniffs the first bytes of a downloaded file. It inspects
-// the file rather than the response header so that the verdict is the same
-// whether the bytes came off the network or out of the local cache.
-func fileLooksLikeHTML(path string) bool {
-	f, err := os.Open(path)
+// isPlainName reports whether name is a bare file name: no path separators, no
+// parent references, nothing that could address anything but a file sitting in
+// the listed directory.
+func isPlainName(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, `/\`) || strings.ContainsRune(name, 0) {
+		return false
+	}
+	// Belt and braces: whatever the separator rules of this platform, the name
+	// must be its own basename.
+	return name == filepath.Base(name)
+}
+
+// safeJoin places name inside dir and proves the result stayed there.
+//
+// name derives from remote input -- a directory index entry, or a
+// Content-Disposition header -- so containment is verified rather than
+// assumed. filepath.Join alone is not enough: it cleans "../" away silently,
+// which does resolve the traversal but leaves the caller unable to tell that
+// one was attempted.
+func safeJoin(dir, name string) (string, error) {
+	target := filepath.Join(dir, filepath.Base(name))
+
+	rel, err := filepath.Rel(dir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("refusing to place %q outside %s", name, dir)
+	}
+
+	return target, nil
+}
+
+// fileLooksLikeHTML sniffs the first bytes of a file inside dir.
+//
+// It inspects the file rather than the response header so that the verdict is
+// the same whether the bytes came off the network or out of the local cache.
+// The read goes through os.Root, which confines it to dir at the OS level: a
+// name check cannot see a symlink already sitting in the output directory, and
+// this is a read of a path built from a remote name.
+func fileLooksLikeHTML(dir, name string) bool {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = root.Close() }()
+
+	f, err := root.Open(filepath.Base(name))
 	if err != nil {
 		return false
 	}

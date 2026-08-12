@@ -184,6 +184,62 @@ func TestDownload_HTMLRejectedRegardlessOfHeader(t *testing.T) {
 	}
 }
 
+// A directory index is remote input. An entry naming a path outside the
+// directory must abort the download, not get quietly flattened into a file
+// name: a listing that tries it is not one to take the rest of on trust.
+func TestDownload_RejectsTraversalInIndex(t *testing.T) {
+	for _, name := range []string{
+		"../../../../tmp/pwned",
+		"..",
+		"sub/nested.h5ad",
+		`..\..\windows`,
+		"/etc/passwd",
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(fmt.Appendf(nil,
+					`[{"name":%q,"size":4,"is_dir":false},{"name":"ok.h5ad","size":2,"is_dir":false}]`, name))
+			}))
+			defer srv.Close()
+
+			dir := t.TempDir()
+			d := New(WithTimeout(5 * time.Second))
+			result, err := d.Download(context.Background(), newRequest(dir, srv.URL+"/data/", nil))
+			if err != nil {
+				t.Fatalf("Download() error: %v", err)
+			}
+			if result.Success {
+				t.Fatalf("Download() Success=true; expected entry %q to be refused", name)
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Errorf("output dir has %d entries, want none", len(entries))
+			}
+		})
+	}
+}
+
+func TestIsPlainName(t *testing.T) {
+	tests := map[string]bool{
+		"be1.h5ad":       true,
+		".hidden":        true,
+		"with space.tsv": true,
+		"":               false,
+		".":              false,
+		"..":             false,
+		"../escape":      false,
+		"sub/file":       false,
+		`sub\file`:       false,
+		"/absolute":      false,
+		"nul\x00byte":    false,
+	}
+	for name, want := range tests {
+		if got := isPlainName(name); got != want {
+			t.Errorf("isPlainName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
 // A server with no JSON index must say so rather than hand back its HTML page.
 func TestDownload_DirectoryWithoutJSONIndex(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
