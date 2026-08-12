@@ -57,6 +57,7 @@ var (
 	includeSRA           bool
 	expectedHash         string
 	forceOverwrite       bool
+	directoryMode        bool
 )
 
 // downloadCmd represents the download command.
@@ -104,6 +105,20 @@ func runDownload(_ *cobra.Command, args []string) error {
 
 	if err := validateAndPrepareDownload(); err != nil {
 		return err
+	}
+
+	// --directory declares the intent, so the URL is canonicalised to the
+	// trailing-slash form the url downloader recognises. Doing it once here
+	// means validation, metadata and download all agree on what this ID is,
+	// instead of each re-deriving it (and disagreeing when the slash is
+	// missing).
+	if directoryMode {
+		if sourceType != "url" {
+			return fmt.Errorf("--directory applies to the url source, not %q", sourceType)
+		}
+		if !strings.HasSuffix(id, "/") {
+			id += "/"
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
@@ -783,6 +798,9 @@ func init() {
 		"enumerate files that would be downloaded without writing anything to disk")
 	downloadCmd.Flags().IntVar(&limitFiles, "limit-files", 0,
 		"stop after downloading this many files — useful for testing (0 = no limit)")
+	downloadCmd.Flags().BoolVar(&directoryMode, "directory", false,
+		"treat the URL as a directory: read its JSON index and download every file listed "+
+			"(url source only; a URL ending in / is treated this way anyway)")
 	downloadCmd.Flags().BoolVar(&includeSRA, "raw", false,
 		"also download raw FASTQ files via ENA/SRA (prompts for confirmation, use -y to skip)")
 
