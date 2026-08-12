@@ -1,9 +1,17 @@
-// Package url implements a hapiq downloader that fetches a single file
-// directly from an arbitrary HTTP(S) URL. The "ID" is the URL itself.
+// Package url implements a hapiq downloader that fetches directly from an
+// arbitrary HTTP(S) URL. The "ID" is the URL itself.
 // In manifests use the dedicated url: field:
 //
 //   - identifier: my-file
 //     url: https://example.com/file.csv
+//
+// A URL whose path ends in "/" is treated as a directory: its files are
+// enumerated from the server's JSON index (Caddy file_server browse, nginx
+// autoindex_format json) and fetched into the output directory, subject to the
+// usual --include-ext / --filename-pattern / --limit-files filters.
+//
+//   - identifier: my-dataset
+//     url: https://example.com/datasets/be1-fixture/
 package url
 
 import (
@@ -78,6 +86,30 @@ func (d *URLDownloader) GetMetadata(ctx context.Context, id string) (*downloader
 	if title == "" {
 		title = filenameFromURL(headURL)
 	}
+
+	// A directory is described by its listing, not by a HEAD. Errors are
+	// returned rather than swallowed here: without a listing the only thing
+	// left to do is fetch the index page as if it were data.
+	if isDirectoryURL(headURL) {
+		entries, err := d.listDirectory(ctx, headURL)
+		if err != nil {
+			return nil, err
+		}
+		meta := &downloaders.Metadata{
+			Source: d.GetSourceType(),
+			ID:     id,
+			Title:  title,
+		}
+		for _, e := range entries {
+			if e.isDir() {
+				continue
+			}
+			meta.FileCount++
+			meta.TotalSize += e.Size
+		}
+		return meta, nil
+	}
+
 	meta := &downloaders.Metadata{
 		Source:    d.GetSourceType(),
 		ID:        id,
@@ -99,7 +131,8 @@ func (d *URLDownloader) GetMetadata(ctx context.Context, id string) (*downloader
 	return meta, nil
 }
 
-// Download fetches the URL and writes the file into req.OutputDir.
+// Download fetches req.ID into req.OutputDir: one file, or -- when the URL
+// addresses a directory -- every file its index lists.
 func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
 	start := time.Now()
 	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
@@ -108,6 +141,10 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		return result, nil
+	}
+
+	if isDirectoryURL(rawURL) {
+		return d.downloadDirectory(ctx, rawURL, req, start)
 	}
 
 	// Resolve the filename once. A resolver-supplied hint (e.g. SharePoint) wins;
@@ -133,13 +170,118 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		return result, nil
 	}
 
-	targetPath := filepath.Join(req.OutputDir, common.SanitizeFilename(filename))
+	fi, warnings, err := d.downloadOne(ctx, rawURL, filename, req.OutputDir, opts)
+	result.Warnings = append(result.Warnings, warnings...)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, nil
+	}
+	if fi == nil { // an existing file was left in place
+		result.Success = true
+		return result, nil
+	}
+
+	result.Files = append(result.Files, *fi)
+	result.BytesDownloaded = fi.Size
+	result.BytesTotal = fi.Size
+	result.Duration = time.Since(start)
+	result.Success = true
+
+	d.writeWitness(req, result, rawURL, start)
+
+	return result, nil
+}
+
+// downloadDirectory fetches every file a directory index lists. Subdirectories
+// are skipped, not walked: published datasets are flat, and recursion needs a
+// depth bound and symlink-cycle handling to be safe.
+//
+// A failure on any one file aborts the whole directory. A partially fetched
+// dataset that reports success is worse than one that fails: the caller cannot
+// tell the difference, and downstream stages consume whatever landed.
+func (d *URLDownloader) downloadDirectory(ctx context.Context, dirURL string, req *downloaders.DownloadRequest, start time.Time) (*downloaders.DownloadResult, error) {
+	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
+
+	entries, err := d.listDirectory(ctx, dirURL)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, nil
+	}
+
+	opts := req.Options
+
+	selected := make([]indexEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.isDir() || e.Name == "" {
+			continue
+		}
+		if !downloaders.ShouldDownload(e.Name, e.Size, opts) {
+			continue
+		}
+		selected = append(selected, e)
+		if opts != nil && opts.LimitFiles > 0 && len(selected) >= opts.LimitFiles {
+			break
+		}
+	}
+
+	if len(selected) == 0 {
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("no files to download in %s (%d entries listed)", dirURL, len(entries)))
+		return result, nil
+	}
+
+	if opts != nil && opts.DryRun {
+		for _, e := range selected {
+			result.Files = append(result.Files, downloaders.FileInfo{
+				OriginalName: e.Name,
+				SourceURL:    childURL(dirURL, e.Name),
+				Size:         e.Size,
+			})
+			result.BytesTotal += e.Size
+		}
+		result.Success = true
+		return result, nil
+	}
+
+	if err := common.EnsureDirectory(req.OutputDir); err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, nil
+	}
+
+	for _, e := range selected {
+		fi, warnings, err := d.downloadOne(ctx, childURL(dirURL, e.Name), e.Name, req.OutputDir, opts)
+		result.Warnings = append(result.Warnings, warnings...)
+		if err != nil {
+			result.Errors = append(result.Errors, err.Error())
+			return result, nil
+		}
+		if fi == nil { // an existing file was left in place
+			continue
+		}
+		result.Files = append(result.Files, *fi)
+		result.BytesDownloaded += fi.Size
+	}
+
+	result.BytesTotal = result.BytesDownloaded
+	result.Duration = time.Since(start)
+	result.Success = true
+
+	d.writeWitness(req, result, dirURL, start)
+
+	return result, nil
+}
+
+// downloadOne fetches rawURL into outputDir as filename. A nil FileInfo with a
+// nil error means an existing file was deliberately left in place.
+func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outputDir string, opts *downloaders.DownloadOptions) (*downloaders.FileInfo, []string, error) {
+	var warnings []string
+
+	targetPath := filepath.Join(outputDir, common.SanitizeFilename(filename))
 
 	if _, statErr := os.Stat(targetPath); statErr == nil {
 		switch {
 		case opts != nil && opts.SkipExisting:
-			result.Success = true
-			return result, nil
+			return nil, nil, nil
 		case opts != nil && (opts.Force || opts.NonInteractive):
 			// Force or --yes: overwrite silently.
 		default:
@@ -147,8 +289,7 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 				fmt.Sprintf("file %q already exists. Overwrite?", filename),
 			)
 			if err != nil || !confirmed {
-				result.Success = true
-				return result, nil
+				return nil, nil, nil
 			}
 		}
 	}
@@ -159,8 +300,22 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	fr, err := common.Fetch(ctx, rawURL, targetPath, common.FetchOptions{Client: d.client})
 	if err != nil {
-		result.Errors = append(result.Errors, err.Error())
-		return result, nil
+		return nil, warnings, err
+	}
+
+	// A directory requested without its trailing slash lands here: the server
+	// answers with its browsable index, and storing that page as though it were
+	// the dataset is the failure this guard exists to prevent. An extensionless
+	// URL answering in HTML is that case; a genuine .html file still downloads.
+	//
+	// The bytes on disk are sniffed rather than the response header trusted: a
+	// cache hit carries no Content-Type (and an index page cached before this
+	// check existed would otherwise sail through on every later run).
+	if filepath.Ext(filename) == "" && fileLooksLikeHTML(targetPath) {
+		_ = os.Remove(targetPath)
+		return nil, warnings, fmt.Errorf(
+			"%s served an HTML page, not a file — if it is a directory, ask for it "+
+				"with a trailing slash (%s/)", rawURL, strings.TrimSuffix(rawURL, "/"))
 	}
 
 	// The GET response may reveal a better filename via Content-Disposition than
@@ -168,18 +323,17 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	// header on a redirect target). If so, rename the downloaded file to it.
 	if fr.Filename != "" {
 		if better := common.SanitizeFilename(fr.Filename); better != "" && better != filepath.Base(targetPath) {
-			newPath := filepath.Join(req.OutputDir, better)
+			newPath := filepath.Join(outputDir, better)
 			if err := os.Rename(targetPath, newPath); err == nil {
 				targetPath = newPath
 				filename = fr.Filename
 			} else {
-				result.Warnings = append(result.Warnings,
-					fmt.Sprintf("could not rename to %q: %v", better, err))
+				warnings = append(warnings, fmt.Sprintf("could not rename to %q: %v", better, err))
 			}
 		}
 	}
 
-	fi := downloaders.FileInfo{
+	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filename,
 		SourceURL:    rawURL,
@@ -189,43 +343,45 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		CacheHit:     fr.Hit,
 		DownloadTime: time.Now(),
 		ContentType:  fr.ContentType,
+	}, warnings, nil
+}
+
+// writeWitness records provenance for everything downloaded in this run.
+func (d *URLDownloader) writeWitness(req *downloaders.DownloadRequest, result *downloaders.DownloadResult, resolvedURL string, start time.Time) {
+	if req.Metadata == nil {
+		return
 	}
 
-	result.Files = append(result.Files, fi)
-	result.BytesDownloaded = fr.N
-	result.BytesTotal = fr.N
-	result.Duration = time.Since(start)
-	result.Success = true
+	req.Metadata.TotalSize = result.BytesDownloaded
+	req.Metadata.FileCount = len(result.Files)
 
-	if req.Metadata != nil {
-		req.Metadata.TotalSize = fr.N
-		req.Metadata.FileCount = 1
-
-		witness := &downloaders.WitnessFile{
-			HapiqVersion: version.String(),
-			DownloadTime: start,
-			Source:       d.GetSourceType(),
-			OriginalID:   req.ID,
-			ResolvedURL:  rawURL,
-			Metadata:     req.Metadata,
-			Files:        []downloaders.FileWitness{downloaders.FileWitness(fi)},
-			DownloadStats: &downloaders.DownloadStats{
-				Duration:        result.Duration,
-				BytesTotal:      fr.N,
-				BytesDownloaded: fr.N,
-				FilesTotal:      1,
-				FilesDownloaded: 1,
-				AverageSpeed:    downloaders.Speed(fr.N, result.Duration),
-			},
-		}
-		if err := common.WriteWitnessFile(req.OutputDir, witness); err != nil {
-			result.Warnings = append(result.Warnings, "witness file: "+err.Error())
-		} else {
-			result.WitnessFile = filepath.Join(req.OutputDir, "hapiq.json")
-		}
+	files := make([]downloaders.FileWitness, 0, len(result.Files))
+	for _, fi := range result.Files {
+		files = append(files, downloaders.FileWitness(fi))
 	}
 
-	return result, nil
+	witness := &downloaders.WitnessFile{
+		HapiqVersion: version.String(),
+		DownloadTime: start,
+		Source:       d.GetSourceType(),
+		OriginalID:   req.ID,
+		ResolvedURL:  resolvedURL,
+		Metadata:     req.Metadata,
+		Files:        files,
+		DownloadStats: &downloaders.DownloadStats{
+			Duration:        result.Duration,
+			BytesTotal:      result.BytesDownloaded,
+			BytesDownloaded: result.BytesDownloaded,
+			FilesTotal:      len(files),
+			FilesDownloaded: len(files),
+			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
+		},
+	}
+	if err := common.WriteWitnessFile(req.OutputDir, witness); err != nil {
+		result.Warnings = append(result.Warnings, "witness file: "+err.Error())
+	} else {
+		result.WitnessFile = filepath.Join(req.OutputDir, "hapiq.json")
+	}
 }
 
 // resolveFilename determines the output filename: Content-Disposition wins over
