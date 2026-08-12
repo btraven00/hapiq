@@ -283,8 +283,20 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	if err != nil {
 		return nil, warnings, err
 	}
+	targetName := filepath.Base(targetPath)
 
-	if _, statErr := os.Stat(targetPath); statErr == nil {
+	// Every operation on the file we are about to write goes through a root
+	// handle. Checking the name is not the same as confining the operation:
+	// a symlink already sitting in outputDir would still redirect a plain
+	// os.Rename or os.Remove, and os.Root refuses to leave the directory at
+	// the OS level rather than on our say-so.
+	root, err := os.OpenRoot(outputDir)
+	if err != nil {
+		return nil, warnings, err
+	}
+	defer func() { _ = root.Close() }()
+
+	if _, statErr := root.Stat(targetName); statErr == nil {
 		switch {
 		case opts != nil && opts.SkipExisting:
 			return nil, nil, nil
@@ -317,8 +329,8 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	// The bytes on disk are sniffed rather than the response header trusted: a
 	// cache hit carries no Content-Type (and an index page cached before this
 	// check existed would otherwise sail through on every later run).
-	if filepath.Ext(filename) == "" && fileLooksLikeHTML(outputDir, filepath.Base(targetPath)) {
-		_ = os.Remove(targetPath)
+	if filepath.Ext(filename) == "" && fileLooksLikeHTML(outputDir, targetName) {
+		_ = root.Remove(targetName)
 		return nil, warnings, fmt.Errorf(
 			"%s served an HTML page, not a file — if it is a directory, ask for it "+
 				"with a trailing slash (%s/)", rawURL, strings.TrimSuffix(rawURL, "/"))
@@ -335,8 +347,9 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 			if err != nil {
 				return nil, warnings, err
 			}
-			if err := os.Rename(targetPath, newPath); err == nil {
+			if err := root.Rename(targetName, filepath.Base(newPath)); err == nil {
 				targetPath = newPath
+				targetName = filepath.Base(newPath)
 				filename = fr.Filename
 			} else {
 				warnings = append(warnings, fmt.Sprintf("could not rename to %q: %v", better, err))
