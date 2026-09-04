@@ -32,20 +32,20 @@ import (
 // (e.g. "NewGEODownloader"). The constructor name is the most stable handle
 // available before the registry is populated at runtime.
 var cachePatternByDownloader = map[string]string{
-	"NewGEODownloader":           "inline",     // pkg/downloaders/geo
+	"NewGEODownloader":           "inline", // pkg/downloaders/geo
 	"NewFigshareDownloader":      "common.Fetch",
 	"NewZenodoDownloader":        "common.Fetch",
-	"NewEnsemblDownloader":       "exception",  // FTP/multi-protocol, see static_test allowlist
-	"NewSRADownloader":           "inline",     // pkg/downloaders/sra
+	"NewEnsemblDownloader":       "exception", // FTP/multi-protocol, see static_test allowlist
+	"NewSRADownloader":           "inline",    // pkg/downloaders/sra
 	"NewVCPDownloader":           "common.Fetch",
 	"NewHCADownloader":           "common.Fetch",
 	"NewBioStudiesDownloader":    "common.Fetch",
 	"NewScPerturbDownloader":     "common.Fetch",
-	"NewExperimentHubDownloader": "inline",     // pkg/downloaders/experimenthub
+	"NewExperimentHubDownloader": "inline", // pkg/downloaders/experimenthub
 	// scanpy and url use unconventional constructor names ("New").
 	// Distinguished by package import alias used in cmd/download.go.
-	"scanpy.New":         "common.Fetch",
-	"urldownloader.New":  "common.Fetch",
+	"scanpy.New":        "common.Fetch",
+	"urldownloader.New": "common.Fetch",
 }
 
 // TestRegistryCoverage scans cmd/download.go for every constructor call that

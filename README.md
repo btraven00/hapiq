@@ -276,6 +276,22 @@ hapiq fetch https://example.com/data.h5ad --out ./data --force
 
 ---
 
+### `hapiq cache serve`
+
+Serve the local blob cache to other hapiq instances so a lab or a workshop
+downloads a dataset once instead of once per machine. Peers verify every blob
+by its SHA-256, so no trust between nodes is required.
+
+```bash
+hapiq cache serve --listen 0.0.0.0:7777
+```
+
+Peers find each other via a static list, an introducer (one hostname that
+gossips the rest), or mDNS on the local link. See
+[docs/lan-sharing.md](docs/lan-sharing.md).
+
+---
+
 ### `hapiq downloaders`
 
 List all registered downloaders with their supported IDs and examples.
@@ -338,6 +354,7 @@ Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
 ## Further reading
 
 - [Local download cache](docs/cache.md) — enable caching to avoid re-fetching the same files
+- [Sharing a cache across a network](docs/lan-sharing.md) — `hapiq cache serve`, so a workshop or lab downloads a dataset once
 
 ---
 

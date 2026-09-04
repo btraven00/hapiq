@@ -15,9 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
-	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/biostudies"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
@@ -124,18 +122,8 @@ func runDownload(_ *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
 	defer cancel()
 
-	if viper.GetString("cache.mode") == "on" {
-		cfg := cache.ConfigFromViper()
-		if c, err := cache.Open(cfg); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
-		} else {
-			defer c.Close()
-			ctx = cache.WithCache(ctx, c)
-			if !quiet {
-				_, _ = fmt.Fprintf(os.Stderr, "Cache enabled: %s\n", cfg.Dir)
-			}
-		}
-	}
+	ctx, closeCache := attachCache(ctx, quiet)
+	defer closeCache()
 
 	printDownloadInfo(sourceType, id)
 
@@ -533,7 +521,7 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(zenodoDownloader); err != nil {
 		return fmt.Errorf("failed to register Zenodo downloader: %w", err)
-    }
+	}
 	// Register Ensembl downloader
 	ensemblDownloader := ensembl.NewEnsemblDownloader(
 		ensembl.WithVerbose(!quiet),

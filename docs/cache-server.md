@@ -17,8 +17,9 @@ We want an opt-in cache that:
 2. **Can be shared across nodes** later. A small REST server serves cached
    blobs by content hash to other hapiq instances, so a lab shares one copy.
 
-First iteration is strictly local (cache + transparent lookup). The server is
-specified but not implemented yet.
+The first iteration was strictly local (cache + transparent lookup); the server
+shipped afterwards as `hapiq cache serve`. Operator-facing usage lives in
+[lan-sharing.md](lan-sharing.md) — this document is the design record.
 
 ## Design decisions (user-confirmed)
 
@@ -28,7 +29,9 @@ specified but not implemented yet.
   dedup across mirror URLs and integrity by construction.
 - **Materialization**: try `ioctl_ficlone` (reflink) → `link(2)` (hardlink) →
   `symlink` → copy. Cross-device falls through to symlink with a warning.
-- **REST server**: sketched in this plan, implemented in a follow-up.
+- **REST server**: sketched in this plan, shipped in a follow-up. Peer
+  discovery (introducer + mDNS) was added at the same time; a static `peers`
+  list alone meant editing config on every machine.
 
 ## Config
 
@@ -148,10 +151,10 @@ on repeat.
 came from network or cache. The stored sha256 is unchanged — the witness
 still reflects ground truth.
 
-## REST server (sketched, not implemented)
+## REST server (implemented)
 
-Single-binary daemon spawned by `hapiq cache serve` (the one subcommand we
-*do* add later — out of scope for this PR but reserving the name).
+Single-binary daemon spawned by `hapiq cache serve`. See
+[docs/lan-sharing.md](lan-sharing.md) for the operator-facing guide.
 
 Endpoints:
 
@@ -160,7 +163,8 @@ Endpoints:
 | GET    | `/v1/blob/{sha256}`     | Stream blob bytes; `ETag: "sha256:<hex>"`.    |
 | HEAD   | `/v1/blob/{sha256}`     | Existence check; returns size + etag.         |
 | GET    | `/v1/resolve?url=...`   | `{sha256, size}` for a canonical URL.         |
-| GET    | `/v1/healthz`           | Liveness.                                     |
+| GET    | `/v1/healthz`           | Liveness (never requires the token).           |
+| GET    | `/v1/peers`             | Peers seen recently — the introducer role.     |
 
 Wire format: raw bytes for blobs; JSON for metadata. Clients verify sha256
 while streaming — untrusted server is fine because the hash is the key.
@@ -289,7 +293,6 @@ WHERE sha256=?`). Kept cheap by batching updates if hit rates get high
 
 ## Out of scope (follow-ups)
 
-- REST server implementation + peer resolution (`hapiq cache serve`).
 - Background eviction daemon / scheduled gc.
 - GEO/SRA downloader migration to `common.Fetch`.
 - Per-blob pinning (manual protection from gc).

@@ -47,9 +47,13 @@ type FetchResult struct {
 	// since the final filename is often only revealed after redirects that a
 	// pre-fetch HEAD request does not expose.
 	Filename string
+	// PeerURL is the base URL of the LAN peer that served this file, or ""
+	// when the bytes came from the local cache or the origin URL.
+	PeerURL string
 	// N is the number of bytes in the file.
 	N int64
-	// Hit is true when the file was served from the local cache.
+	// Hit is true when the file did not come from its origin server — either
+	// the local cache or a peer cache supplied it.
 	Hit bool
 }
 
@@ -85,6 +89,16 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 				Filename: cachedName,
 				Hit:      true,
 			}, nil
+		}
+	}
+
+	// ── LAN peer path ─────────────────────────────────────────────────────────
+	// A peer is just another hapiq cache. Because blobs are addressed by
+	// sha256 and verified below, consulting an untrusted peer is safe: the
+	// worst case is a wasted round-trip and a fall through to the origin.
+	if peers := cache.PeersFromContext(ctx); peers.Len() > 0 {
+		if res, ok := fetchFromPeers(ctx, peers, rawURL, destPath, c); ok {
+			return res, nil
 		}
 	}
 
@@ -147,6 +161,75 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		N:           n,
 		Hit:         false,
 	}, nil
+}
+
+// fetchFromPeers resolves rawURL against the peer set and, on a hit, streams the
+// blob to destPath. It reports false for every failure — a peer is an
+// optimisation, never a reason for a download to fail.
+func fetchFromPeers(ctx context.Context, peers *cache.Peers, rawURL, destPath string, c *cache.Cache) (FetchResult, bool) {
+	hit, ok := peers.Resolve(ctx, rawURL)
+	if !ok {
+		return FetchResult{}, false
+	}
+
+	client := peers.Client()
+	headers := peers.Headers()
+
+	// Without a local cache there is nothing to promote into, so stream
+	// straight to the destination and verify before keeping it.
+	if c == nil {
+		f, err := os.Create(filepath.Clean(destPath)) // #nosec G304 -- caller-controlled destination
+		if err != nil {
+			return FetchResult{}, false
+		}
+		n, gotHash, _, _, err := streamToFile(ctx, client, hit.BlobURL(), headers, f)
+		_ = f.Close()
+		if err != nil || gotHash != hit.SHA256 {
+			warnPeer(hit, err, gotHash)
+			_ = os.Remove(destPath)
+			return FetchResult{}, false
+		}
+		return FetchResult{SHA256: gotHash, Filename: hit.Filename, N: n, Hit: true, PeerURL: hit.Base}, true
+	}
+
+	tmpFile, err := c.NewTmpFile()
+	if err != nil {
+		return FetchResult{}, false
+	}
+	tmpPath := tmpFile.Name()
+
+	n, gotHash, _, _, err := streamToFile(ctx, client, hit.BlobURL(), headers, tmpFile)
+	if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil || gotHash != hit.SHA256 {
+		warnPeer(hit, err, gotHash)
+		_ = os.Remove(tmpPath)
+		return FetchResult{}, false
+	}
+
+	if err := c.Put(ctx, rawURL, tmpPath, gotHash); err != nil {
+		_ = os.Remove(tmpPath)
+		return FetchResult{}, false
+	}
+	_ = c.RecordFilename(ctx, rawURL, hit.Filename)
+
+	if err := c.Materialize(gotHash, destPath); err != nil {
+		return FetchResult{}, false
+	}
+
+	return FetchResult{SHA256: gotHash, Filename: hit.Filename, N: n, Hit: true, PeerURL: hit.Base}, true
+}
+
+// warnPeer reports why a peer was skipped. A hash mismatch is worth shouting
+// about: it means that peer is serving corrupt or forged content.
+func warnPeer(hit cache.PeerHit, err error, gotHash string) {
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "cache: peer %s failed, falling back: %v\n", hit.Base, err)
+		return
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "cache: peer %s served content hashing to %s, expected %s — ignoring peer\n",
+		hit.Base, gotHash, hit.SHA256)
 }
 
 // directFetch streams rawURL directly to destPath without cache involvement.

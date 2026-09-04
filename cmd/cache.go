@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -251,7 +253,10 @@ func init() {
 	cacheGCCmd.Flags().BoolVar(&cacheGCDryRun, "dry-run", false, "show what would be evicted without removing")
 	cacheGCCmd.Flags().StringVar(&cacheGCKeep, "keep", "", "spare blobs accessed within this duration (e.g. 7d, 24h)")
 
-	cacheCmd.AddCommand(cacheInfoCmd, cacheListCmd, cacheVerifyCmd, cacheGCCmd, cacheEvictCmd, cachePruneURLsCmd, cacheConfigCmd)
+	cacheServeCmd.Flags().StringVar(&cacheServeListen, "listen", "", "bind address (overrides cache.server.listen)")
+	cacheServeCmd.Flags().StringVar(&cacheServeAdvertise, "advertise", "", "base URL to advertise to peers (default: derived from --listen)")
+
+	cacheCmd.AddCommand(cacheInfoCmd, cacheListCmd, cacheVerifyCmd, cacheGCCmd, cacheEvictCmd, cachePruneURLsCmd, cacheConfigCmd, cacheServeCmd)
 	rootCmd.AddCommand(cacheCmd)
 }
 
@@ -287,6 +292,75 @@ var cacheConfigCmd = &cobra.Command{
 	},
 }
 
+var (
+	cacheServeListen    string
+	cacheServeAdvertise string
+)
+
+var cacheServeCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Serve this cache to other hapiq nodes on the network",
+	Long: `Serve the local blob cache over HTTP so other hapiq instances can pull
+from it instead of from the origin repository.
+
+Blobs are addressed by sha256 and every client verifies the hash while
+streaming, so no trust relationship between nodes is required.
+
+Peers point at this node with:
+
+    [cache.server]
+    peers = ["http://` + "this-host" + `:7777"]
+
+A node that also answers /v1/peers acts as an introducer: peers that talk to it
+are remembered and handed out to later callers, so one hostname bootstraps a
+whole set. Point others at it with introducers = ["http://this-host:7777"].
+
+On a single network segment, discover = "mdns" replaces all of that: nodes
+advertise _hapiq._tcp and find each other with no addresses configured.
+
+Full guide: docs/lan-sharing.md`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, cfg, err := openCacheForCmd()
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+
+		if cacheServeListen != "" {
+			cfg.Server.Listen = cacheServeListen
+		}
+		if cacheServeAdvertise != "" {
+			cfg.Server.Advertise = strings.TrimSuffix(cacheServeAdvertise, "/")
+		}
+
+		srv := cache.NewServer(c, cfg.Server)
+
+		// Ctrl-C and SIGTERM cancel the context, which shuts the server down
+		// gracefully rather than cutting off in-flight transfers.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		count, _ := c.BlobCount(ctx)
+		fmt.Fprintf(os.Stderr, "hapiq cache serve: %s (%d blobs) on %s\n", cfg.Dir, count, cfg.Server.Listen)
+		if self := srv.AdvertisedURL(); self != "" {
+			fmt.Fprintf(os.Stderr, "peers can reach this node at %s\n", self)
+		}
+		if cfg.Server.Discover == "mdns" {
+			if stop, err := srv.AdvertiseMDNS(); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: mdns advertisement failed: %v\n", err)
+			} else {
+				defer stop()
+				fmt.Fprintf(os.Stderr, "advertising _hapiq._tcp on the local link\n")
+			}
+		}
+		if cfg.Server.Token == "" {
+			fmt.Fprintf(os.Stderr, "warning: no cache.server.token set — anyone who can reach this port can read the cache\n")
+		}
+
+		return srv.ListenAndServe(ctx)
+	},
+}
+
 // openCacheForCmd opens the cache using the resolved config, with --cache-dir override.
 func openCacheForCmd() (*cache.Cache, cache.Config, error) {
 	cfg := cache.ConfigFromViper()
@@ -310,4 +384,37 @@ func openCacheForCmd() (*cache.Cache, cache.Config, error) {
 
 	_ = viper.Get("cache.mode") // ensure viper is initialised
 	return c, cfg, nil
+}
+
+// attachCache wires the local blob cache and the LAN peer set onto ctx for a
+// download. Both are optional: a missing cache or an unreachable peer degrades
+// to fetching from the origin URL. The returned func releases the cache.
+//
+// Shared by `hapiq download` and `hapiq fetch` so the two cannot drift.
+func attachCache(ctx context.Context, quiet bool) (context.Context, func()) {
+	cfg := cache.ConfigFromViper()
+	cleanup := func() {}
+
+	if cfg.Mode == "on" {
+		if c, err := cache.Open(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
+		} else {
+			cleanup = func() { _ = c.Close() }
+			ctx = cache.WithCache(ctx, c)
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Cache enabled: %s\n", cfg.Dir)
+			}
+		}
+	}
+
+	// Peers work with or without a local cache: without one, a peer blob is
+	// verified and streamed straight to the output directory.
+	if peers := cache.SetupPeers(ctx, cfg.Server); peers != nil {
+		ctx = cache.WithPeers(ctx, peers)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "Peers: %s\n", strings.Join(peers.URLs(), ", "))
+		}
+	}
+
+	return ctx, cleanup
 }
