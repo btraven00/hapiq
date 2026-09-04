@@ -250,32 +250,6 @@ Each download writes a `hapiq.json` witness file containing the full metadata, p
 
 ---
 
-### `hapiq fetch`
-
-Convenience shorthand for downloading a single file from a direct HTTP/HTTPS URL. Equivalent to `hapiq download url <url> --out <dir>`.
-
-```
-hapiq fetch <url> --out <dir> [flags]
-```
-
-| Flag | Description |
-|------|-------------|
-| `--out <dir>` | Output directory (required) |
-| `--dry-run` | Show what would be downloaded without writing anything |
-| `--force` | Overwrite an existing file without prompting |
-| `--skip-existing` | Skip the download if the file already exists |
-| `-y, --yes` | Non-interactive mode (auto-confirm prompts) |
-| `--hash <algo>:<hex>` | Verify the downloaded file against this checksum |
-| `-t, --timeout N` | Timeout in seconds (default 300) |
-
-```bash
-hapiq fetch https://example.com/data.h5ad --out ./data
-hapiq fetch https://example.com/data.h5ad --out ./data --hash sha256:abc123...
-hapiq fetch https://example.com/data.h5ad --out ./data --force
-```
-
----
-
 ### `hapiq downloaders`
 
 List all registered downloaders with their supported IDs and examples.
