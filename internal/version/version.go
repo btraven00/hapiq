@@ -5,13 +5,23 @@ import (
 	"runtime/debug"
 )
 
-// String returns a human-readable version string derived from VCS build info.
-// Examples:
+// Version is the release version, stamped at build time with
+// -ldflags "-X github.com/btraven00/hapiq/internal/version.Version=0.1.0".
+// Empty for plain `go build`.
+var Version string
+
+// String returns Version when stamped, otherwise a string derived from VCS
+// build info. Examples:
 //
+//	0.1.0
 //	devel (abc1234, 2026-05-05T10:00:00Z)
 //	devel (abc1234+dirty, 2026-05-05T10:00:00Z)
 //	(unknown)
 func String() string {
+	if Version != "" {
+		return Version
+	}
+
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "(unknown)"

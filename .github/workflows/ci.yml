@@ -197,9 +197,9 @@ jobs:
         run: |
           mkdir -p bin
           if [ "$GOOS" = "windows" ]; then
-            go build -o bin/hapiq-$GOOS-$GOARCH.exe -ldflags="-s -w -X main.version=$GITHUB_REF_NAME" .
+            go build -o bin/hapiq-$GOOS-$GOARCH.exe -ldflags="-s -w" .
           else
-            go build -o bin/hapiq-$GOOS-$GOARCH -ldflags="-s -w -X main.version=$GITHUB_REF_NAME" .
+            go build -o bin/hapiq-$GOOS-$GOARCH -ldflags="-s -w" .
           fi
 
       - name: Upload artifacts
