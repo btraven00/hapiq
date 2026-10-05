@@ -275,7 +275,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	nonInteractive := req.Options != nil && req.Options.NonInteractive
 
-	action, err := common.HandleDirectoryConflicts(dirStatus, nonInteractive)
+	action, err := common.HandleDirectoryConflicts(dirStatus, req.Options)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("conflict resolution failed: %v", err))
 		return result, nil
@@ -286,7 +286,7 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		result.Errors = append(result.Errors, "download aborted by user")
 		return result, nil
 	case downloaders.ActionSkip:
-		result.Warnings = append(result.Warnings, "download skipped due to existing directory")
+		result.Warnings = append(result.Warnings, fmt.Sprintf("download skipped: %s already exists (use --skip-existing or --force to download into it)", dirStatus.TargetPath))
 		result.Success = true
 
 		return result, nil
