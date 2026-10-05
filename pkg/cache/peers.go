@@ -140,7 +140,7 @@ func (p *Peers) ordered() []string {
 		return nil
 	}
 
-	start := int((p.rr.Add(1) - 1) % uint64(n))
+	start := int((p.rr.Add(1) - 1) % uint64(n)) // #nosec G115 -- result < n, which is an int
 	out := make([]string, 0, n)
 	for i := 0; i < n; i++ {
 		out = append(out, p.urls[(start+i)%n])
