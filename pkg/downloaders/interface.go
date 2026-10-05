@@ -45,8 +45,8 @@ type DownloadOptions struct {
 	DryRun   bool     `json:"dry_run,omitempty"`  // enumerate files without downloading
 
 	// Testing / throttling
-	LimitFiles int  `json:"limit_files,omitempty"`  // stop after downloading this many files (0 = no limit)
-	IncludeSRA bool `json:"include_sra,omitempty"`  // also download raw FASTQ files via SRA/ENA
+	LimitFiles int  `json:"limit_files,omitempty"` // stop after downloading this many files (0 = no limit)
+	IncludeSRA bool `json:"include_sra,omitempty"` // also download raw FASTQ files via SRA/ENA
 
 	CustomFilters        map[string]string `json:"custom_filters,omitempty"`
 	MaxConcurrent        int               `json:"max_concurrent"`

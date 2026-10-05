@@ -17,9 +17,9 @@ type ELinkResultGDS struct {
 
 // ELinkSetGDS holds the linked IDs from a single ELink call.
 type ELinkSetGDS struct {
-	DbFrom   string            `xml:"DbFrom"`
-	IDList   []string          `xml:"IdList>Id"`
-	LinkDBs  []ELinkDBGDS      `xml:"LinkSetDb"`
+	DbFrom  string       `xml:"DbFrom"`
+	IDList  []string     `xml:"IdList>Id"`
+	LinkDBs []ELinkDBGDS `xml:"LinkSetDb"`
 }
 
 // ELinkDBGDS holds links to a specific target database.
@@ -159,8 +159,8 @@ type SRARun struct {
 
 // SRARunSummary is the XML structure returned by ESummary for the sra database.
 type SRARunSummary struct {
-	XMLName xml.Name       `xml:"eSummaryResult"`
-	DocSums []SRADocSum    `xml:"DocSum"`
+	XMLName xml.Name    `xml:"eSummaryResult"`
+	DocSums []SRADocSum `xml:"DocSum"`
 }
 
 // SRADocSum holds run fields from an SRA ESummary result.

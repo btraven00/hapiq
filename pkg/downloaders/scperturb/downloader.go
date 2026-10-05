@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -105,12 +105,12 @@ func (d *ScPerturbDownloader) GetMetadata(ctx context.Context, id string) (*down
 		FileCount: len(matches),
 		Authors:   []string{first.FirstAuthor},
 		Custom: map[string]any{
-			"organism":    first.Organism,
-			"modality":    first.Modality,
-			"method":      first.Method,
+			"organism":     first.Organism,
+			"modality":     first.Modality,
+			"method":       first.Method,
 			"perturbation": first.Perturbation,
-			"zenodo_id":   first.ZenodoID,
-			"datasets":    datasetsToNames(matches),
+			"zenodo_id":    first.ZenodoID,
+			"datasets":     datasetsToNames(matches),
 		},
 	}
 	if first.DOI != "" {

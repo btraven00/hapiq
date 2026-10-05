@@ -10,10 +10,10 @@ import (
 func TestIsShareURL(t *testing.T) {
 	cases := map[string]bool{
 		"https://hopebio2020.sharepoint.com/:f:/s/PublicSharedfiles/IgBlEJ72": true,
-		"https://tenant.sharepoint.com/:b:/s/Site/AbCdEf":                      true,
+		"https://tenant.sharepoint.com/:b:/s/Site/AbCdEf":                     true,
 		"https://tenant.sharepoint.com/sites/Site/Shared%20Documents/x.bin":   false,
 		"https://example.com/:f:/s/Site/token":                                false,
-		"not a url ::::":                                                       false,
+		"not a url ::::":                                                      false,
 	}
 	for in, want := range cases {
 		if got := IsShareURL(in); got != want {
