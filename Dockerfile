@@ -3,9 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-ARG VERSION=dev
+ARG VERSION=
 RUN CGO_ENABLED=0 go build -trimpath \
-      -ldflags="-s -w -X main.version=${VERSION}" \
+      -ldflags="-s -w -X github.com/btraven00/hapiq/internal/version.Version=${VERSION}" \
       -o /hapiq .
 
 FROM scratch

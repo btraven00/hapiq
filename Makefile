@@ -10,23 +10,28 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+# Release version: set only when HEAD is exactly on a vX.Y.Z tag, so untagged
+# builds fall back to VCS info ("devel (sha, time)").
+VERSION ?= $(shell git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null | sed 's/^v//')
+LDFLAGS := -s -w -X github.com/btraven00/hapiq/internal/version.Version=$(VERSION)
+
 # Build the binary
 build: ## Build the hapiq binary
 	@echo "Building hapiq..."
-	go build -o bin/hapiq -ldflags="-s -w" .
+	go build -o bin/hapiq -ldflags="$(LDFLAGS)" .
 
 # Build for multiple platforms
 build-all: ## Build for multiple platforms
 	@echo "Building for multiple platforms..."
-	GOOS=linux GOARCH=amd64 go build -o bin/hapiq-linux-amd64 -ldflags="-s -w" .
-	GOOS=darwin GOARCH=amd64 go build -o bin/hapiq-darwin-amd64 -ldflags="-s -w" .
-	GOOS=darwin GOARCH=arm64 go build -o bin/hapiq-darwin-arm64 -ldflags="-s -w" .
-	GOOS=windows GOARCH=amd64 go build -o bin/hapiq-windows-amd64.exe -ldflags="-s -w" .
+	GOOS=linux GOARCH=amd64 go build -o bin/hapiq-linux-amd64 -ldflags="$(LDFLAGS)" .
+	GOOS=darwin GOARCH=amd64 go build -o bin/hapiq-darwin-amd64 -ldflags="$(LDFLAGS)" .
+	GOOS=darwin GOARCH=arm64 go build -o bin/hapiq-darwin-arm64 -ldflags="$(LDFLAGS)" .
+	GOOS=windows GOARCH=amd64 go build -o bin/hapiq-windows-amd64.exe -ldflags="$(LDFLAGS)" .
 
 # Install the binary to GOPATH/bin
 install: ## Install hapiq to GOPATH/bin
 	@echo "Installing hapiq..."
-	go install -ldflags="-s -w" .
+	go install -ldflags="$(LDFLAGS)" .
 
 # Run tests
 test: ## Run all tests
