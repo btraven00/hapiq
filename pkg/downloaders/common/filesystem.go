@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -117,18 +118,21 @@ func (dc *DirectoryChecker) scanForConflicts(targetDir string) ([]string, error)
 // getFreeSpace is implemented per-platform in freespace_unix.go / freespace_windows.go.
 
 // HandleDirectoryConflicts presents options to the user for conflict resolution.
-func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractive bool) (downloaders.Action, error) {
+// --force and --skip-existing are per-file policies, so either one means merge
+// into the existing directory and let the downloader apply it file by file.
+// Prompting is skipped when stdin is not a terminal (piped/agent runs would
+// otherwise fail on EOF).
+func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, opts *downloaders.DownloadOptions) (downloaders.Action, error) {
 	if !status.Exists {
 		return downloaders.ActionProceed, nil
 	}
 
-	if nonInteractive {
-		// In non-interactive mode, default to merge if witness exists, otherwise skip
-		if status.HasWitness {
-			return downloaders.ActionMerge, nil
-		}
+	if opts != nil && (opts.Force || opts.SkipExisting) {
+		return downloaders.ActionMerge, nil
+	}
 
-		return downloaders.ActionSkip, nil
+	if (opts != nil && opts.NonInteractive) || !stdinIsTerminal() {
+		return nonInteractiveAction(status), nil
 	}
 
 	fmt.Printf("⚠️  Directory already exists: %s\n", status.TargetPath)
@@ -163,7 +167,28 @@ func HandleDirectoryConflicts(status *downloaders.DirectoryStatus, nonInteractiv
 		"Abort",
 	}
 
-	return promptUserChoice(options)
+	action, err := promptUserChoice(options)
+	if errors.Is(err, io.EOF) {
+		// stdin closed: </dev/null passes the char-device check above
+		fmt.Println()
+		return nonInteractiveAction(status), nil
+	}
+
+	return action, err
+}
+
+// nonInteractiveAction merges into a previous hapiq download, otherwise skips.
+func nonInteractiveAction(status *downloaders.DirectoryStatus) downloaders.Action {
+	if status.HasWitness {
+		return downloaders.ActionMerge
+	}
+
+	return downloaders.ActionSkip
+}
+
+func stdinIsTerminal() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // promptUserChoice presents options to the user and returns their choice.
