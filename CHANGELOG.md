@@ -32,6 +32,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Dataverse's download API. Anything that expects the old URL-derived name
   must be updated. Cache hits reproduce the same name.
 
+### Removed
+
+- **`hapiq fetch`.** Use `hapiq download url <url> --out <dir>`, which takes
+  the same flags (`--hash`, `--force`, `--skip-existing`, `--dry-run`, `-y`,
+  `-t`) and goes through the same downloader and cache.
+
 ### Fixed
 
 - `download` into an existing directory (figshare, GEO) honors `--force` and
