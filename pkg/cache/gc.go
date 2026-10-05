@@ -199,21 +199,8 @@ type Orphan struct {
 // Orphans lists files under blobs/sha256 that have no index row and are older
 // than orphanGrace.
 func (c *Cache) Orphans(ctx context.Context) ([]Orphan, error) {
-	indexed := map[string]bool{}
-	rows, err := c.db.QueryContext(ctx, `SELECT sha256 FROM blobs`)
+	indexed, err := c.indexedBlobs(ctx)
 	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var sha string
-		if err := rows.Scan(&sha); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		indexed[sha] = true
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -239,6 +226,25 @@ func (c *Cache) Orphans(ctx context.Context) ([]Orphan, error) {
 		return nil
 	})
 	return out, err
+}
+
+// indexedBlobs returns the set of sha256 hashes that have a blobs row.
+func (c *Cache) indexedBlobs(ctx context.Context) (map[string]bool, error) {
+	rows, err := c.db.QueryContext(ctx, `SELECT sha256 FROM blobs`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	indexed := map[string]bool{}
+	for rows.Next() {
+		var sha string
+		if err := rows.Scan(&sha); err != nil {
+			return nil, err
+		}
+		indexed[sha] = true
+	}
+	return indexed, rows.Err()
 }
 
 // RemoveOrphan deletes an orphan blob file. It reports false without deleting
