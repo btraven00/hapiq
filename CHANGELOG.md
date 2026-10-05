@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-05
+
+First tagged release. Earlier builds were published only as
+`0.0.0.dev<sha>`.
+
 ### Added
 
 - **SharePoint share links** in the `url` source. Anonymous
@@ -45,3 +50,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   per file, instead of skipping the whole download. Without a terminal, or
   when stdin closes at the prompt, it falls back to the `-y` behaviour instead
   of failing with EOF.
+
+[Unreleased]: https://github.com/btraven00/hapiq/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/btraven00/hapiq/releases/tag/v0.1.0
