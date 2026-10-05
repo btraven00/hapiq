@@ -79,7 +79,8 @@ hapiq cache list               # tabular view: hash, size, last used, URL
 hapiq cache list --url '*/zenodo*'   # filter by URL glob
 hapiq cache list --json        # JSON output for scripting
 
-hapiq cache verify             # re-hash all blobs; evict corrupt ones
+hapiq cache verify             # re-hash all blobs; evict corrupt ones; list orphan files
+hapiq cache verify --remove-orphans  # also delete blob files missing from the index
 hapiq cache verify <sha256>    # check a single blob
 
 hapiq cache gc                 # evict LRU blobs until under quota

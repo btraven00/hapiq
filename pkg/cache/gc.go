@@ -3,7 +3,9 @@ package cache
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -179,4 +181,83 @@ func (c *Cache) PruneURLs(ctx context.Context) (int, error) {
 	}
 	n, _ := result.RowsAffected()
 	return int(n), nil
+}
+
+// orphanGrace hides recently written blob files from Orphans: Put renames a
+// blob into place before inserting its index row, possibly from another
+// process (cache serve), so a fresh unindexed file may just be mid-Put.
+const orphanGrace = time.Hour
+
+// Orphan is a blob file on disk with no row in the index, e.g. left by a crash
+// between promoting a blob and recording it, or by a recreated index.
+type Orphan struct {
+	ModTime time.Time
+	Path    string
+	Size    int64
+}
+
+// Orphans lists files under blobs/sha256 that have no index row and are older
+// than orphanGrace.
+func (c *Cache) Orphans(ctx context.Context) ([]Orphan, error) {
+	indexed := map[string]bool{}
+	rows, err := c.db.QueryContext(ctx, `SELECT sha256 FROM blobs`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var sha string
+		if err := rows.Scan(&sha); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		indexed[sha] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	root := filepath.Join(c.cfg.Dir, "blobs", "sha256")
+	cutoff := time.Now().Add(-orphanGrace)
+
+	var out []Orphan
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if path == root && os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() || indexed[d.Name()] {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil || !info.Mode().IsRegular() || info.ModTime().After(cutoff) {
+			return nil
+		}
+		out = append(out, Orphan{Path: path, Size: info.Size(), ModTime: info.ModTime()})
+		return nil
+	})
+	return out, err
+}
+
+// RemoveOrphan deletes an orphan blob file. It reports false without deleting
+// when the file has since been indexed or still has hardlinks from output
+// directories. Symlinked materializations cannot be detected and will dangle.
+func (c *Cache) RemoveOrphan(ctx context.Context, o Orphan) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var n int
+	if err := c.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM blobs WHERE sha256 = ?`, filepath.Base(o.Path)).Scan(&n); err != nil {
+		return false, err
+	}
+	if n > 0 || blobNlink(o.Path) > 1 {
+		return false, nil
+	}
+	if err := os.Remove(o.Path); err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	return true, nil
 }

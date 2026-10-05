@@ -2,7 +2,12 @@ package cache_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/btraven00/hapiq/pkg/cache"
 )
@@ -92,4 +97,61 @@ func TestPruneURLs(t *testing.T) {
 	// After Evict uses a transaction with cascading deletes, URL rows should
 	// already be gone. PruneURLs is still correct if it returns 0.
 	_ = pruned
+}
+
+func TestOrphans(t *testing.T) {
+	c := openTestCache(t)
+	ctx := context.Background()
+
+	// Indexed blob: never an orphan.
+	tmp, sha := writeTmp(t, c, []byte("indexed"))
+	if err := c.Put(ctx, "https://example.org/indexed", tmp, sha); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	old := time.Now().Add(-48 * time.Hour)
+	mkBlob := func(name string, mtime time.Time) string {
+		p := filepath.Join(c.Dir(), "blobs", "sha256", name[:2], name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	stale := mkBlob("aa"+strings.Repeat("0", 62), old)
+	linked := mkBlob("bb"+strings.Repeat("0", 62), old)
+	mkBlob("cc"+strings.Repeat("0", 62), time.Now()) // within grace: may be mid-Put
+	if err := os.Link(linked, filepath.Join(t.TempDir(), "output")); err != nil {
+		t.Skipf("hardlinks unsupported: %v", err)
+	}
+
+	orphans, err := c.Orphans(ctx)
+	if err != nil {
+		t.Fatalf("Orphans: %v", err)
+	}
+	got := map[string]cache.Orphan{}
+	for _, o := range orphans {
+		got[o.Path] = o
+	}
+	if len(got) != 2 || got[stale].Path == "" || got[linked].Path == "" {
+		t.Fatalf("Orphans = %v, want only %s and %s", orphans, stale, linked)
+	}
+
+	if ok, err := c.RemoveOrphan(ctx, got[stale]); err != nil || !ok {
+		t.Errorf("RemoveOrphan(stale) = %v, %v; want true", ok, err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale orphan still on disk")
+	}
+	if ok, _ := c.RemoveOrphan(ctx, got[linked]); ok && runtime.GOOS != "windows" {
+		t.Errorf("RemoveOrphan removed a hardlinked blob")
+	}
+	if _, _, hit, _ := c.Get(ctx, "https://example.org/indexed"); !hit {
+		t.Errorf("indexed blob lost")
+	}
 }
