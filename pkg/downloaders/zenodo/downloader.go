@@ -298,7 +298,7 @@ func (d *ZenodoDownloader) parseZenodoIdentifier(input string) (*ZenodoIdentifie
 	}
 
 	// Pattern 2: Zenodo record URL
-	recordURLPattern := regexp.MustCompile(`https?://zenodo\.org/record/(\d+)`)
+	recordURLPattern := regexp.MustCompile(`^https?://zenodo\.org/record/(\d+)`)
 	if matches := recordURLPattern.FindStringSubmatch(input); len(matches) > 1 {
 		identifier.ID = matches[1]
 		identifier.Type = ArtifactTypeRecord
@@ -306,7 +306,7 @@ func (d *ZenodoDownloader) parseZenodoIdentifier(input string) (*ZenodoIdentifie
 	}
 
 	// Pattern 3: Zenodo deposit URL
-	depositURLPattern := regexp.MustCompile(`https?://zenodo\.org/deposit/(\d+)`)
+	depositURLPattern := regexp.MustCompile(`^https?://zenodo\.org/deposit/(\d+)`)
 	if matches := depositURLPattern.FindStringSubmatch(input); len(matches) > 1 {
 		identifier.ID = matches[1]
 		identifier.Type = ArtifactTypeDeposit
@@ -339,7 +339,7 @@ func (d *ZenodoDownloader) parseZenodoIdentifier(input string) (*ZenodoIdentifie
 	}
 
 	// Pattern 7: DOI URL (https://doi.org/10.5281/zenodo.123456)
-	doiURLPattern := regexp.MustCompile(`https?://doi\.org/10\.5281/zenodo\.(\d+)`)
+	doiURLPattern := regexp.MustCompile(`^https?://doi\.org/10\.5281/zenodo\.(\d+)`)
 	if matches := doiURLPattern.FindStringSubmatch(input); len(matches) > 1 {
 		identifier.ID = matches[1]
 		identifier.Type = ArtifactTypeRecord

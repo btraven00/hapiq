@@ -213,6 +213,12 @@ func TestZenodoDownloader_CleanZenodoID(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name:     "record URL embedded in another URL",
+			input:    "https://evil.example/?u=https://zenodo.org/record/123456",
+			expected: "",
+			wantErr:  true,
+		},
+		{
 			name:     "non-zenodo DOI",
 			input:    "10.1234/example.123",
 			expected: "",
