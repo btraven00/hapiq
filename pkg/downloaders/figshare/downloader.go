@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 

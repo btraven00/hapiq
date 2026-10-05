@@ -26,9 +26,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
-	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -78,7 +78,7 @@ func (d *SRADownloader) Validate(_ context.Context, id string) (*downloaders.Val
 	result := &downloaders.ValidationResult{
 		ID:         clean,
 		SourceType: d.GetSourceType(),
-		Valid:       sraPattern.MatchString(clean),
+		Valid:      sraPattern.MatchString(clean),
 	}
 	if !result.Valid {
 		result.Errors = []string{fmt.Sprintf("unrecognized SRA/BioProject accession format: %q", id)}
@@ -242,7 +242,7 @@ func (d *SRADownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	// Write witness file.
 	if req.Metadata != nil {
 		witness := &downloaders.WitnessFile{
-			HapiqVersion: version.String(),
+			HapiqVersion:  version.String(),
 			DownloadTime:  start,
 			Source:        d.GetSourceType(),
 			OriginalID:    req.ID,
@@ -335,7 +335,7 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	mdHash := md5.New()       // #nosec G401 -- ENA-provided MD5 checksum verification
+	mdHash := md5.New() // #nosec G401 -- ENA-provided MD5 checksum verification
 	shaHash := sha256.New()
 
 	// Stream into a cache tmp file when a cache is available; otherwise stream

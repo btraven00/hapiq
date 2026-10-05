@@ -58,23 +58,23 @@ type SearchResponse struct {
 
 // DatasetRecord is the full record returned by /public/dataset/{id}.
 type DatasetRecord struct {
-	InternalID string     `json:"internal_id"`
-	Label      string     `json:"label"`
-	Domain     string     `json:"domain"`
-	Version    string     `json:"version"`
-	Tags       []string   `json:"tags"`
-	Locations  []Location `json:"locations"`
+	InternalID string       `json:"internal_id"`
+	Label      string       `json:"label"`
+	Domain     string       `json:"domain"`
+	Version    string       `json:"version"`
+	Tags       []string     `json:"tags"`
+	Locations  []Location   `json:"locations"`
 	MD         *CroissantMD `json:"md"`
 }
 
 // CroissantMD holds Croissant Lite metadata for a dataset.
 type CroissantMD struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	License     string            `json:"license"`
-	Version     string            `json:"version"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	License       string          `json:"license"`
+	Version       string          `json:"version"`
 	DatePublished string          `json:"datePublished"`
-	Distribution []CroissantFile  `json:"distribution"`
+	Distribution  []CroissantFile `json:"distribution"`
 }
 
 // CroissantFile is one entry in the Croissant distribution list.
@@ -159,11 +159,11 @@ func (c *client) endpoint(path string) string {
 // search queries the VCP dataset search API.
 func (c *client) search(ctx context.Context, query string, limit int, cursor string) (*SearchResponse, error) {
 	params := url.Values{
-		"query":       {query + " AND latest_version:true"},
-		"limit":       {fmt.Sprintf("%d", limit)},
-		"use_cursor":  {"true"},
-		"download":    {"true"},
-		"scout":       {boolStr(cursor == "")},
+		"query":      {query + " AND latest_version:true"},
+		"limit":      {fmt.Sprintf("%d", limit)},
+		"use_cursor": {"true"},
+		"download":   {"true"},
+		"scout":      {boolStr(cursor == "")},
 	}
 	if cursor != "" {
 		params.Set("cursor", cursor)

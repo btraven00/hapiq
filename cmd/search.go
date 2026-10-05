@@ -89,13 +89,13 @@ func runSearch(_ *cobra.Command, args []string) error {
 	case "scperturb":
 		d = scperturb.NewScPerturbDownloader(
 			scperturb.WithVerbose(false),
-			scperturb.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+			scperturb.WithTimeout(time.Duration(defaultCheckTimeoutSec)*time.Second),
 		)
 
 	case "experimenthub", "eh":
 		d = experimenthub.NewExperimentHubDownloader(
 			experimenthub.WithVerbose(!quiet),
-			experimenthub.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+			experimenthub.WithTimeout(time.Duration(defaultCheckTimeoutSec)*time.Second),
 		)
 
 	default:

@@ -25,14 +25,14 @@ const (
 // Note: the upstream rdatapaths table only stores rdatapath / rdataclass /
 // dispatchclass — no size or checksum. We surface what's there.
 type resourceInfo struct {
-	AHID         string
-	Title        string
-	Description  string
-	Species      string
-	DataProvider string
-	Maintainer   string
-	RDataPath    string
-	RDataClass   string
+	AHID          string
+	Title         string
+	Description   string
+	Species       string
+	DataProvider  string
+	Maintainer    string
+	RDataPath     string
+	RDataClass    string
 	DispatchClass string
 }
 

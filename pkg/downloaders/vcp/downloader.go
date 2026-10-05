@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
@@ -70,7 +70,7 @@ func (d *VCPDownloader) Validate(_ context.Context, id string) (*downloaders.Val
 	result := &downloaders.ValidationResult{
 		ID:         clean,
 		SourceType: d.GetSourceType(),
-		Valid:       idPattern.MatchString(clean),
+		Valid:      idPattern.MatchString(clean),
 	}
 	if !result.Valid {
 		result.Errors = []string{

@@ -52,7 +52,7 @@ func (d *GEODownloader) downloadSRA(
 	result *downloaders.DownloadResult,
 ) error {
 	if d.verbose {
-		fmt.Fprintf(os.Stderr,"🧬 Resolving SRA runs for %s...\n", gseID)
+		fmt.Fprintf(os.Stderr, "🧬 Resolving SRA runs for %s...\n", gseID)
 	}
 
 	sraRuns, err := d.ResolveGSEToSRARuns(ctx, gdsUID, gseID)
@@ -63,7 +63,7 @@ func (d *GEODownloader) downloadSRA(
 		return fmt.Errorf("no SRA runs found for %s — the dataset may not have raw data in SRA, or the accession may not be linked", gseID)
 	}
 	if d.verbose {
-		fmt.Fprintf(os.Stderr,"   Found %d SRA runs — fetching ENA file info\n", len(sraRuns))
+		fmt.Fprintf(os.Stderr, "   Found %d SRA runs — fetching ENA file info\n", len(sraRuns))
 	}
 
 	sraDownloader := sra.NewSRADownloader(

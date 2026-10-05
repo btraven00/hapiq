@@ -40,15 +40,15 @@ type File struct {
 
 // Project is the trimmed Azul project payload we care about.
 type Project struct {
-	ProjectID         string                  `json:"projectId"`
-	ProjectTitle      string                  `json:"projectTitle"`
-	ProjectShortname  string                  `json:"projectShortname"`
-	Description       string                  `json:"projectDescription"`
-	EstimatedCells    *int64                  `json:"estimatedCellCount"`
-	Accessions        []ProjectAccession      `json:"accessions"`
-	Matrices          map[string]any          `json:"matrices"`
-	ContributedAnalyses map[string]any        `json:"contributedAnalyses"`
-	ContributorMatrices map[string]any        `json:"contributorMatrices"`
+	ProjectID           string             `json:"projectId"`
+	ProjectTitle        string             `json:"projectTitle"`
+	ProjectShortname    string             `json:"projectShortname"`
+	Description         string             `json:"projectDescription"`
+	EstimatedCells      *int64             `json:"estimatedCellCount"`
+	Accessions          []ProjectAccession `json:"accessions"`
+	Matrices            map[string]any     `json:"matrices"`
+	ContributedAnalyses map[string]any     `json:"contributedAnalyses"`
+	ContributorMatrices map[string]any     `json:"contributorMatrices"`
 }
 
 // ProjectAccession is an external repository reference (BioStudies, INSDC, …).

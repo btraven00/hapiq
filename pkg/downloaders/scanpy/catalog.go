@@ -17,12 +17,12 @@ type fileSpec struct {
 // (visium_sge, ebi_expression_atlas) Files is nil and Resolve is set; it
 // returns the file list for a given parameter (sample_id / accession).
 type entry struct {
-	Name        string
-	Label       string
-	Format      string
-	Files       []fileSpec
-	Examples    []string                            // example parameters for parametrized entries
-	Resolve     func(param string) ([]fileSpec, error)
+	Name     string
+	Label    string
+	Format   string
+	Files    []fileSpec
+	Examples []string // example parameters for parametrized entries
+	Resolve  func(param string) ([]fileSpec, error)
 }
 
 // catalog mirrors scanpy.datasets downloadable entries (excluding the ones
@@ -96,9 +96,9 @@ var catalog = map[string]entry{
 		},
 	},
 	"ebi_expression_atlas": {
-		Name:   "ebi_expression_atlas",
-		Label:  "EBI Single Cell Expression Atlas (parametrized by accession)",
-		Format: "mtx + tsv",
+		Name:     "ebi_expression_atlas",
+		Label:    "EBI Single Cell Expression Atlas (parametrized by accession)",
+		Format:   "mtx + tsv",
 		Examples: []string{"E-GEOD-98816", "E-MTAB-4888"},
 		Resolve: func(accession string) ([]fileSpec, error) {
 			if accession == "" {
