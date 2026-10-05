@@ -240,7 +240,7 @@ lands with the server follow-up).
 |----------------------------------|--------------------------------------------------------------------------|
 | `hapiq cache info`               | Print cache dir, total size, blob count, quota, % full, sqlite version.  |
 | `hapiq cache list [--url GLOB]`  | Tabular listing: sha256, size, last_used, url(s). Supports `--json`.     |
-| `hapiq cache verify [--all\|sha]`| Re-hash blobs, compare against index; report/evict corrupt entries.      |
+| `hapiq cache verify [--all\|sha]`| Re-hash blobs, compare against index; report/evict corrupt entries; report orphan files (`--remove-orphans` deletes them). |
 | `hapiq cache gc`                 | Evict until under quota (LRU by `last_used`). `--dry-run`, `--keep <dur>`. |
 | `hapiq cache evict <sha\|--url>` | Remove a specific blob and its URL mappings.                             |
 | `hapiq cache prune-urls`         | Drop URL rows whose blobs are missing (index hygiene).                   |
@@ -279,7 +279,9 @@ Enforcement points:
 Eviction touches both tables transactionally: delete rows from `blobs`,
 cascade-delete from `urls` via foreign key, then `unlink(2)` the file.
 Orphan files (crash between sqlite commit and unlink) are cleaned by
-`hapiq cache prune-urls` + a filesystem scan in `verify`.
+`hapiq cache prune-urls` + a filesystem scan in `verify --remove-orphans`
+(files younger than one hour are skipped, since `Put` renames the blob into
+place before writing its index row).
 
 The schema adds one column to support LRU:
 

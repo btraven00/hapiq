@@ -104,12 +104,13 @@ var cacheListCmd = &cobra.Command{
 }
 
 var (
-	cacheVerifyAll bool
+	cacheVerifyAll           bool
+	cacheVerifyRemoveOrphans bool
 )
 
 var cacheVerifyCmd = &cobra.Command{
 	Use:   "verify [sha256]",
-	Short: "Re-hash blobs and evict corrupt entries",
+	Short: "Re-hash blobs, evict corrupt entries, and find orphan blob files",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, _, err := openCacheForCmd()
 		if err != nil {
@@ -150,6 +151,42 @@ var cacheVerifyCmd = &cobra.Command{
 			}
 		}
 		fmt.Printf("Verified %d blobs; %d corrupt.\n", len(blobs), corrupt)
+
+		orphans, err := c.Orphans(ctx)
+		if err != nil {
+			return fmt.Errorf("scan for orphan blobs: %w", err)
+		}
+		if len(orphans) == 0 {
+			return nil
+		}
+
+		var size, freed int64
+		removed := 0
+		for _, o := range orphans {
+			size += o.Size
+			if !cacheVerifyRemoveOrphans {
+				fmt.Printf("ORPHAN: %s (%s, %s)\n", o.Path, common.FormatBytes(o.Size), o.ModTime.Format("2006-01-02"))
+				continue
+			}
+			ok, err := c.RemoveOrphan(ctx, o)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error removing %s: %v\n", o.Path, err)
+				continue
+			}
+			if ok {
+				fmt.Printf("ORPHAN (removed): %s\n", o.Path)
+				removed++
+				freed += o.Size
+			} else {
+				fmt.Printf("ORPHAN (kept, indexed or hardlinked): %s\n", o.Path)
+			}
+		}
+		if cacheVerifyRemoveOrphans {
+			fmt.Printf("Removed %d of %d orphan blob files; freed %s.\n", removed, len(orphans), common.FormatBytes(freed))
+		} else {
+			fmt.Printf("Found %d orphan blob files not in the index (%s); rerun with --remove-orphans to delete them.\n",
+				len(orphans), common.FormatBytes(size))
+		}
 		return nil
 	},
 }
@@ -249,6 +286,8 @@ func init() {
 	cacheListCmd.Flags().BoolVar(&cacheListJSON, "json", false, "output as JSON")
 
 	cacheVerifyCmd.Flags().BoolVar(&cacheVerifyAll, "all", false, "verify all blobs (default when no sha256 given)")
+	cacheVerifyCmd.Flags().BoolVar(&cacheVerifyRemoveOrphans, "remove-orphans", false,
+		"delete blob files that are not in the index (symlinked outputs pointing at them will break)")
 
 	cacheGCCmd.Flags().BoolVar(&cacheGCDryRun, "dry-run", false, "show what would be evicted without removing")
 	cacheGCCmd.Flags().StringVar(&cacheGCKeep, "keep", "", "spare blobs accessed within this duration (e.g. 7d, 24h)")
