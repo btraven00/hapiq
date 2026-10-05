@@ -336,7 +336,7 @@ Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
 
 ```json
 {
-  "hapiq_version": "nightly-20260416-a1b2c3d",
+  "hapiq_version": "0.1.0",
   "download_time": "2026-04-16T02:00:00Z",
   "source": "geo",
   "original_id": "GSE133344",

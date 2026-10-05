@@ -424,12 +424,17 @@ We use Semantic Versioning (SemVer):
 
 ### Release Checklist
 
-1. Update version in relevant files
-2. Update CHANGELOG.md
-3. Create release notes
-4. Tag the release
-5. Update documentation
-6. Announce the release
+The git tag is the only place the version lives. Pushing `vX.Y.Z` makes
+`publish-prefix.yml` stamp `X.Y.Z` into the binary (`internal/version.Version`)
+and publish conda package `hapiq X.Y.Z` to the `almost-conductor` channel.
+
+1. In `CHANGELOG.md`, rename `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD` and
+   start a fresh `[Unreleased]`. Call out behaviour changes (output names,
+   flag semantics) under **Changed**.
+2. Commit, then tag and push: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`
+3. Check the conda package appeared, then bump downstream pins (`hapiq ==X.Y.Z`).
+
+`make build` stamps the version automatically when HEAD is exactly on a tag.
 
 ## Getting Help
 
