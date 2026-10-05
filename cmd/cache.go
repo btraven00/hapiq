@@ -428,8 +428,6 @@ func openCacheForCmd() (*cache.Cache, cache.Config, error) {
 // attachCache wires the local blob cache and the LAN peer set onto ctx for a
 // download. Both are optional: a missing cache or an unreachable peer degrades
 // to fetching from the origin URL. The returned func releases the cache.
-//
-// Shared by `hapiq download` and `hapiq fetch` so the two cannot drift.
 func attachCache(ctx context.Context, quiet bool) (context.Context, func()) {
 	cfg := cache.ConfigFromViper()
 	cleanup := func() {}
