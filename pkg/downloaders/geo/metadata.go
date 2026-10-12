@@ -100,8 +100,7 @@ func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*down
 			if sampleInfo := d.parseSampleInfo(item); sampleInfo != nil {
 				metadata.Custom["sample_info"] = sampleInfo
 				if count, ok := sampleInfo["sample_count"].(int); ok {
-					metadata.FileCount = count * 2                       // Estimate: raw + processed per sample
-					metadata.TotalSize = int64(count) * 50 * 1024 * 1024 // 50MB per sample estimate
+					metadata.FileCount = count * 2 // Estimate: raw + processed per sample
 				}
 			}
 		case "PDAT":
@@ -119,12 +118,18 @@ func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*down
 		}
 	}
 
-	// For debugging, let's try a different approach to get sample information
+	// Size of the series-level supplementary files, summed from the FTP listing
+	// (rounded per-file figures). Stays 0, shown as "unknown", if unlistable.
+	suppURL := fmt.Sprintf("%s/series/%s/%s/suppl/", d.ftpBaseURL, d.getGSESubdir(id), id)
+	if listing, err := d.getDirectoryListing(ctx, suppURL); err == nil {
+		for _, e := range listing {
+			metadata.TotalSize += max(e.Size, 0)
+		}
+	}
+
 	// First check if we have any file count information already
 	if metadata.FileCount == 0 {
-		// Set some default estimates for now
-		metadata.FileCount = 10                // Conservative estimate
-		metadata.TotalSize = 500 * 1024 * 1024 // 500MB estimate
+		metadata.FileCount = 10 // Conservative estimate
 
 		// Create a basic collection
 		collection := downloaders.Collection{

@@ -253,6 +253,9 @@ func TestGEODownloader_GetMetadata_MockEUtils(t *testing.T) {
 		} else if strings.Contains(r.URL.Path, "esummary") || strings.Contains(r.URL.RawQuery, "esummary") {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(mockESummaryResponse))
+		} else if r.URL.Path == "/series/GSE123nnn/GSE123456/suppl/" {
+			w.Write([]byte(`<a href="x.csv.gz">x.csv.gz</a>  2020-03-23 12:47   14M
+<a href="y.csv.gz">y.csv.gz</a>  2020-03-23 12:47  242K`))
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -266,6 +269,7 @@ func TestGEODownloader_GetMetadata_MockEUtils(t *testing.T) {
 	}
 
 	downloader := NewGEODownloader(WithHTTPClient(client))
+	downloader.ftpBaseURL = server.URL
 
 	ctx := context.Background()
 	metadata, err := downloader.getSeriesMetadata(ctx, "GSE123456")
@@ -310,6 +314,11 @@ func TestGEODownloader_GetMetadata_MockEUtils(t *testing.T) {
 	expectedDate := time.Date(2020, 1, 15, 0, 0, 0, 0, time.UTC)
 	if !metadata.Created.Equal(expectedDate) {
 		t.Fatalf("Expected created date %v, got %v", expectedDate, metadata.Created)
+	}
+
+	// Regression: size is summed from the suppl/ listing, not a hardcoded 500 MB.
+	if want := int64(14<<20 + 242<<10); metadata.TotalSize != want {
+		t.Fatalf("Expected TotalSize %d from the listing, got %d", want, metadata.TotalSize)
 	}
 }
 

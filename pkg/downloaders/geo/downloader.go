@@ -480,7 +480,12 @@ func (d *GEODownloader) confirmCollection(ctx context.Context, collection *downl
 	fmt.Printf("🔍 Detected %s collection:\n", collection.Type)
 	fmt.Printf("   Title: %s\n", collection.Title)
 	fmt.Printf("   Files: %d\n", collection.FileCount)
-	fmt.Printf("   Estimated size: %s\n", common.FormatBytes(collection.EstimatedSize))
+	size := "unknown"
+	if collection.EstimatedSize > 0 {
+		size = common.FormatBytes(collection.EstimatedSize)
+	}
+
+	fmt.Printf("   Estimated size: %s\n", size)
 
 	if len(collection.Samples) > 0 {
 		fmt.Printf("   Structure preview:\n")
