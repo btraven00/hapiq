@@ -299,7 +299,8 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 }
 
 // mergeWitnessFiles merges prev and next into a single WitnessFile.
-// next's top-level metadata and stats win; file lists are union-merged by
+// next's top-level metadata and stats win (stats describe the latest run
+// only, not a running total); file lists are union-merged by
 // path, with next's entries taking precedence over prev's on conflict.
 // When prev and next have different OriginalIDs (i.e. different datasets were
 // downloaded into the same folder), prev's provenance is preserved in the
@@ -321,19 +322,6 @@ func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.Witness
 		}
 	}
 	merged.Files = append(extra, next.Files...)
-
-	// Accumulate byte counts from previous runs.
-	if next.DownloadStats != nil && prev.DownloadStats != nil {
-		merged.DownloadStats = &downloaders.DownloadStats{
-			BytesDownloaded: prev.DownloadStats.BytesDownloaded + next.DownloadStats.BytesDownloaded,
-			FilesDownloaded: prev.DownloadStats.FilesDownloaded + next.DownloadStats.FilesDownloaded,
-			FilesTotal:      prev.DownloadStats.FilesTotal + next.DownloadStats.FilesTotal,
-			// Duration/speed reflect the most recent run only.
-			Duration:      next.DownloadStats.Duration,
-			AverageSpeed:  next.DownloadStats.AverageSpeed,
-			MaxConcurrent: next.DownloadStats.MaxConcurrent,
-		}
-	}
 
 	// When the two downloads are for different accessions, preserve prev's
 	// dataset-level provenance in the Datasets slice so it is not silently
