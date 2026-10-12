@@ -329,6 +329,7 @@ func (d *GEODownloader) planSeriesFiles(ctx context.Context, id string, options 
 			OriginalName: e.Name,
 			SourceURL:    base + "/suppl/" + e.Name,
 			Path:         filepath.Join("supplementary", e.Name),
+			Size:         max(e.Size, 0),
 		})
 		kept++
 	}

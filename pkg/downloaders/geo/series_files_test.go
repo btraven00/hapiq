@@ -2,6 +2,7 @@ package geo
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -94,6 +95,17 @@ func TestSeriesDownloadHonorsFiltersAndSkipExisting(t *testing.T) {
 	}
 	if got := paths(dry.Files); !slices.Equal(got, want) {
 		t.Fatalf("dry-run paths = %v, want %v", got, want)
+	}
+
+	// Dry-run entries carry a prospective size and no fake timestamp.
+	for _, f := range dry.Files {
+		if strings.HasSuffix(f.Path, "UMI_matrix.csv.gz") && f.Size != 35<<20 {
+			t.Errorf("dry-run size of %s = %d, want %d", f.Path, f.Size, 35<<20)
+		}
+	}
+
+	if b, _ := json.Marshal(dry.Files[0]); strings.Contains(string(b), "download_time") {
+		t.Errorf("dry-run FileInfo should omit zero download_time: %s", b)
 	}
 
 	// Contract: the real download fetches exactly the dry-run file set.
