@@ -111,6 +111,7 @@ type DownloadResult struct {
 	Duration        time.Duration `json:"duration"`
 	BytesTotal      int64         `json:"bytes_total"`
 	BytesDownloaded int64         `json:"bytes_downloaded"`
+	FilesSkipped    int           `json:"files_skipped"` // already on disk under SkipExisting; not in Files
 	Success         bool          `json:"success"`
 }
 
