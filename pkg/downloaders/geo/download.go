@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,32 +53,9 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 		fmt.Printf("📦 Downloading GEO Series: %s\n", id)
 	}
 
-	// Create series subdirectories
-	metadataDir := filepath.Join(targetDir, "metadata")
-	supplementaryDir := filepath.Join(targetDir, "supplementary")
-
-	for _, dir := range []string{metadataDir, supplementaryDir} {
-		if err := common.EnsureDirectory(dir); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-
-	// Download series metadata files using known FTP patterns
-	if err := d.downloadSeriesMetadata(ctx, id, metadataDir, result); err != nil {
-		if d.verbose {
-			fmt.Printf("⚠️  Series metadata download had issues: %v\n", err)
-		}
-		// Don't fail completely for metadata issues
-		result.Warnings = append(result.Warnings, fmt.Sprintf("series metadata download issues: %v", err))
-	}
-
-	// Download series-level supplementary files (priority for modern datasets)
-	if err := d.downloadSeriesSupplementary(ctx, id, supplementaryDir, result); err != nil {
-		if d.verbose {
-			fmt.Printf("⚠️  Series supplementary download had issues: %v\n", err)
-		}
-
-		result.Warnings = append(result.Warnings, fmt.Sprintf("series supplementary files: %v", err))
+	// Series-level files: the same plan the dry run reports.
+	for _, f := range d.planSeriesFiles(ctx, id, options, result) {
+		d.fetchFile(ctx, f.SourceURL, targetDir, f.Path, options, result)
 	}
 
 	// Try to download individual sample files if they exist
@@ -175,36 +153,7 @@ func filterSubsetSamples(samples, subset []string) []string {
 // enumerateSeries lists the files that would be downloaded for a GSE without writing anything.
 // It populates result.Files with series-level files and result.Collections with the sample list.
 func (d *GEODownloader) enumerateSeries(ctx context.Context, id string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
-	// --- Series supplementary files (real directory listing) ---
-	suppBaseURL := fmt.Sprintf("%s/series/%s/%s/suppl/", d.ftpBaseURL, d.getGSESubdir(id), id)
-
-	suppFiles, err := d.getDirectoryListing(ctx, suppBaseURL)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("could not list supplementary files: %v", err))
-	}
-
-	for _, filename := range suppFiles {
-		if options == nil || downloaders.ShouldDownload(filename, -1, options) {
-			result.Files = append(result.Files, downloaders.FileInfo{
-				OriginalName: filename,
-				SourceURL:    suppBaseURL + filename,
-			})
-		}
-	}
-
-	// --- Series metadata files (well-known patterns, not verified) ---
-	gseSubdir := d.getGSESubdir(id)
-	metaBaseURL := fmt.Sprintf("%s/series/%s/%s", d.ftpBaseURL, gseSubdir, id)
-
-	for _, f := range []string{
-		fmt.Sprintf("%s_series_matrix.txt.gz", id),
-		fmt.Sprintf("%s_family.soft.gz", id),
-	} {
-		result.Files = append(result.Files, downloaders.FileInfo{
-			OriginalName: f,
-			SourceURL:    metaBaseURL + "/matrix/" + f,
-		})
-	}
+	result.Files = append(result.Files, d.planSeriesFiles(ctx, id, options, result)...)
 
 	// --- Sample list ---
 	samples, err := d.getSeriesSamplesViaEUtils(ctx, id)
@@ -248,19 +197,6 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 
 	// Download each file
 	for filename, fileURL := range fileURLs {
-		targetPath := filepath.Join(targetDir, filename)
-
-		// Skip if file exists and skip_existing is enabled
-		if options != nil && options.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
-				if d.verbose {
-					fmt.Printf("⏭️  Skipping existing file: %s\n", filename)
-				}
-
-				continue
-			}
-		}
-
 		// Apply filters if specified
 		if options != nil && !d.shouldDownloadFile(filename, options) {
 			if d.verbose {
@@ -270,25 +206,7 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 			continue
 		}
 
-		if d.verbose {
-			fmt.Printf("⬇️  Downloading: %s\n", filename)
-		}
-
-		fileInfo, err := d.downloadFileWithRetry(ctx, fileURL, targetPath)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", filename, err))
-			continue
-		}
-
-		// Make path relative to target directory
-		relPath, err := filepath.Rel(targetDir, fileInfo.Path)
-		if err != nil {
-			relPath = fileInfo.Path
-		}
-
-		fileInfo.Path = relPath
-
-		result.Files = append(result.Files, *fileInfo)
+		d.fetchFile(ctx, fileURL, targetDir, filename, options, result)
 	}
 
 	return nil
@@ -374,111 +292,90 @@ func (d *GEODownloader) downloadDataset(ctx context.Context, id, targetDir strin
 	return nil
 }
 
-// downloadSeriesMetadata downloads series-level metadata files using FTP patterns.
-func (d *GEODownloader) downloadSeriesMetadata(ctx context.Context, id, targetDir string, result *downloaders.DownloadResult) error {
-	// Try matrix directory first (more reliable structure)
-	matrixFile := fmt.Sprintf("%s_series_matrix.txt.gz", id)
-	matrixURL := fmt.Sprintf("%s/series/%s/%s/matrix/%s", d.ftpBaseURL, d.getGSESubdir(id), id, matrixFile)
+// planSeriesFiles lists the series-level files a GSE download fetches, with
+// Path set relative to the series directory. The dry run and the real download
+// both use it, so they cannot disagree on the file set.
+//
+// Supplementary files go through the user's filters. The series matrix and
+// SOFT files are provenance, not payload, and are always included: filtering
+// them would e.g. drop *_family.soft.gz under ExcludeSupplementary, whose
+// pattern list contains "metadata". Their existence is not verified here.
+func (d *GEODownloader) planSeriesFiles(ctx context.Context, id string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) []downloaders.FileInfo {
+	base := fmt.Sprintf("%s/series/%s/%s", d.ftpBaseURL, d.getGSESubdir(id), id)
+	matrix := id + "_series_matrix.txt.gz"
+	soft := id + "_family.soft.gz"
 
-	// Try soft directory
-	softFile := fmt.Sprintf("%s_family.soft.gz", id)
-	softURL := fmt.Sprintf("%s/series/%s/%s/soft/%s", d.ftpBaseURL, d.getGSESubdir(id), id, softFile)
-
-	metadataFiles := map[string]string{
-		matrixFile: matrixURL,
-		softFile:   softURL,
+	files := []downloaders.FileInfo{
+		{OriginalName: matrix, SourceURL: base + "/matrix/" + matrix, Path: filepath.Join("metadata", matrix)},
+		{OriginalName: soft, SourceURL: base + "/soft/" + soft, Path: filepath.Join("metadata", soft)},
 	}
 
-	var downloadedAny bool
+	listing, err := d.getDirectoryListing(ctx, base+"/suppl/")
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("could not list supplementary files: %v", err))
+		return files
+	}
 
-	for filename, url := range metadataFiles {
-		targetPath := filepath.Join(targetDir, filename)
+	kept := 0
 
-		if d.verbose {
-			fmt.Printf("📄 Downloading metadata: %s\n", filename)
-		}
-
-		fileInfo, err := d.downloadFileWithRetry(ctx, url, targetPath)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", filename, err))
+	for _, e := range listing {
+		// ponytail: e.Size is the listing's rounded figure ("14M"), so MaxFileSize is
+		// approximate at the boundary; HEAD each file if that ever matters.
+		if !downloaders.ShouldDownload(e.Name, e.Size, options) {
 			continue
 		}
 
-		// Make path relative to metadata directory
-		relPath := filepath.Join("metadata", filename)
-		fileInfo.Path = relPath
-
-		result.Files = append(result.Files, *fileInfo)
-		downloadedAny = true
+		files = append(files, downloaders.FileInfo{
+			OriginalName: e.Name,
+			SourceURL:    base + "/suppl/" + e.Name,
+			Path:         filepath.Join("supplementary", e.Name),
+			Size:         max(e.Size, 0),
+		})
+		kept++
 	}
 
-	if !downloadedAny {
-		return fmt.Errorf("no metadata files could be downloaded")
+	if kept == 0 && len(listing) > 0 {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("all %d supplementary files were excluded by filters", len(listing)))
 	}
 
-	return nil
+	return files
 }
 
-// downloadSeriesSupplementary downloads supplementary files from series suppl directory.
-func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, targetDir string, result *downloaders.DownloadResult) error {
-	// Supplementary files base URL
-	suppBaseURL := fmt.Sprintf("%s/series/%s/%s/suppl/", d.ftpBaseURL, d.getGSESubdir(id), id)
+// fetchFile downloads url to targetDir/relPath and records it in result.Files
+// with Path=relPath. With SkipExisting, a file already on disk is counted in
+// result.FilesSkipped without touching the network.
+func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) {
+	targetPath := filepath.Join(targetDir, relPath)
 
-	if d.verbose {
-		fmt.Printf("📎 Checking supplementary files directory...\n")
+	if options != nil && options.SkipExisting {
+		if _, err := os.Stat(targetPath); err == nil {
+			if d.verbose {
+				fmt.Printf("⏭️  Skipping existing file: %s\n", relPath)
+			}
+
+			result.FilesSkipped++
+
+			return
+		}
 	}
 
-	// Get actual file list from FTP directory
-	files, err := d.getDirectoryListing(ctx, suppBaseURL)
+	if d.verbose {
+		fmt.Printf("⬇️  Downloading: %s\n", relPath)
+	}
+
+	if err := common.EnsureDirectory(filepath.Dir(targetPath)); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create directory for %s: %v", relPath, err))
+		return
+	}
+
+	fileInfo, err := d.downloadFileWithRetry(ctx, url, targetPath)
 	if err != nil {
-		if d.verbose {
-			fmt.Printf("⚠️  Could not access supplementary directory: %v\n", err)
-		}
-
-		return fmt.Errorf("failed to access supplementary directory: %w", err)
+		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", relPath, err))
+		return
 	}
 
-	if len(files) == 0 {
-		if d.verbose {
-			fmt.Printf("ℹ️  No supplementary files found in directory\n")
-		}
-
-		return nil
-	}
-
-	if d.verbose {
-		fmt.Printf("📁 Found %d supplementary files\n", len(files))
-	}
-
-	downloadedAny := false
-
-	for _, filename := range files {
-		fileURL := suppBaseURL + filename
-		targetPath := filepath.Join(targetDir, filename)
-
-		if d.verbose {
-			fmt.Printf("📎 Downloading: %s\n", filename)
-		}
-
-		fileInfo, err := d.downloadFileWithRetry(ctx, fileURL, targetPath)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", filename, err))
-			continue
-		}
-
-		// Make path relative to supplementary directory
-		relPath := filepath.Join("supplementary", filename)
-		fileInfo.Path = relPath
-
-		result.Files = append(result.Files, *fileInfo)
-		downloadedAny = true
-	}
-
-	if !downloadedAny && len(files) > 0 {
-		return fmt.Errorf("failed to download any supplementary files")
-	}
-
-	return nil
+	fileInfo.Path = relPath
+	result.Files = append(result.Files, *fileInfo)
 }
 
 // getSeriesSamplesViaEUtils retrieves sample IDs for a series using series matrix file.
@@ -874,57 +771,74 @@ func (d *GEODownloader) fetchPageContent(ctx context.Context, url string) ([]byt
 	return content, nil
 }
 
-// getDirectoryListing attempts to parse an FTP directory listing to get filenames.
-func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) ([]string, error) {
-	// Rate limit requests
-	d.rateLimitEUtils()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", dirURL, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse HTML directory listing to extract filenames
-	return d.parseDirectoryListing(string(content))
+// listingEntry is one file in an FTP directory listing. Size is converted from
+// the listing's rounded human-readable figure ("14M"), or -1 if absent.
+type listingEntry struct {
+	Name string
+	Size int64
 }
 
-// parseDirectoryListing extracts filenames from HTML directory listing.
-func (d *GEODownloader) parseDirectoryListing(htmlContent string) ([]string, error) {
-	var files []string
-
-	// Look for href links that point to files (not directories)
-	lines := strings.Split(htmlContent, "\n")
-	for _, line := range lines {
-		// Look for <a href="filename"> pattern
-		if strings.Contains(line, `<a href="`) {
-			start := strings.Index(line, `<a href="`) + 9
-			if start >= 9 {
-				end := strings.Index(line[start:], `"`)
-				if end > 0 {
-					filename := line[start : start+end]
-					// Skip parent directory links and directories (ending with /)
-					if filename != "../" && !strings.HasSuffix(filename, "/") && filename != "" {
-						files = append(files, filename)
-					}
-				}
-			}
-		}
+// getDirectoryListing fetches and parses an FTP directory listing.
+func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) ([]listingEntry, error) {
+	content, err := d.fetchPageContent(ctx, dirURL)
+	if err != nil {
+		return nil, err
 	}
 
-	return files, nil
+	return parseDirectoryListing(string(content)), nil
+}
+
+// parseDirectoryListing extracts files from an HTML directory listing, whose
+// lines look like `<a href="name">name</a>   2020-03-23 12:47   14M`.
+func parseDirectoryListing(htmlContent string) []listingEntry {
+	var files []listingEntry
+
+	for _, line := range strings.Split(htmlContent, "\n") {
+		start := strings.Index(line, `<a href="`)
+		if start < 0 {
+			continue
+		}
+
+		start += len(`<a href="`)
+
+		end := strings.Index(line[start:], `"`)
+		if end <= 0 {
+			continue
+		}
+
+		filename := line[start : start+end]
+		// Skip parent directory links and directories (ending with /)
+		if filename == "../" || strings.HasSuffix(filename, "/") {
+			continue
+		}
+
+		size := int64(-1)
+
+		if i := strings.Index(line, "</a>"); i >= 0 {
+			if fields := strings.Fields(line[i+len("</a>"):]); len(fields) > 0 {
+				size = parseListingSize(fields[len(fields)-1])
+			}
+		}
+
+		files = append(files, listingEntry{Name: filename, Size: size})
+	}
+
+	return files
+}
+
+// parseListingSize converts "512", "242K", "5.0M", "1.2G" to bytes; -1 if unparseable.
+func parseListingSize(s string) int64 {
+	mult := 1.0
+
+	if i := strings.IndexByte("KMGT", s[len(s)-1]); i >= 0 {
+		mult = float64(int64(1) << (10 * (i + 1)))
+		s = s[:len(s)-1]
+	}
+
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return -1
+	}
+
+	return int64(f * mult)
 }

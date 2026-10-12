@@ -103,7 +103,7 @@ type DownloadResult struct {
 	Metadata        *Metadata     `json:"metadata"`
 	Checksum        string        `json:"checksum,omitempty"`
 	ChecksumType    string        `json:"checksum_type,omitempty"`
-	WitnessFile     string        `json:"witness_file"`
+	WitnessFile     string        `json:"witness_file,omitempty"`
 	Files           []FileInfo    `json:"files"`
 	Collections     []Collection  `json:"collections,omitempty"`
 	Errors          []string      `json:"errors,omitempty"`
@@ -111,12 +111,13 @@ type DownloadResult struct {
 	Duration        time.Duration `json:"duration"`
 	BytesTotal      int64         `json:"bytes_total"`
 	BytesDownloaded int64         `json:"bytes_downloaded"`
+	FilesSkipped    int           `json:"files_skipped"` // already on disk under SkipExisting; not in Files
 	Success         bool          `json:"success"`
 }
 
 // FileInfo contains metadata about an individual downloaded file.
 type FileInfo struct {
-	DownloadTime time.Time `json:"download_time"`
+	DownloadTime time.Time `json:"download_time,omitzero"` // zero in dry-run listings
 	Path         string    `json:"path"`
 	OriginalName string    `json:"original_name"`
 	Checksum     string    `json:"checksum,omitempty"`

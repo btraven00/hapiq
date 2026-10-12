@@ -281,7 +281,7 @@ func displayMetadataSummary(metadata *downloaders.Metadata) {
 		for _, collection := range metadata.Collections {
 			_, _ = fmt.Fprintf(os.Stderr, "   %s: %s (%d files, %s)\n",
 				collection.Type, collection.Title, collection.FileCount,
-				common.FormatBytes(collection.EstimatedSize))
+				common.FormatEstimate(collection.EstimatedSize))
 		}
 	}
 }

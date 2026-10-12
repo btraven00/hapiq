@@ -38,3 +38,35 @@ func TestHandleDirectoryConflicts(t *testing.T) {
 		})
 	}
 }
+
+// Regression: witness stats describe the latest run, not a
+// running total, while the file list still accumulates.
+func TestMergeWitnessFilesStatsArePerRun(t *testing.T) {
+	prev := &downloaders.WitnessFile{
+		OriginalID:    "GSE1",
+		Files:         []downloaders.FileWitness{{Path: "a"}},
+		DownloadStats: &downloaders.DownloadStats{BytesTotal: 100, BytesDownloaded: 100, FilesTotal: 1, FilesDownloaded: 1},
+	}
+	nextStats := &downloaders.DownloadStats{BytesTotal: 0, BytesDownloaded: 0, FilesTotal: 1, FilesSkipped: 1}
+	next := &downloaders.WitnessFile{OriginalID: "GSE1", DownloadStats: nextStats}
+
+	merged := mergeWitnessFiles(prev, next)
+
+	if *merged.DownloadStats != *nextStats {
+		t.Errorf("stats = %+v, want latest run's %+v", *merged.DownloadStats, *nextStats)
+	}
+
+	if len(merged.Files) != 1 || merged.Files[0].Path != "a" {
+		t.Errorf("file list should still accumulate, got %+v", merged.Files)
+	}
+}
+
+func TestFormatEstimate(t *testing.T) {
+	if got := FormatEstimate(0); got != "unknown" {
+		t.Errorf("FormatEstimate(0) = %q, want unknown", got)
+	}
+
+	if got := FormatEstimate(2048); got != FormatBytes(2048) {
+		t.Errorf("FormatEstimate(2048) = %q, want %q", got, FormatBytes(2048))
+	}
+}
