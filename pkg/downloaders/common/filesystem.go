@@ -393,6 +393,15 @@ func FormatBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), units[exp])
 }
 
+// FormatEstimate formats an estimated size, printing "unknown" for 0 (no estimate).
+func FormatEstimate(bytes int64) string {
+	if bytes <= 0 {
+		return "unknown"
+	}
+
+	return FormatBytes(bytes)
+}
+
 // EstimateDownloadTime estimates download time based on file size and average speed.
 func EstimateDownloadTime(totalBytes int64, averageSpeedBps float64) string {
 	if averageSpeedBps <= 0 {

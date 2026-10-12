@@ -60,3 +60,13 @@ func TestMergeWitnessFilesStatsArePerRun(t *testing.T) {
 		t.Errorf("file list should still accumulate, got %+v", merged.Files)
 	}
 }
+
+func TestFormatEstimate(t *testing.T) {
+	if got := FormatEstimate(0); got != "unknown" {
+		t.Errorf("FormatEstimate(0) = %q, want unknown", got)
+	}
+
+	if got := FormatEstimate(2048); got != FormatBytes(2048) {
+		t.Errorf("FormatEstimate(2048) = %q, want %q", got, FormatBytes(2048))
+	}
+}
