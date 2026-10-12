@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
 const testGSE = "GSE147405"
@@ -169,7 +171,9 @@ func TestParseDirectoryListingSizes(t *testing.T) {
 <a href="b.csv.gz">b.csv.gz</a>          2020-03-23 12:47  242K
 <a href="c.csv.gz">c.csv.gz</a>          2020-03-23 12:47  5.0M
 <a href="d.txt">d.txt</a>                2020-03-23 12:47  512
-<a href="e.txt">e.txt</a>`
+<a href="e.txt">e.txt</a>
+<a href="f.txt">f.txt</a>                2020-03-23 12:47  -
+<a href="">broken</a>`
 
 	want := []listingEntry{
 		{"a.csv.gz", 14 << 20},
@@ -177,8 +181,75 @@ func TestParseDirectoryListingSizes(t *testing.T) {
 		{"c.csv.gz", 5 << 20},
 		{"d.txt", 512},
 		{"e.txt", -1},
+		{"f.txt", -1},
 	}
 	if got := parseDirectoryListing(html); !slices.Equal(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// The full Download path: a second run into a populated directory skips every
+// file, still counts as a success, and records the skips in the witness stats.
+func TestDownloadRerunSkipsEverything(t *testing.T) {
+	srv, hits := fakeGEOFTP(t)
+	d := newTestDownloader(srv.URL)
+	out := t.TempDir()
+	req := &downloaders.DownloadRequest{
+		ID:        testGSE,
+		OutputDir: out,
+		Metadata:  &downloaders.Metadata{Source: "geo", ID: testGSE, Custom: map[string]any{}},
+		Options:   &downloaders.DownloadOptions{FilenameGlob: "*A549*TimeCourse*", SkipExisting: true, NonInteractive: true},
+	}
+
+	for run := 1; run <= 2; run++ {
+		result, err := d.Download(context.Background(), req)
+		if err != nil || !result.Success {
+			t.Fatalf("run %d: success=%v err=%v errors=%v", run, result.Success, err, result.Errors)
+		}
+	}
+
+	if n := hits("/suppl/GSE147405_A549_EGF_TimeCourse_UMI_matrix.csv.gz"); n != 1 {
+		t.Errorf("file fetched %d times across two runs, want 1", n)
+	}
+
+	witness, err := common.LoadWitnessFile(filepath.Join(out, testGSE))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := *witness.DownloadStats
+	if got.FilesTotal != 4 || got.FilesSkipped != 4 || got.FilesDownloaded != 0 || got.BytesDownloaded != 0 {
+		t.Errorf("run 2 witness stats = %+v, want 4 total, 4 skipped, 0 downloaded", got)
+	}
+
+	if len(witness.Files) != 4 {
+		t.Errorf("witness should still list the 4 files from run 1, got %d", len(witness.Files))
+	}
+}
+
+// Failures are reported as warnings, not silently dropped.
+func TestSeriesPlanAndFetchWarnOnFailure(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+
+	d := newTestDownloader(srv.URL)
+	ctx := context.Background()
+	result := &downloaders.DownloadResult{}
+
+	files := d.planSeriesFiles(ctx, testGSE, nil, result)
+	if len(files) != 2 {
+		t.Errorf("unlistable suppl/ should leave just the 2 metadata files, got %v", paths(files))
+	}
+
+	d.fetchFile(ctx, srv.URL+"/missing.gz", t.TempDir(), "supplementary/missing.gz", nil, result)
+
+	if len(result.Files) != 0 {
+		t.Errorf("failed fetch should not be listed, got %v", paths(result.Files))
+	}
+
+	for _, want := range []string{"could not list supplementary files", "failed to download supplementary/missing.gz"} {
+		if !slices.ContainsFunc(result.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
+			t.Errorf("missing warning %q in %v", want, result.Warnings)
+		}
 	}
 }
