@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -183,7 +184,8 @@ func (d *GEODownloader) enumerateSeries(ctx context.Context, id string, options 
 		result.Warnings = append(result.Warnings, fmt.Sprintf("could not list supplementary files: %v", err))
 	}
 
-	for _, filename := range suppFiles {
+	for _, e := range suppFiles {
+		filename := e.Name
 		if options == nil || downloaders.ShouldDownload(filename, -1, options) {
 			result.Files = append(result.Files, downloaders.FileInfo{
 				OriginalName: filename,
@@ -452,7 +454,8 @@ func (d *GEODownloader) downloadSeriesSupplementary(ctx context.Context, id, tar
 
 	downloadedAny := false
 
-	for _, filename := range files {
+	for _, e := range files {
+		filename := e.Name
 		fileURL := suppBaseURL + filename
 		targetPath := filepath.Join(targetDir, filename)
 
@@ -874,57 +877,74 @@ func (d *GEODownloader) fetchPageContent(ctx context.Context, url string) ([]byt
 	return content, nil
 }
 
-// getDirectoryListing attempts to parse an FTP directory listing to get filenames.
-func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) ([]string, error) {
-	// Rate limit requests
-	d.rateLimitEUtils()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", dirURL, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse HTML directory listing to extract filenames
-	return d.parseDirectoryListing(string(content))
+// listingEntry is one file in an FTP directory listing. Size is converted from
+// the listing's rounded human-readable figure ("14M"), or -1 if absent.
+type listingEntry struct {
+	Name string
+	Size int64
 }
 
-// parseDirectoryListing extracts filenames from HTML directory listing.
-func (d *GEODownloader) parseDirectoryListing(htmlContent string) ([]string, error) {
-	var files []string
-
-	// Look for href links that point to files (not directories)
-	lines := strings.Split(htmlContent, "\n")
-	for _, line := range lines {
-		// Look for <a href="filename"> pattern
-		if strings.Contains(line, `<a href="`) {
-			start := strings.Index(line, `<a href="`) + 9
-			if start >= 9 {
-				end := strings.Index(line[start:], `"`)
-				if end > 0 {
-					filename := line[start : start+end]
-					// Skip parent directory links and directories (ending with /)
-					if filename != "../" && !strings.HasSuffix(filename, "/") && filename != "" {
-						files = append(files, filename)
-					}
-				}
-			}
-		}
+// getDirectoryListing fetches and parses an FTP directory listing.
+func (d *GEODownloader) getDirectoryListing(ctx context.Context, dirURL string) ([]listingEntry, error) {
+	content, err := d.fetchPageContent(ctx, dirURL)
+	if err != nil {
+		return nil, err
 	}
 
-	return files, nil
+	return parseDirectoryListing(string(content)), nil
+}
+
+// parseDirectoryListing extracts files from an HTML directory listing, whose
+// lines look like `<a href="name">name</a>   2020-03-23 12:47   14M`.
+func parseDirectoryListing(htmlContent string) []listingEntry {
+	var files []listingEntry
+
+	for _, line := range strings.Split(htmlContent, "\n") {
+		start := strings.Index(line, `<a href="`)
+		if start < 0 {
+			continue
+		}
+
+		start += len(`<a href="`)
+
+		end := strings.Index(line[start:], `"`)
+		if end <= 0 {
+			continue
+		}
+
+		filename := line[start : start+end]
+		// Skip parent directory links and directories (ending with /)
+		if filename == "../" || strings.HasSuffix(filename, "/") {
+			continue
+		}
+
+		size := int64(-1)
+
+		if i := strings.Index(line, "</a>"); i >= 0 {
+			if fields := strings.Fields(line[i+len("</a>"):]); len(fields) > 0 {
+				size = parseListingSize(fields[len(fields)-1])
+			}
+		}
+
+		files = append(files, listingEntry{Name: filename, Size: size})
+	}
+
+	return files
+}
+
+// parseListingSize converts "512", "242K", "5.0M", "1.2G" to bytes; -1 if unparseable.
+func parseListingSize(s string) int64 {
+	mult := 1.0
+
+	if i := strings.IndexByte("KMGT", s[len(s)-1]); i >= 0 {
+		mult = float64(int64(1) << (10 * (i + 1)))
+		s = s[:len(s)-1]
+	}
+
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return -1
+	}
+
+	return int64(f * mult)
 }
