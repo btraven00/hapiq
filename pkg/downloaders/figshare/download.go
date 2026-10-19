@@ -258,6 +258,55 @@ func (d *FigshareDownloader) downloadProject(ctx context.Context, id, targetDir 
 	return nil
 }
 
+// listFiles fills result.Files with the files a download would fetch, without
+// writing anything. Paths are relative to the dataset directory, as in a real
+// download.
+func (d *FigshareDownloader) listFiles(ctx context.Context, id, datasetType string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
+	listArticle := func(articleID, dir string) error {
+		var article FigshareArticle
+		if err := d.apiRequest(ctx, "articles/"+articleID, &article); err != nil {
+			return fmt.Errorf("failed to fetch article details: %w", err)
+		}
+		for _, file := range article.Files {
+			if options != nil && !d.shouldDownloadFile(file, options) {
+				continue
+			}
+			result.Files = append(result.Files, downloaders.FileInfo{
+				Path:         filepath.Join(dir, common.SanitizeFilename(file.Name)),
+				OriginalName: file.Name,
+				SourceURL:    file.DownloadURL,
+				Size:         file.Size,
+				Checksum:     file.MD5,
+				ChecksumType: "md5",
+			})
+			result.BytesTotal += file.Size
+		}
+		return nil
+	}
+
+	if datasetType == "article" {
+		return listArticle(id, "")
+	}
+
+	var parent struct {
+		Articles []FigshareArticle `json:"articles"`
+	}
+	endpoint := fmt.Sprintf("%ss/%s", datasetType, id) // collections/<id> or projects/<id>
+	if err := d.apiRequest(ctx, endpoint, &parent); err != nil {
+		return fmt.Errorf("failed to fetch %s details: %w", datasetType, err)
+	}
+	for _, article := range parent.Articles {
+		dirName := fmt.Sprintf("%d_%s", article.ID, common.SanitizeFilename(article.Title))
+		if len(dirName) > 100 {
+			dirName = dirName[:100]
+		}
+		if err := listArticle(fmt.Sprintf("%d", article.ID), filepath.Join("articles", dirName)); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to list article %s: %v", article.Title, err))
+		}
+	}
+	return nil
+}
+
 // saveArticleMetadata saves article metadata to a JSON file.
 func (d *FigshareDownloader) saveArticleMetadata(article FigshareArticle, targetDir string) error {
 	metadataPath := filepath.Join(targetDir, "article_metadata.json")

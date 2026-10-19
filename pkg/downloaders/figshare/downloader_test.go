@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -637,4 +639,43 @@ func (t *mockFigshareTransport) RoundTrip(req *http.Request) (*http.Response, er
 	}
 
 	return http.DefaultTransport.RoundTrip(req)
+}
+
+// Regression: --dry-run used to start the real download.
+func TestFigshareDownloader_DryRun(t *testing.T) {
+	var fileHits int
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/files/") {
+			fileHits++
+			w.Write([]byte("payload"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id": 1, "title": "t", "files": [
+			{"id": 1, "name": "a.csv", "size": 10, "download_url": "` + server.URL + `/files/1", "computed_md5": "abc"},
+			{"id": 2, "name": "b.rds", "size": 20, "download_url": "` + server.URL + `/files/2"}]}`))
+	}))
+	defer server.Close()
+
+	d := NewFigshareDownloader(WithHTTPClient(&http.Client{Transport: &mockFigshareTransport{server: server}}))
+	outDir := filepath.Join(t.TempDir(), "out")
+	result, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID:        "1",
+		OutputDir: outDir,
+		Metadata:  &downloaders.Metadata{Source: "figshare", ID: "1"},
+		Options:   &downloaders.DownloadOptions{DryRun: true, NonInteractive: true},
+	})
+	if err != nil || !result.Success {
+		t.Fatalf("Download() err=%v result=%+v", err, result)
+	}
+	if len(result.Files) != 2 || result.Files[0].Checksum != "abc" {
+		t.Errorf("listed %+v, want a.csv and b.rds", result.Files)
+	}
+	if fileHits != 0 {
+		t.Errorf("dry run fetched %d files", fileHits)
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Errorf("dry run touched output dir %s", outDir)
+	}
 }
