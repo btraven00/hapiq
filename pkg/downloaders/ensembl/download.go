@@ -32,7 +32,17 @@ type SpeciesInfo struct {
 func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *EnsemblRequest, outputDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	// Create output directory structure
 	targetDir := filepath.Join(outputDir, fmt.Sprintf("ensembl_%s_release-%s_%s", req.Database, req.Version, req.Content))
-	if err := common.EnsureDirectory(targetDir); err != nil {
+	dryRun := options != nil && options.DryRun
+	speciesDir := targetDir
+	if dryRun {
+		// The species list is needed to build URLs; keep it out of the output dir.
+		tmp, err := os.MkdirTemp("", "hapiq-ensembl-")
+		if err != nil {
+			return fmt.Errorf("failed to create temp directory: %w", err)
+		}
+		defer os.RemoveAll(tmp)
+		speciesDir = tmp
+	} else if err := common.EnsureDirectory(targetDir); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
@@ -40,7 +50,7 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 	speciesListURL := fmt.Sprintf("%s/release-%s/%s/species_Ensembl%s.txt",
 		d.ftpBaseURL, req.Version, req.Database, strings.Title(string(req.Database)))
 
-	speciesList, err := d.downloadSpeciesList(ctx, speciesListURL, targetDir)
+	speciesList, err := d.downloadSpeciesList(ctx, speciesListURL, speciesDir)
 	if err != nil {
 		return fmt.Errorf("failed to download species list: %w", err)
 	}
@@ -70,6 +80,18 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 	urls, err := d.generateDownloadURLs(req, species)
 	if err != nil {
 		return fmt.Errorf("failed to generate download URLs: %w", err)
+	}
+
+	if dryRun {
+		for _, u := range urls {
+			fileName := filepath.Base(u)
+			result.Files = append(result.Files, downloaders.FileInfo{
+				Path:         filepath.Join(targetDir, fileName),
+				OriginalName: fileName,
+				SourceURL:    u,
+			})
+		}
+		return nil
 	}
 
 	// Set up progress tracking with FTP-aware concurrency limits

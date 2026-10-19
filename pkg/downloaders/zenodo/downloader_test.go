@@ -834,3 +834,29 @@ func BenchmarkZenodoDownloader_ShouldDownloadFile(b *testing.B) {
 		_ = downloader.shouldDownloadFile(file, options)
 	}
 }
+
+// Regression: --dry-run used to start the real download.
+func TestZenodoDownloader_DryRun(t *testing.T) {
+	server := mockZenodoServer()
+	defer server.Close()
+
+	downloader := NewZenodoDownloader()
+	downloader.apiURL = server.URL + "/api/records"
+	downloader.baseURL = server.URL
+
+	outDir := filepath.Join(t.TempDir(), "out")
+	result, err := downloader.Download(context.Background(), &downloaders.DownloadRequest{
+		ID:        "123456",
+		OutputDir: outDir,
+		Options:   &downloaders.DownloadOptions{DryRun: true},
+	})
+	if err != nil || !result.Success {
+		t.Fatalf("Download() err=%v result=%+v", err, result)
+	}
+	if len(result.Files) != 2 {
+		t.Errorf("listed %d files, want 2", len(result.Files))
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Errorf("dry run touched output dir %s", outDir)
+	}
+}

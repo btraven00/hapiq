@@ -208,6 +208,16 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 
 	result.Metadata = metadata
 
+	if req.Options != nil && req.Options.DryRun {
+		if err := d.listFiles(ctx, cleanID, d.determineDatasetType(metadata), req.Options, result); err != nil {
+			result.Errors = append(result.Errors, err.Error())
+			return result, nil
+		}
+		result.Success = true
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	// Check directory and handle conflicts
 	dirChecker := common.NewDirectoryChecker(req.OutputDir)
 

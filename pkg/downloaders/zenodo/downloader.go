@@ -223,6 +223,24 @@ func (d *ZenodoDownloader) Download(ctx context.Context, req *downloaders.Downlo
 		}
 	}
 
+	if req.Options != nil && req.Options.DryRun {
+		for _, file := range d.filterFiles(record.Files, req.Options) {
+			checksumType, checksum, _ := strings.Cut(file.Checksum, ":")
+			result.Files = append(result.Files, downloaders.FileInfo{
+				Path:         filepath.Join(req.OutputDir, file.Key),
+				OriginalName: file.Key,
+				SourceURL:    file.Links.Self,
+				Size:         file.Size,
+				Checksum:     checksum,
+				ChecksumType: checksumType,
+			})
+			result.BytesTotal += file.Size
+		}
+		result.Success = true
+		result.Duration = time.Since(startTime)
+		return result, nil
+	}
+
 	// Create output directory
 	if err := os.MkdirAll(req.OutputDir, 0o750); err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create output directory: %v", err))

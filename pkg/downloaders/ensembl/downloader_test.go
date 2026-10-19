@@ -3,8 +3,14 @@ package ensembl
 
 import (
 	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
 func TestNewEnsemblDownloader(t *testing.T) {
@@ -447,5 +453,50 @@ func BenchmarkEnsemblDownloader_cleanEnsemblID(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = d.cleanEnsemblID("  ENSEMBL:BACTERIA:47:PEP  ")
+	}
+}
+
+// fakeProto serves the species list and records every other URL requested.
+type fakeProto struct{ others []string }
+
+func (f *fakeProto) Head(ctx context.Context, u string) (*ProtocolResponse, error) {
+	return f.Get(ctx, u)
+}
+
+func (f *fakeProto) Get(_ context.Context, u string) (*ProtocolResponse, error) {
+	if strings.HasSuffix(u, ".txt") {
+		line := "escherichia_coli\tescherichia_coli\tEnsemblBacteria\t562\tASM584v2\tENA\t1\t2\t3\t4\t5\t6\t7\tbacteria_0_collection_core_47_100_1\n"
+		return &ProtocolResponse{StatusCode: 200, Body: io.NopCloser(strings.NewReader(line))}, nil
+	}
+	f.others = append(f.others, u)
+	return &ProtocolResponse{StatusCode: 200, Body: io.NopCloser(strings.NewReader("payload"))}, nil
+}
+
+func (f *fakeProto) Close() error { return nil }
+
+// Regression: --dry-run used to start the real download.
+func TestEnsemblDownloader_DryRun(t *testing.T) {
+	proto := &fakeProto{}
+	d := NewEnsemblDownloader()
+	d.protoClient = proto
+
+	outDir := filepath.Join(t.TempDir(), "out")
+	result, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID:        "bacteria:47:pep",
+		OutputDir: outDir,
+		Metadata:  &downloaders.Metadata{Source: "ensembl"},
+		Options:   &downloaders.DownloadOptions{DryRun: true},
+	})
+	if err != nil || !result.Success {
+		t.Fatalf("Download() err=%v result=%+v", err, result)
+	}
+	if len(result.Files) != 1 || !strings.HasSuffix(result.Files[0].OriginalName, ".pep.all.fa.gz") {
+		t.Errorf("listed %+v, want one .pep.all.fa.gz", result.Files)
+	}
+	if len(proto.others) != 0 {
+		t.Errorf("dry run fetched %v", proto.others)
+	}
+	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+		t.Errorf("dry run touched output dir %s", outDir)
 	}
 }
