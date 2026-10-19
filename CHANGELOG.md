@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GEO series filters:** `--filename-pattern`, `--include-ext`,
+  `--exclude-ext`, `--max-file-size` and `--skip-existing` now apply to
+  series-level supplementary files. Before, every file in `suppl/` was
+  downloaded on every run. The dry run and the real download now use the
+  same file list. The series matrix and SOFT files are always included.
+  A filter that excludes every supplementary file prints a warning.
+- **GEO size estimate:** a series' estimated size is now summed from the FTP
+  listing. Before, every series reported a hardcoded 500 MB. When the
+  listing can't be read, the size shows as "unknown".
+- **Dry-run output:** each file now has its destination `path` and its
+  approximate `size`. The zero `download_time` is no longer printed.
+- **Witness stats:** `download_stats` describes the latest run only. Before,
+  byte and file counts added up across runs into the same directory.
+  GEO downloads now report `files_skipped`.
+
 ## [0.1.1] - 2026-10-05
 
 ### Fixed
