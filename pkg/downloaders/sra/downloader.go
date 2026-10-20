@@ -46,7 +46,7 @@ type Option func(*SRADownloader)
 func WithTimeout(t time.Duration) Option {
 	return func(d *SRADownloader) {
 		d.timeout = t
-		d.client.Timeout = t
+		common.SetIdleTimeout(d.client, t)
 	}
 }
 

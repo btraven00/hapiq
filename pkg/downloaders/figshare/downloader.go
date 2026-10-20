@@ -54,7 +54,7 @@ type Option func(*FigshareDownloader)
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *FigshareDownloader) {
 		d.timeout = timeout
-		d.client.Timeout = timeout
+		common.SetIdleTimeout(d.client, timeout)
 	}
 }
 

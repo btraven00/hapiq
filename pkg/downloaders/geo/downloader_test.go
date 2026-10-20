@@ -463,8 +463,9 @@ func TestGEODownloader_Options(t *testing.T) {
 		t.Fatalf("Expected timeout %v, got %v", timeout, downloader.timeout)
 	}
 
-	if downloader.client.Timeout != timeout {
-		t.Fatalf("Expected client timeout %v, got %v", timeout, downloader.client.Timeout)
+	// The timeout is a stall limit on the transport, not a cap on the request.
+	if downloader.client.Timeout != 0 || downloader.client.Transport == nil {
+		t.Fatalf("WithTimeout should install the idle-timeout transport, got Timeout=%v", downloader.client.Timeout)
 	}
 
 	// Test WithVerbose option

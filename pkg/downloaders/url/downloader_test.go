@@ -529,7 +529,8 @@ func TestOptions(t *testing.T) {
 	if !d.verbose {
 		t.Error("WithVerbose(true) not applied")
 	}
-	if d.client.Timeout != 30*time.Second {
-		t.Errorf("WithTimeout: client.Timeout = %v, want 30s", d.client.Timeout)
+	// The timeout is a stall limit on the transport, not a cap on the request.
+	if d.client.Timeout != 0 || d.client.Transport == nil {
+		t.Errorf("WithTimeout should install the idle-timeout transport, got Timeout=%v", d.client.Timeout)
 	}
 }

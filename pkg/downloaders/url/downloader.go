@@ -46,7 +46,7 @@ func WithVerbose(v bool) Option {
 
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(t time.Duration) Option {
-	return func(d *URLDownloader) { d.client.Timeout = t }
+	return func(d *URLDownloader) { common.SetIdleTimeout(d.client, t) }
 }
 
 // New creates a URLDownloader.

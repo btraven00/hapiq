@@ -57,7 +57,7 @@ type Option func(*GEODownloader)
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *GEODownloader) {
 		d.timeout = timeout
-		d.client.Timeout = timeout
+		common.SetIdleTimeout(d.client, timeout)
 	}
 }
 
