@@ -35,6 +35,15 @@ func Open(cfg Config) (*Cache, error) {
 		}
 	}
 
+	// MkdirAll succeeds on existing dirs, so a read-only cache (e.g. a system
+	// config pointing at someone else's dir) is only caught by writing to it.
+	probe, err := os.CreateTemp(filepath.Join(cfg.Dir, "tmp"), "probe-*")
+	if err != nil {
+		return nil, fmt.Errorf("cache dir not writable: %w", err)
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
+
 	db, s, err := openDB(cfg.Dir)
 	if err != nil {
 		return nil, err
