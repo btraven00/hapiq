@@ -48,6 +48,7 @@ func WithTimeout(t time.Duration) Option {
 	return func(d *ExperimentHubDownloader) {
 		d.timeout = t
 		d.client = newHTTPClient(t)
+		common.SetIdleTimeout(d.client, t)
 	}
 }
 

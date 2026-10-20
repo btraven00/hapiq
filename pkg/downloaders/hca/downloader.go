@@ -33,6 +33,7 @@ func WithTimeout(t time.Duration) Option {
 	return func(d *HCADownloader) {
 		d.timeout = t
 		d.client = newHTTPClient(t)
+		common.SetIdleTimeout(d.client, t)
 	}
 }
 

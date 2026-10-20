@@ -119,8 +119,9 @@ func runDownload(_ *cobra.Command, args []string) error {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
-	defer cancel()
+	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
+	// deadline for the run: a multi-GB download may legitimately take hours.
+	ctx := context.Background()
 
 	ctx, closeCache := attachCache(ctx, quiet)
 	defer closeCache()
@@ -765,7 +766,7 @@ func init() {
 
 	// Network and timeout flags
 	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
-		"timeout in seconds for download operations")
+		"seconds without any data received before a request is abandoned")
 
 	// File-level filters (Phase 1)
 	downloadCmd.Flags().StringVar(&includeExts, "include-ext", "",

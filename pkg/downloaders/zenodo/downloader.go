@@ -86,7 +86,7 @@ type Option func(*ZenodoDownloader)
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *ZenodoDownloader) {
 		d.timeout = timeout
-		d.client.Timeout = timeout
+		common.SetIdleTimeout(d.client, timeout)
 	}
 }
 

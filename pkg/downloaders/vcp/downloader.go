@@ -31,7 +31,7 @@ type Option func(*VCPDownloader)
 func WithTimeout(t time.Duration) Option {
 	return func(d *VCPDownloader) {
 		d.timeout = t
-		d.c.http.Timeout = t
+		common.SetIdleTimeout(d.c.http, t)
 	}
 }
 

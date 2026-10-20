@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
 // EnsemblDownloader implements the Downloader interface for Ensembl Genomes datasets.
@@ -53,7 +54,7 @@ type Option func(*EnsemblDownloader)
 func WithTimeout(timeout time.Duration) Option {
 	return func(d *EnsemblDownloader) {
 		d.timeout = timeout
-		d.client.Timeout = timeout
+		common.SetIdleTimeout(d.client, timeout)
 	}
 }
 
