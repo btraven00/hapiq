@@ -296,6 +296,7 @@ hapiq species plants --examples       # show example download IDs
 |----------|-------------|
 | `NCBI_API_KEY` | NCBI API key — raises rate limit from 3 to 10 req/s for GEO. Get one at [ncbi.nlm.nih.gov/account](https://www.ncbi.nlm.nih.gov/account/). |
 | `VCP_TOKEN` | JWT for the CZI Virtual Cell Platform. Required for private/restricted VCP datasets. Public datasets (e.g. Billion Cell Project) work without it. |
+| `SSL_CERT_FILE` | PEM bundle to trust instead of the system roots (Linux/BSD). Use it for a server that omits its intermediate certificate (`x509: certificate signed by unknown authority`): concatenate the system bundle and the missing intermediate, after checking it with `openssl verify`. There is no option to skip verification. |
 
 ```bash
 export NCBI_API_KEY=your_key_here
