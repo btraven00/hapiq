@@ -17,6 +17,7 @@ import (
 	"github.com/btraven00/hapiq/internal/version"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
+	"github.com/btraven00/hapiq/pkg/manifest"
 )
 
 // ZenodoArtifactType represents the type of Zenodo artifact
@@ -624,16 +625,26 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 		return nil, fmt.Errorf("fetch %s: %w", file.Key, err)
 	}
 
+	// Zenodo publishes "md5:<hex>"; check it so a truncated or corrupted
+	// transfer fails instead of passing as complete.
+	if strings.HasPrefix(file.Checksum, "md5:") {
+		if err := manifest.VerifyFile(outputPath, file.Checksum); err != nil {
+			_ = os.Remove(outputPath)
+			return nil, err
+		}
+	}
+
 	return &downloaders.FileInfo{
-		Path:         outputPath,
-		OriginalName: file.Key,
-		SourceURL:    file.Links.Self,
-		ContentType:  result.ContentType,
-		Size:         result.N,
-		Checksum:     result.SHA256,
-		ChecksumType: "sha256",
-		DownloadTime: time.Now(),
-		CacheHit:     result.Hit,
+		Path:           outputPath,
+		OriginalName:   file.Key,
+		SourceURL:      file.Links.Self,
+		ContentType:    result.ContentType,
+		Size:           result.N,
+		Checksum:       result.SHA256,
+		ChecksumType:   "sha256",
+		SourceChecksum: sourceMD5(file.Checksum),
+		DownloadTime:   time.Now(),
+		CacheHit:       result.Hit,
 	}, nil
 }
 
@@ -664,16 +675,26 @@ func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult,
 	// Convert FileInfo to FileWitness
 	for _, file := range result.Files {
 		witness.Files = append(witness.Files, downloaders.FileWitness{
-			Path:         file.Path,
-			OriginalName: file.OriginalName,
-			SourceURL:    file.SourceURL,
-			ContentType:  file.ContentType,
-			Size:         file.Size,
-			Checksum:     file.Checksum,
-			ChecksumType: file.ChecksumType,
-			DownloadTime: file.DownloadTime,
+			Path:           file.Path,
+			OriginalName:   file.OriginalName,
+			SourceURL:      file.SourceURL,
+			ContentType:    file.ContentType,
+			Size:           file.Size,
+			Checksum:       file.Checksum,
+			ChecksumType:   file.ChecksumType,
+			SourceChecksum: file.SourceChecksum,
+			DownloadTime:   file.DownloadTime,
 		})
 	}
 
 	return witness
+}
+
+// sourceMD5 returns Zenodo's checksum when it is an md5 (the only kind
+// downloadFile verifies), else "".
+func sourceMD5(checksum string) string {
+	if strings.HasPrefix(checksum, "md5:") {
+		return checksum
+	}
+	return ""
 }
