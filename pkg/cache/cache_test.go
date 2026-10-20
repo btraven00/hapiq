@@ -340,3 +340,28 @@ func TestIsPinnedAfterHardlink(t *testing.T) {
 		t.Error("blob should no longer be pinned after output file removed")
 	}
 }
+
+// An existing but read-only cache dir must fail Open, so callers fall back to
+// no cache instead of failing every download at "create tmp".
+func TestOpenReadOnlyDirFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	c, err := cache.Open(cache.Config{Dir: dir})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	_ = c.Close()
+
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.Chmod(tmp, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(tmp, 0o750) })
+
+	if c, err := cache.Open(cache.Config{Dir: dir}); err == nil {
+		_ = c.Close()
+		t.Fatal("Open succeeded on a read-only cache dir")
+	}
+}
