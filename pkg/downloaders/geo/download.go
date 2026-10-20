@@ -807,8 +807,9 @@ func parseDirectoryListing(htmlContent string) []listingEntry {
 		}
 
 		filename := line[start : start+end]
-		// Skip parent directory links and directories (ending with /)
-		if filename == "../" || strings.HasSuffix(filename, "/") {
+		// Keep only plain names in this directory: skip parent/sub-directories
+		// and absolute or off-site links such as the footer's hhs.gov link.
+		if strings.ContainsAny(filename, "/:?#") {
 			continue
 		}
 
