@@ -679,3 +679,44 @@ func TestFigshareDownloader_DryRun(t *testing.T) {
 		t.Errorf("dry run touched output dir %s", outDir)
 	}
 }
+
+// A file that doesn't match figshare's size or md5 (e.g. a transfer cut off
+// midway) fails the run and is not left at its final path; a good file
+// records the verified md5.
+func TestFigshareDownloader_VerifiesAgainstSource(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/files/") {
+			w.Write([]byte("payload"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id": 1, "title": "t", "files": [
+			{"id": 1, "name": "good.csv", "size": 7, "download_url": "` + server.URL + `/files/1", "computed_md5": "", "supplied_md5": "321c3cf486ed509164edec1e1981fec8"},
+			{"id": 2, "name": "short.h5ad", "size": 20, "download_url": "` + server.URL + `/files/2"}]}`))
+	}))
+	defer server.Close()
+
+	d := NewFigshareDownloader(WithHTTPClient(&http.Client{Transport: &mockFigshareTransport{server: server}}))
+	outDir := t.TempDir()
+	result, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID:        "1",
+		OutputDir: outDir,
+		Metadata:  &downloaders.Metadata{Source: "figshare", ID: "1"},
+		Options:   &downloaders.DownloadOptions{NonInteractive: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success || len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "short.h5ad") {
+		t.Fatalf("Success=%v Errors=%v, want one error for short.h5ad", result.Success, result.Errors)
+	}
+	if len(result.Files) != 1 || result.Files[0].SourceChecksum != "md5:321c3cf486ed509164edec1e1981fec8" {
+		t.Fatalf("Files=%+v, want good.csv with its supplied md5", result.Files)
+	}
+	matches, _ := filepath.Glob(filepath.Join(outDir, "*", "short.h5ad"))
+	matches2, _ := filepath.Glob(filepath.Join(outDir, "short.h5ad"))
+	if len(matches)+len(matches2) != 0 {
+		t.Errorf("truncated file left on disk: %v %v", matches, matches2)
+	}
+}

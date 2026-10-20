@@ -122,10 +122,13 @@ type FileInfo struct {
 	OriginalName string    `json:"original_name"`
 	Checksum     string    `json:"checksum,omitempty"`
 	ChecksumType string    `json:"checksum_type,omitempty"`
-	SourceURL    string    `json:"source_url"`
-	ContentType  string    `json:"content_type,omitempty"`
-	Size         int64     `json:"size"`
-	CacheHit     bool      `json:"cache_hit,omitempty"`
+	// SourceChecksum is the repository's own checksum ("md5:<hex>"), verified
+	// against the downloaded file. Empty when the source publishes none.
+	SourceChecksum string `json:"source_checksum,omitempty"`
+	SourceURL      string `json:"source_url"`
+	ContentType    string `json:"content_type,omitempty"`
+	Size           int64  `json:"size"`
+	CacheHit       bool   `json:"cache_hit,omitempty"`
 }
 
 // DatasetRecord captures provenance for a single dataset/accession within a
@@ -165,10 +168,13 @@ type FileWitness struct {
 	OriginalName string    `json:"original_name"`
 	Checksum     string    `json:"checksum,omitempty"`
 	ChecksumType string    `json:"checksum_type,omitempty"`
-	SourceURL    string    `json:"source_url"`
-	ContentType  string    `json:"content_type,omitempty"`
-	Size         int64     `json:"size"`
-	CacheHit     bool      `json:"cache_hit,omitempty"`
+	// SourceChecksum is the repository's own checksum ("md5:<hex>"), verified
+	// against the downloaded file. Empty when the source publishes none.
+	SourceChecksum string `json:"source_checksum,omitempty"`
+	SourceURL      string `json:"source_url"`
+	ContentType    string `json:"content_type,omitempty"`
+	Size           int64  `json:"size"`
+	CacheHit       bool   `json:"cache_hit,omitempty"`
 }
 
 // DownloadStats contains performance and operational statistics.

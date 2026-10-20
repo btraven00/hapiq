@@ -11,6 +11,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
+	"github.com/btraven00/hapiq/pkg/manifest"
 )
 
 // downloadArticle downloads a single Figshare article with all its files.
@@ -90,8 +91,14 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 		}
 
 		fileInfo, err := d.downloadFileWithProgress(ctx, file.DownloadURL, targetPath, file.Name, file.Size, progressTracker)
+		if err == nil {
+			err = verifyAgainstSource(fileInfo, file)
+		}
 		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", file.Name, err))
+			// A failed file fails the run and must not stay at its final path,
+			// where it would pass for complete (and --skip-existing would keep it).
+			_ = os.Remove(targetPath)
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to download %s: %v", file.Name, err))
 
 			if progressTracker != nil {
 				progressTracker.FailFile(file.Name, err)
@@ -102,15 +109,6 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 
 		// Use the original filename from Figshare
 		fileInfo.OriginalName = file.Name
-
-		// Verify checksum if available
-		if file.MD5 != "" && fileInfo.Checksum != "" {
-			// Convert SHA256 to MD5 for comparison (simplified - in practice you'd compute MD5)
-			if d.verbose {
-				fmt.Printf("✅ Checksum available for: %s\n", file.Name)
-			}
-			// Note: We could implement MD5 verification here
-		}
 
 		// Make path relative to target directory
 		relPath, err := filepath.Rel(targetDir, fileInfo.Path)
@@ -417,4 +415,25 @@ func (d *FigshareDownloader) sanitizeArticleTitle(title string) string {
 	}
 
 	return sanitized
+}
+
+// verifyAgainstSource checks a downloaded file against the size and md5 that
+// figshare publishes (computed_md5, else supplied_md5) and records the md5 in
+// fi.SourceChecksum. Unlike the local sha256 this catches truncated transfers.
+func verifyAgainstSource(fi *downloaders.FileInfo, file FigshareFile) error {
+	if file.Size > 0 && fi.Size != file.Size {
+		return fmt.Errorf("size %d, figshare lists %d", fi.Size, file.Size)
+	}
+	md5 := file.MD5
+	if md5 == "" {
+		md5 = file.SuppliedMD5
+	}
+	if md5 == "" {
+		return nil
+	}
+	if err := manifest.VerifyFile(fi.Path, "md5:"+md5); err != nil {
+		return err
+	}
+	fi.SourceChecksum = "md5:" + md5
+	return nil
 }
