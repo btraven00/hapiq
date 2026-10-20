@@ -59,7 +59,7 @@ func createTestRecord(serverURL string) ZenodoRecord {
 				ID:       "file1",
 				Key:      "data.csv",
 				Size:     900, // "test,data\n" * 100 = 9 * 100 = 900 bytes
-				Checksum: "d41d8cd98f00b204e9800998ecf8427e",
+				Checksum: "md5:b5ec80660f775fbb9de952045cd8f008",
 				Type:     "csv",
 				Links: ZenodoFileLinks{
 					Self: serverURL + "/api/files/bucket1/data.csv",
@@ -91,6 +91,12 @@ func mockZenodoServer() *httptest.Server {
 		switch recordID {
 		case "123456":
 			record := createTestRecord(server.URL)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(record)
+
+		case "777": // data.csv content does not match its published md5
+			record := createTestRecord(server.URL)
+			record.Files[0].Checksum = "md5:00000000000000000000000000000000"
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(record)
 
@@ -858,5 +864,38 @@ func TestZenodoDownloader_DryRun(t *testing.T) {
 	}
 	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
 		t.Errorf("dry run touched output dir %s", outDir)
+	}
+}
+
+// Downloads are checked against Zenodo's md5: a match is recorded in
+// SourceChecksum, a mismatch fails the file and removes it.
+func TestZenodoDownloader_VerifiesMD5(t *testing.T) {
+	server := mockZenodoServer()
+	defer server.Close()
+
+	d := NewZenodoDownloader()
+	d.apiURL = server.URL + "/api/records"
+	d.baseURL = server.URL
+
+	good, err := d.Download(context.Background(), &downloaders.DownloadRequest{ID: "123456", OutputDir: t.TempDir()})
+	if err != nil || !good.Success {
+		t.Fatalf("good record: err=%v errors=%v", err, good.Errors)
+	}
+	for _, f := range good.Files {
+		if f.OriginalName == "data.csv" && f.SourceChecksum != "md5:b5ec80660f775fbb9de952045cd8f008" {
+			t.Errorf("data.csv SourceChecksum = %q", f.SourceChecksum)
+		}
+	}
+
+	out := t.TempDir()
+	bad, err := d.Download(context.Background(), &downloaders.DownloadRequest{ID: "777", OutputDir: out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.Success || len(bad.Errors) != 1 || !strings.Contains(bad.Errors[0], "data.csv") {
+		t.Fatalf("bad record: Success=%v Errors=%v, want a data.csv error", bad.Success, bad.Errors)
+	}
+	if _, err := os.Stat(filepath.Join(out, "data.csv")); !os.IsNotExist(err) {
+		t.Errorf("mismatched data.csv left on disk (stat err=%v)", err)
 	}
 }
