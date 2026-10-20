@@ -385,7 +385,11 @@ func displayResults(result *downloaders.DownloadResult) {
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr, "   Duration: %v\n", result.Duration.Round(time.Second))
-	_, _ = fmt.Fprintf(os.Stderr, "   Files downloaded: %d\n", len(result.Files))
+	filesLabel := "Files downloaded"
+	if dryRun {
+		filesLabel = "Files that would be downloaded"
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "   %s: %d\n", filesLabel, len(result.Files))
 	cacheHits := countCacheHits(result)
 	if cacheHits > 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "   Cache hits: %d/%d (no network traffic)\n", cacheHits, len(result.Files))
