@@ -173,6 +173,7 @@ func TestParseDirectoryListingSizes(t *testing.T) {
 <a href="d.txt">d.txt</a>                2020-03-23 12:47  512
 <a href="e.txt">e.txt</a>
 <a href="f.txt">f.txt</a>                2020-03-23 12:47  -
+<a href="https://www.hhs.gov/vulnerability-disclosure-policy/index.html">HHS Vulnerability Disclosure</a>
 <a href="">broken</a>`
 
 	want := []listingEntry{
