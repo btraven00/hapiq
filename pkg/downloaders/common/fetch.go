@@ -287,6 +287,10 @@ func getWaitingForReady(ctx context.Context, client *http.Client, rawURL string,
 		if err != nil {
 			return nil, err
 		}
+		// Without an Accept header Cloudflare treats the GET as a page view and
+		// injects its analytics <script> into HTML files (seen on 10x's
+		// web_summary.html: +361 bytes, md5 mismatch). */* gets the stored bytes.
+		req.Header.Set("Accept", "*/*")
 		for k, v := range extra {
 			req.Header.Set(k, v)
 		}
