@@ -46,6 +46,9 @@ var cachePatternByDownloader = map[string]string{
 	// Distinguished by package import alias used in cmd/download.go.
 	"scanpy.New":        "common.Fetch",
 	"urldownloader.New": "common.Fetch",
+	// Gated/private datasets drop the cache from ctx on purpose, so
+	// `cache serve` cannot share them; open datasets are cached as usual.
+	"huggingface.New": "common.Fetch",
 }
 
 // TestRegistryCoverage scans cmd/download.go for every constructor call that
@@ -115,7 +118,8 @@ func collectRegisteredConstructors(file *ast.File) []string {
 	})
 
 	// Pass 2: walk calls of the form `downloaders.Register(<ident>)` and
-	// look up the constructor for <ident>.
+	// look up the constructor for <ident>, or `downloaders.Register(pkg.New(...))`
+	// with the constructor inline.
 	seen := map[string]bool{}
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
@@ -131,6 +135,10 @@ func collectRegisteredConstructors(file *ast.File) []string {
 			return true
 		}
 		if len(call.Args) != 1 {
+			return true
+		}
+		if ctor, ok := constructorName(call.Args[0]); ok {
+			seen[ctor] = true
 			return true
 		}
 		argIdent, ok := call.Args[0].(*ast.Ident)
