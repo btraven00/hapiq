@@ -173,3 +173,26 @@ func TestGetWaitingForReady_NonAcceptedReturnedImmediately(t *testing.T) {
 		t.Errorf("server calls = %d, want 1 (no polling on non-202)", got)
 	}
 }
+
+// Fetch asks for the stored bytes (Accept: */*): a CDN that rewrites HTML for
+// page views (Cloudflare's analytics beacon) must not alter downloaded files.
+func TestFetch_SendsAcceptAny(t *testing.T) {
+	const stored = "<html><body>report</body></html>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		if r.Header.Get("Accept") != "*/*" {
+			_, _ = io.WriteString(w, "<html><body>report<script src=beacon.js></script></body></html>")
+			return
+		}
+		_, _ = io.WriteString(w, stored)
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "web_summary.html")
+	if _, err := Fetch(context.Background(), srv.URL, dest, FetchOptions{Client: srv.Client()}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != stored {
+		t.Errorf("got %q, want the stored bytes %q", got, stored)
+	}
+}
