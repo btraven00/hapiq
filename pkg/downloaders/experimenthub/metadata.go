@@ -24,7 +24,9 @@ const (
 // resourceInfo holds the subset of EH metadata hapiq cares about.
 // Note: the upstream rdatapaths table only stores rdatapath / rdataclass /
 // dispatchclass — no size or checksum. We surface what's there.
+// RDataPath/RDataClass/DispatchClass are those of the first of Paths.
 type resourceInfo struct {
+	Paths         []rdataPath
 	AHID          string
 	Title         string
 	Description   string
@@ -34,6 +36,13 @@ type resourceInfo struct {
 	RDataPath     string
 	RDataClass    string
 	DispatchClass string
+}
+
+// rdataPath is one file of a resource. ID is the rdatapaths row id, which is
+// what /fetch/<id> takes; it is not the number in the EH id.
+type rdataPath struct {
+	Path string
+	ID   int64
 }
 
 // cachePath returns the on-disk location of the cached metadata sqlite file,
@@ -150,13 +159,14 @@ func searchCatalog(dbPath, query string, opts downloaders.SearchOptions) ([]down
 	}
 
 	q := `
-		SELECT rp.id, r.ah_id, r.title,
-		       COALESCE(r.species, ''), COALESCE(rp.rdataclass, ''),
+		SELECT r.ah_id, r.title,
+		       COALESCE(r.species, ''), COALESCE(MIN(rp.rdataclass), ''),
 		       COALESCE(r.rdatadateadded, '')
 		FROM rdatapaths rp
 		JOIN resources r ON rp.resource_id = r.id
 		` + where + `
-		ORDER BY rp.id DESC
+		GROUP BY r.id
+		ORDER BY r.id DESC
 		LIMIT ?`
 	args = append(args, limit)
 
@@ -169,19 +179,17 @@ func searchCatalog(dbPath, query string, opts downloaders.SearchOptions) ([]down
 	var out []downloaders.SearchResult
 	for rows.Next() {
 		var (
-			rpID    int64
 			ahID    string
 			title   string
 			species string
 			rclass  string
 			added   string
 		)
-		if err := rows.Scan(&rpID, &ahID, &title, &species, &rclass, &added); err != nil {
+		if err := rows.Scan(&ahID, &title, &species, &rclass, &added); err != nil {
 			return nil, err
 		}
-		acc := fmt.Sprintf("EH%d", rpID)
 		out = append(out, downloaders.SearchResult{
-			Accession: acc,
+			Accession: ahID,
 			Title:     title,
 			Organism:  species,
 			EntryType: rclass,
@@ -191,9 +199,9 @@ func searchCatalog(dbPath, query string, opts downloaders.SearchOptions) ([]down
 	return out, rows.Err()
 }
 
-// lookupResource queries the metadata DB for a single rdatapath (= EH numeric id).
-// Returns nil with no error when no row matches.
-func lookupResource(dbPath string, fetchID int64) (*resourceInfo, error) {
+// lookupResource returns the resource with the given ah_id ("EH3796") and all
+// its rdatapaths, or nil with no error when there is none.
+func lookupResource(dbPath, ahID string) (*resourceInfo, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
@@ -203,22 +211,35 @@ func lookupResource(dbPath string, fetchID int64) (*resourceInfo, error) {
 	const q = `
 		SELECT r.ah_id, r.title, COALESCE(r.description, ''),
 		       COALESCE(r.species, ''), COALESCE(r.dataprovider, ''),
-		       COALESCE(r.maintainer, ''),
+		       COALESCE(r.maintainer, ''), rp.id,
 		       COALESCE(rp.rdatapath, ''), COALESCE(rp.rdataclass, ''),
 		       COALESCE(rp.dispatchclass, '')
-		FROM rdatapaths rp
-		JOIN resources r ON rp.resource_id = r.id
-		WHERE rp.id = ?
-		LIMIT 1`
-	row := db.QueryRow(q, fetchID)
-	var ri resourceInfo
-	if err := row.Scan(&ri.AHID, &ri.Title, &ri.Description, &ri.Species,
-		&ri.DataProvider, &ri.Maintainer, &ri.RDataPath, &ri.RDataClass,
-		&ri.DispatchClass); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
+		FROM resources r
+		JOIN rdatapaths rp ON rp.resource_id = r.id
+		WHERE r.ah_id = ?
+		ORDER BY rp.id`
+	rows, err := db.Query(q, ahID)
+	if err != nil {
 		return nil, err
 	}
-	return &ri, nil
+	defer rows.Close()
+
+	var ri *resourceInfo
+	for rows.Next() {
+		var (
+			row resourceInfo
+			p   rdataPath
+		)
+		if err := rows.Scan(&row.AHID, &row.Title, &row.Description, &row.Species,
+			&row.DataProvider, &row.Maintainer, &p.ID, &row.RDataPath,
+			&row.RDataClass, &row.DispatchClass); err != nil {
+			return nil, err
+		}
+		p.Path = row.RDataPath
+		if ri == nil {
+			ri = &row
+		}
+		ri.Paths = append(ri.Paths, p)
+	}
+	return ri, rows.Err()
 }
