@@ -63,9 +63,10 @@ go build -o hapiq .
 | `biostudies` | `S-<COLLECTION><digits>`, `E-<TYPE>-<digits>` (e.g. `S-BSST1502`, `E-MTAB-8077`) | EBI BioStudies; combine with `--include-ext` / `--filename-glob` to target count matrices |
 | `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
 | `experimenthub` | `EH<digits>` (e.g. `EH1039`) | Bioconductor ExperimentHub; metadata catalog cached locally for a week |
+| `hf` | `<owner>/<name>` or `<owner>/<name>@<revision>` (e.g. `scikit-learn/iris`) | Hugging Face Hub datasets; the revision is pinned to a commit and every file is checked against the Hub's sha256 / git hash. Set `HF_TOKEN` for gated or private datasets |
 | `url` | Any `http://` or `https://` URL | Direct single-file fetch; filename from `Content-Disposition` or URL path |
 
-`ncbi` is an alias for `geo`. `ena` is an alias for `sra`.
+`ncbi` is an alias for `geo`. `ena` is an alias for `sra`. `huggingface` is an alias for `hf`.
 
 ---
 
@@ -242,6 +243,9 @@ hapiq download scperturb NormanWeissman2019_filtered --out ./data
 # Bioconductor ExperimentHub
 hapiq download experimenthub EH1039 --out ./data
 
+# Hugging Face Hub dataset (pinned to the commit main points at now)
+hapiq download hf cornell-movie-review-data/rotten_tomatoes --out ./data/rt
+
 # Direct URL (single file)
 hapiq download url https://example.com/data.h5ad --out ./data
 ```
@@ -318,6 +322,7 @@ hapiq species plants --examples       # show example download IDs
 |----------|-------------|
 | `NCBI_API_KEY` | NCBI API key — raises rate limit from 3 to 10 req/s for GEO. Get one at [ncbi.nlm.nih.gov/account](https://www.ncbi.nlm.nih.gov/account/). |
 | `VCP_TOKEN` | JWT for the CZI Virtual Cell Platform. Required for private/restricted VCP datasets. Public datasets (e.g. Billion Cell Project) work without it. |
+| `HF_TOKEN` | Hugging Face access token, for private or gated datasets (accept the dataset's terms on the Hub first). |
 | `SSL_CERT_FILE` | PEM bundle to trust instead of the system roots (Linux/BSD). Use it for a server that omits its intermediate certificate (`x509: certificate signed by unknown authority`): concatenate the system bundle and the missing intermediate, after checking it with `openssl verify`. There is no option to skip verification. |
 
 ```bash
