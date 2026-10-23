@@ -15,6 +15,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
+	"github.com/btraven00/hapiq/pkg/downloaders/huggingface"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 )
@@ -41,6 +42,8 @@ Supported sources:
   vcp  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
   scperturb - scPerturb harmonised perturbation datasets
   experimenthub - Bioconductor ExperimentHub (uses cached metadata sqlite)
+  hf   - Hugging Face Hub datasets, most downloaded first; --type is a Hub tag
+         (e.g. modality:tabular); set HF_TOKEN to include private datasets
 
 Examples:
   hapiq search geo "ATAC-seq human liver" --limit 20
@@ -94,6 +97,16 @@ func runSearch(_ *cobra.Command, args []string) error {
 			scperturb.WithTimeout(time.Duration(defaultCheckTimeoutSec)*time.Second),
 		)
 
+	case "hf", "huggingface":
+		src = "hf"
+		hfOpts := []huggingface.Option{
+			huggingface.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second),
+		}
+		if token := os.Getenv("HF_TOKEN"); token != "" {
+			hfOpts = append(hfOpts, huggingface.WithToken(token))
+		}
+		d = huggingface.New(hfOpts...)
+
 	case "experimenthub", "eh":
 		d = experimenthub.NewExperimentHubDownloader(
 			experimenthub.WithVerbose(!quiet),
@@ -101,7 +114,7 @@ func runSearch(_ *cobra.Command, args []string) error {
 		)
 
 	default:
-		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb', 'experimenthub'; got %q", sourceType)
+		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb', 'experimenthub', 'hf'; got %q", sourceType)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -156,10 +169,25 @@ func printSearchQuiet(results []downloaders.SearchResult) error {
 // Column layout differs by source:
 //   - geo: ACCESSION  TITLE  ORGANISM  TYPE  SAMPLES  DATE
 //   - vcp: ACCESSION  TITLE  ORGANISM  ASSAY  SIZE
+//   - hf:  ACCESSION  TITLE  ACCESS  DOWNLOADS  UPDATED
 func printSearchTable(results []downloaders.SearchResult, src string) error {
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, tabWriterPadding, ' ', 0)
 
-	if src == "vcp" || src == "scperturb" {
+	if src == "hf" {
+		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tACCESS\tDOWNLOADS\tUPDATED")
+		_, _ = fmt.Fprintln(w, "---------\t-----\t------\t---------\t-------")
+		for _, r := range results {
+			title := r.Title
+			if len(title) > maxDescriptionChars {
+				title = title[:maxDescriptionChars-truncationSuffix] + "..."
+			}
+			access := "open"
+			if r.EntryType != "" {
+				access = r.EntryType
+			}
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", r.Accession, title, access, r.Downloads, r.Date)
+		}
+	} else if src == "vcp" || src == "scperturb" {
 		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tASSAY\tSIZE")
 		_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t-----\t----")
 		for _, r := range results {
@@ -204,5 +232,5 @@ func init() {
 	searchCmd.Flags().IntVar(&searchLimit, "limit", 10, "maximum number of results to return")
 	searchCmd.Flags().StringVar(&searchOrganism, "organism", "", "filter by organism (e.g. 'Homo sapiens')")
 	searchCmd.Flags().StringVar(&searchType, "type", "",
-		"GEO: entry type to filter (GSE/GSM/GPL/GDS, default GSE); CZI: assay filter (e.g. 'Perturb-Seq')")
+		"GEO: entry type to filter (GSE/GSM/GPL/GDS, default GSE); CZI: assay filter (e.g. 'Perturb-Seq'); hf: Hub tag (e.g. 'modality:tabular')")
 }

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
@@ -32,7 +33,8 @@ func blobSHA1(b string) string {
 
 // fakeHub serves a dataset whose tree spans two pages: an LFS file, a small
 // git file, and (when corrupt) an LFS file whose bytes do not match its oid.
-func fakeHub(t *testing.T, corrupt bool) *httptest.Server {
+// gated is the revision API's "gated" value (false, "auto" or "manual").
+func fakeHub(t *testing.T, corrupt bool, gated any) *httptest.Server {
 	t.Helper()
 	contents := map[string]string{
 		"data/train.h5ad": "anndata bytes",
@@ -58,7 +60,7 @@ func fakeHub(t *testing.T, corrupt bool) *httptest.Server {
 		api := "/api/datasets/" + testRepo
 		switch p := r.URL.Path; {
 		case p == api+"/revision/main" || p == api+"/revision/"+testSHA:
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": testRepo, "sha": testSHA, "tags": []string{"license:cc-by-4.0"}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": testRepo, "sha": testSHA, "gated": gated, "tags": []string{"license:cc-by-4.0"}})
 		case p == api+"/tree/"+testSHA && r.URL.Query().Get("cursor") == "":
 			w.Header().Set("Link", fmt.Sprintf(`<%s%s?recursive=true&cursor=2>; rel="next"`, srv.URL, p))
 			_ = json.NewEncoder(w).Encode(page1)
@@ -81,7 +83,7 @@ func newTestDownloader(srv *httptest.Server) *HFDownloader {
 }
 
 func TestDownloadPinsAndVerifies(t *testing.T) {
-	d := newTestDownloader(fakeHub(t, false))
+	d := newTestDownloader(fakeHub(t, false, false))
 	ctx := context.Background()
 
 	meta, err := d.GetMetadata(ctx, testRepo)
@@ -120,7 +122,7 @@ func TestDownloadPinsAndVerifies(t *testing.T) {
 }
 
 func TestDownloadRejectsMismatch(t *testing.T) {
-	d := newTestDownloader(fakeHub(t, true))
+	d := newTestDownloader(fakeHub(t, true, false))
 	out := t.TempDir()
 	res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
 		ID: testRepo, OutputDir: out, Options: &downloaders.DownloadOptions{IncludeExts: []string{".h5ad"}},
@@ -140,7 +142,7 @@ func TestDownloadRejectsMismatch(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	d := newTestDownloader(fakeHub(t, false))
+	d := newTestDownloader(fakeHub(t, false, false))
 	for id, valid := range map[string]bool{
 		testRepo:             true,
 		testRepo + "@main":   true,
@@ -152,5 +154,66 @@ func TestValidate(t *testing.T) {
 		if err != nil || vr.Valid != valid {
 			t.Errorf("%q: valid=%v err=%v errors=%v, want valid=%v", id, vr.Valid, err, vr.Errors, valid)
 		}
+	}
+}
+
+// Gated files bypass the blob cache (so `cache serve` cannot hand them to LAN
+// peers without a token); open datasets are cached as usual.
+func TestGatedFilesStayOutOfCache(t *testing.T) {
+	for _, gated := range []any{false, "manual"} {
+		c, err := cache.Open(cache.Config{Dir: t.TempDir(), LinkStrategy: cache.StrategyCopy})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+
+		d := newTestDownloader(fakeHub(t, false, gated))
+		ctx := cache.WithCache(context.Background(), c)
+		res, err := d.Download(ctx, &downloaders.DownloadRequest{ID: testRepo, OutputDir: t.TempDir()})
+		if err != nil || !res.Success {
+			t.Fatalf("gated=%v: err=%v errors=%v", gated, err, res.Errors)
+		}
+
+		n, err := c.BlobCount(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := map[bool]int{true: 0, false: 2}[gated != false]; n != want {
+			t.Errorf("gated=%v: %d blobs cached, want %d", gated, n, want)
+		}
+	}
+}
+
+func TestSearch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if r.URL.Path != "/api/datasets" || q.Get("search") != "cells" || q.Get("filter") != "modality:tabular" ||
+			q.Get("sort") != "downloads" || q.Get("limit") != "5" {
+			http.Error(w, "unexpected query "+r.URL.String(), http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`[
+			{"id": "lab/cells", "gated": false, "downloads": 120, "lastModified": "2025-01-02T03:04:05.000Z",
+			 "cardData": {"pretty_name": "Lab cells"}},
+			{"id": "lab/private-cells", "gated": "manual", "downloads": 3}]`))
+	}))
+	t.Cleanup(srv.Close)
+
+	d := New()
+	d.baseURL = srv.URL
+	got, err := d.Search(context.Background(), "cells", downloaders.SearchOptions{Limit: 5, EntryType: "modality:tabular"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []downloaders.SearchResult{
+		{Accession: "lab/cells", Title: "Lab cells", Downloads: 120, Date: "2025-01-02"},
+		{Accession: "lab/private-cells", Title: "lab/private-cells", Downloads: 3, EntryType: "gated"},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("results = %+v\nwant %+v", got, want)
+	}
+
+	if _, err := d.Search(context.Background(), "cells", downloaders.SearchOptions{Organism: "Homo sapiens"}); err == nil {
+		t.Error("--organism should be refused, not silently ignored")
 	}
 }

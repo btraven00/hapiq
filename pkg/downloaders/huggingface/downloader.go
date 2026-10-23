@@ -4,7 +4,7 @@
 // commit). The revision is resolved to a commit sha before anything is
 // listed, and that sha is what the download URLs and hapiq.json record, so
 // a refetch gets exactly the same files. Set HF_TOKEN for private or gated
-// datasets.
+// datasets; their files bypass the blob cache and LAN peers.
 package huggingface
 
 import (
@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/btraven00/hapiq/internal/version"
+	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
@@ -87,6 +88,11 @@ type repoInfo struct {
 	Tags         []string  `json:"tags"`
 	Gated        any       `json:"gated"` // false or "auto"/"manual"
 	Private      bool      `json:"private"`
+}
+
+// restricted reports whether the dataset needs a token (gated or private).
+func (r *repoInfo) restricted() bool {
+	return r.Private || (r.Gated != nil && r.Gated != false)
 }
 
 // hfFile is one entry of the recursive tree listing.
@@ -275,6 +281,12 @@ func (d *HFDownloader) downloadFile(ctx context.Context, info *repoInfo, f hfFil
 		return nil, err
 	}
 	rawURL := d.fileURL(info.ID, info.SHA, f.Path)
+	if info.restricted() {
+		// Gated/private files stay out of the blob cache: `hapiq cache serve`
+		// would hand them to LAN peers that have no token or never accepted
+		// the terms. Peers are skipped too, so nothing is looked up by URL.
+		ctx = cache.WithPeers(cache.WithCache(ctx, nil), nil)
+	}
 	res, err := common.Fetch(ctx, rawURL, targetPath, common.FetchOptions{Client: d.client, ExtraHeaders: d.authHeader()})
 	if err != nil {
 		// Gated datasets list their files publicly; the 401 comes only here.

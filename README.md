@@ -63,7 +63,7 @@ go build -o hapiq .
 | `biostudies` | `S-<COLLECTION><digits>`, `E-<TYPE>-<digits>` (e.g. `S-BSST1502`, `E-MTAB-8077`) | EBI BioStudies; combine with `--include-ext` / `--filename-glob` to target count matrices |
 | `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
 | `experimenthub` | `EH<digits>` (e.g. `EH1039`) | Bioconductor ExperimentHub; metadata catalog cached locally for a week |
-| `hf` | `<owner>/<name>` or `<owner>/<name>@<revision>` (e.g. `scikit-learn/iris`) | Hugging Face Hub datasets; the revision is pinned to a commit and every file is checked against the Hub's sha256 / git hash. Set `HF_TOKEN` for gated or private datasets |
+| `hf` | `<owner>/<name>` or `<owner>/<name>@<revision>` (e.g. `scikit-learn/iris`) | Hugging Face Hub datasets; the revision is pinned to a commit and every file is checked against the Hub's sha256 / git hash. Set `HF_TOKEN` for gated or private datasets; their files are never cached or shared with LAN peers |
 | `url` | Any `http://` or `https://` URL | Direct single-file fetch; filename from `Content-Disposition` or URL path |
 
 `ncbi` is an alias for `geo`. `ena` is an alias for `sra`. `huggingface` is an alias for `hf`.
@@ -108,13 +108,13 @@ Search for datasets using a repository's native query API.
 hapiq search <source> <query> [flags]
 ```
 
-Supported sources: `geo`, `vcp`, `scperturb`
+Supported sources: `geo`, `vcp`, `scperturb`, `experimenthub`, `hf`
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--limit N` | 10 | Maximum results to return |
-| `--organism X` | — | Filter by organism (e.g. `"Homo sapiens"`) |
-| `--type X` | — | GEO: entry type (`GSE`/`GSM`/`GPL`/`GDS`); VCP: assay filter (e.g. `"Perturb-Seq"`) |
+| `--organism X` | — | Filter by organism (e.g. `"Homo sapiens"`); not available for `hf` |
+| `--type X` | — | GEO: entry type (`GSE`/`GSM`/`GPL`/`GDS`); VCP: assay filter (e.g. `"Perturb-Seq"`); hf: Hub tag (e.g. `modality:tabular`) |
 | `-o, --output` | human | Output format: `human`, `json` |
 | `-q, --quiet` | false | Print accessions only (one per line, pipe-friendly) |
 
@@ -136,6 +136,9 @@ hapiq search vcp "Perturb-Seq" --organism "Homo sapiens" --type "Perturb-Seq"
 
 hapiq search scperturb "CRISPR" --limit 10
 hapiq search scperturb "pancreas" --organism "Homo sapiens" --type "Perturb-seq"
+
+hapiq search hf "single-cell" --limit 10          # most downloaded first
+hapiq search hf "cells" --type modality:tabular
 
 # Pipe into download
 hapiq search geo "bulk RNA-seq liver" -q \
