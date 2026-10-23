@@ -1,6 +1,7 @@
 // Package experimenthub implements a hapiq downloader for Bioconductor's
 // ExperimentHub. Resources are addressed by their EH<digits> identifier and
-// fetched via https://experimenthub.bioconductor.org/fetch/<digits>.
+// fetched via https://experimenthub.bioconductor.org/fetch/<rdatapath id>,
+// where the rdatapath ids of a resource come from the catalog.
 //
 // Resource metadata (title, description, species, rdatapath/dispatchclass)
 // comes from the upstream metadata sqlite (experimenthub.sqlite3), which is
@@ -88,14 +89,14 @@ func (d *ExperimentHubDownloader) Validate(ctx context.Context, id string) (*dow
 		return result, nil
 	}
 
-	ri, err := lookupResource(dbPath, num)
+	ri, err := lookupResource(dbPath, ehID(num))
 	if err != nil {
 		result.Warnings = []string{fmt.Sprintf("metadata lookup failed: %v", err)}
 		result.Valid = true
 		return result, nil
 	}
 	if ri == nil {
-		result.Errors = []string{fmt.Sprintf("EH%d not found in ExperimentHub catalog", num)}
+		result.Errors = []string{fmt.Sprintf("%s not found in ExperimentHub catalog", ehID(num))}
 		return result, nil
 	}
 	result.Valid = true
@@ -112,21 +113,21 @@ func (d *ExperimentHubDownloader) GetMetadata(ctx context.Context, id string) (*
 
 	meta := &downloaders.Metadata{
 		Source: d.GetSourceType(),
-		ID:     fmt.Sprintf("EH%d", num),
+		ID:     ehID(num),
 	}
 
 	dbPath, err := ensureMetadata(ctx, d.client, d.verbose)
 	if err != nil {
 		return meta, nil
 	}
-	ri, err := lookupResource(dbPath, num)
+	ri, err := lookupResource(dbPath, ehID(num))
 	if err != nil || ri == nil {
 		return meta, nil
 	}
 
 	meta.Title = ri.Title
 	meta.Description = ri.Description
-	meta.FileCount = 1
+	meta.FileCount = len(ri.Paths)
 	if ri.Maintainer != "" {
 		meta.Authors = []string{ri.Maintainer}
 	}
@@ -152,7 +153,8 @@ func (d *ExperimentHubDownloader) GetMetadata(ctx context.Context, id string) (*
 	return meta, nil
 }
 
-// Download fetches the single resource file at /fetch/<id>.
+// Download fetches every file of the resource from /fetch/<rdatapath id>.
+// The catalog is required: the number in the EH id is not a fetch id.
 func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders.DownloadRequest) (*downloaders.DownloadResult, error) {
 	start := time.Now()
 	result := &downloaders.DownloadResult{Files: []downloaders.FileInfo{}}
@@ -162,22 +164,31 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 		result.Errors = append(result.Errors, err.Error())
 		return result, nil
 	}
+	id := ehID(num)
 
-	url := fetchURLPrefix + strconv.FormatInt(num, 10)
-
-	// Best-effort metadata for naming + integrity.
-	var ri *resourceInfo
-	if dbPath, err := ensureMetadata(ctx, d.client, d.verbose); err == nil {
-		ri, _ = lookupResource(dbPath, num)
+	dbPath, err := ensureMetadata(ctx, d.client, d.verbose)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("cannot resolve %s without the ExperimentHub catalog: %v", id, err))
+		return result, nil
 	}
-	filename := defaultFilename(num, ri)
+	ri, err := lookupResource(dbPath, id)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("catalog lookup for %s: %v", id, err))
+		return result, nil
+	}
+	if ri == nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("%s not found in ExperimentHub catalog", id))
+		return result, nil
+	}
 
 	opts := req.Options
 	if opts != nil && opts.DryRun {
-		result.Files = append(result.Files, downloaders.FileInfo{
-			OriginalName: filename,
-			SourceURL:    url,
-		})
+		for _, p := range ri.Paths {
+			result.Files = append(result.Files, downloaders.FileInfo{
+				OriginalName: defaultFilename(p),
+				SourceURL:    fetchURL(p),
+			})
+		}
 		result.Success = true
 		return result, nil
 	}
@@ -187,41 +198,47 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 		return result, nil
 	}
 
-	targetPath := filepath.Join(req.OutputDir, common.SanitizeFilename(filename))
+	for _, p := range ri.Paths {
+		filename := defaultFilename(p)
+		url := fetchURL(p)
+		targetPath := filepath.Join(req.OutputDir, common.SanitizeFilename(filename))
 
-	if opts != nil && opts.SkipExisting {
-		if _, err := os.Stat(targetPath); err == nil {
-			if d.verbose {
-				fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", filename)
+		if opts != nil && opts.SkipExisting {
+			if _, err := os.Stat(targetPath); err == nil {
+				if d.verbose {
+					fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", filename)
+				}
+				result.FilesSkipped++
+				continue
 			}
-			result.Success = true
-			return result, nil
 		}
+
+		if d.verbose {
+			fmt.Fprintf(os.Stderr, "⬇️  %s\n", url)
+		}
+
+		fi, gotName, err := d.downloadFile(ctx, url, targetPath, filename)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to download %s: %v", filename, err))
+			continue
+		}
+		fi.OriginalName = gotName // catalog has no upstream md5/size to verify against
+		result.Files = append(result.Files, *fi)
+		result.BytesDownloaded += fi.Size
 	}
 
-	if d.verbose {
-		fmt.Fprintf(os.Stderr, "⬇️  %s\n", url)
-	}
-
-	fi, gotName, err := d.downloadFile(ctx, url, targetPath, filename)
-	if err != nil {
-		result.Errors = append(result.Errors, err.Error())
-		return result, nil
-	}
-	fi.OriginalName = gotName
-	_ = ri // catalog has no upstream md5/size to verify against
-
-	result.Files = append(result.Files, *fi)
-	result.BytesDownloaded += fi.Size
 	result.BytesTotal = result.BytesDownloaded
 	result.Duration = time.Since(start)
-	result.Success = true
+	result.Success = len(result.Errors) == 0
+	if len(result.Files) == 0 {
+		return result, nil
+	}
 
 	// The catalog has no upstream size column, so back-fill totals from what
-	// we just downloaded (single-file resource).
+	// we just downloaded.
 	if req.Metadata != nil {
 		req.Metadata.TotalSize = result.BytesDownloaded
-		req.Metadata.FileCount = 1
+		req.Metadata.FileCount = len(ri.Paths)
 	}
 
 	if req.Metadata != nil {
@@ -230,17 +247,21 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 			DownloadTime: start,
 			Source:       d.GetSourceType(),
 			OriginalID:   req.ID,
-			ResolvedURL:  url,
+			ResolvedURL:  fetchURL(ri.Paths[0]),
 			Metadata:     req.Metadata,
-			Files:        []downloaders.FileWitness{downloaders.FileWitness(*fi)},
 			DownloadStats: &downloaders.DownloadStats{
 				Duration:        result.Duration,
 				BytesTotal:      result.BytesDownloaded,
 				BytesDownloaded: result.BytesDownloaded,
-				FilesTotal:      1,
-				FilesDownloaded: 1,
+				FilesTotal:      len(ri.Paths),
+				FilesDownloaded: len(result.Files),
+				FilesSkipped:    result.FilesSkipped,
+				FilesFailed:     len(result.Errors),
 				AverageSpeed:    averageSpeed(result.BytesDownloaded, result.Duration),
 			},
+		}
+		for _, f := range result.Files {
+			witness.Files = append(witness.Files, downloaders.FileWitness(f))
 		}
 		if err := common.WriteWitnessFile(req.OutputDir, witness); err != nil {
 			result.Warnings = append(result.Warnings, "witness file: "+err.Error())
@@ -394,15 +415,19 @@ func parseID(id string) (int64, error) {
 	return n, nil
 }
 
-func defaultFilename(num int64, ri *resourceInfo) string {
-	if ri != nil && ri.RDataPath != "" {
-		base := filepath.Base(ri.RDataPath)
-		if base != "" && base != "." && base != "/" {
-			return base
-		}
+func defaultFilename(p rdataPath) string {
+	base := filepath.Base(p.Path)
+	if p.Path != "" && base != "." && base != "/" {
+		return base
 	}
-	return fmt.Sprintf("EH%d.rds", num)
+	return fmt.Sprintf("rdatapath-%d", p.ID)
 }
+
+func fetchURL(p rdataPath) string {
+	return fetchURLPrefix + strconv.FormatInt(p.ID, 10)
+}
+
+func ehID(num int64) string { return fmt.Sprintf("EH%d", num) }
 
 // newHTTPClient builds a client tuned for ExperimentHub's redirect chain to
 // third-party data providers (e.g. functionalgenomics.upf.edu), which can be
