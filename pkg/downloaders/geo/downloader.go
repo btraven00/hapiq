@@ -617,6 +617,8 @@ func (d *GEODownloader) downloadFileWithProgress(ctx context.Context, url, targe
 		copiedSize, err = io.Copy(file, resp.Body)
 	}
 	if err != nil {
+		// Don't leave a truncated file at its final path.
+		_ = os.Remove(targetPath)
 		return nil, fmt.Errorf("failed to copy data: %w", err)
 	}
 

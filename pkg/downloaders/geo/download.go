@@ -55,7 +55,18 @@ func (d *GEODownloader) downloadSeries(ctx context.Context, id, targetDir string
 
 	// Series-level files: the same plan the dry run reports.
 	for _, f := range d.planSeriesFiles(ctx, id, options, result) {
-		d.fetchFile(ctx, f.SourceURL, targetDir, f.Path, options, result)
+		err := d.fetchFile(ctx, f.SourceURL, targetDir, f.Path, options, result)
+		if err == nil {
+			continue
+		}
+		msg := fmt.Sprintf("failed to download %s: %v", f.Path, err)
+		// Supplementary files come from the FTP listing, so a failure is real and
+		// fails the run. The matrix/SOFT names are guessed and may be absent.
+		if filepath.Dir(f.Path) == "supplementary" {
+			result.Errors = append(result.Errors, msg)
+		} else {
+			result.Warnings = append(result.Warnings, msg)
+		}
 	}
 
 	// Try to download individual sample files if they exist
@@ -206,7 +217,10 @@ func (d *GEODownloader) downloadSample(ctx context.Context, id, targetDir string
 			continue
 		}
 
-		d.fetchFile(ctx, fileURL, targetDir, filename, options, result)
+		// Sample file names are guesses, so a failure is only a warning.
+		if err := d.fetchFile(ctx, fileURL, targetDir, filename, options, result); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", filename, err))
+		}
 	}
 
 	return nil
@@ -343,8 +357,9 @@ func (d *GEODownloader) planSeriesFiles(ctx context.Context, id string, options 
 
 // fetchFile downloads url to targetDir/relPath and records it in result.Files
 // with Path=relPath. With SkipExisting, a file already on disk is counted in
-// result.FilesSkipped without touching the network.
-func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) {
+// result.FilesSkipped without touching the network. A failure is returned for
+// the caller to report as an error or a warning.
+func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	targetPath := filepath.Join(targetDir, relPath)
 
 	if options != nil && options.SkipExisting {
@@ -355,7 +370,7 @@ func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath s
 
 			result.FilesSkipped++
 
-			return
+			return nil
 		}
 	}
 
@@ -364,18 +379,18 @@ func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath s
 	}
 
 	if err := common.EnsureDirectory(filepath.Dir(targetPath)); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create directory for %s: %v", relPath, err))
-		return
+		return fmt.Errorf("create directory: %w", err)
 	}
 
 	fileInfo, err := d.downloadFileWithRetry(ctx, url, targetPath)
 	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to download %s: %v", relPath, err))
-		return
+		return err
 	}
 
 	fileInfo.Path = relPath
 	result.Files = append(result.Files, *fileInfo)
+
+	return nil
 }
 
 // getSeriesSamplesViaEUtils retrieves sample IDs for a series using series matrix file.
