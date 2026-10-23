@@ -163,6 +163,7 @@ func (d *VCPDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	if req.Metadata != nil {
 		witness := &downloaders.WitnessFile{
+			Options:      req.Options,
 			HapiqVersion: version.String(),
 			DownloadTime: start,
 			Source:       d.GetSourceType(),

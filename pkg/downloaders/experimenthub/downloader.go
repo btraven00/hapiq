@@ -243,6 +243,7 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 
 	if req.Metadata != nil {
 		witness := &downloaders.WitnessFile{
+			Options:      req.Options,
 			HapiqVersion: version.String(),
 			DownloadTime: start,
 			Source:       d.GetSourceType(),

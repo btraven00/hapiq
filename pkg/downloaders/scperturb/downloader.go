@@ -204,6 +204,7 @@ func (d *ScPerturbDownloader) Download(ctx context.Context, req *downloaders.Dow
 
 	if req.Metadata != nil && len(result.Files) > 0 {
 		witness := &downloaders.WitnessFile{
+			Options:      req.Options,
 			HapiqVersion: version.String(),
 			DownloadTime: start,
 			Source:       d.GetSourceType(),

@@ -385,6 +385,7 @@ func (d *URLDownloader) writeWitness(req *downloaders.DownloadRequest, result *d
 	}
 
 	witness := &downloaders.WitnessFile{
+		Options:      req.Options,
 		HapiqVersion: version.String(),
 		DownloadTime: start,
 		Source:       d.GetSourceType(),

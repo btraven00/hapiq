@@ -192,6 +192,7 @@ func (d *HCADownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	if req.Metadata != nil && len(result.Files) > 0 {
 		witness := &downloaders.WitnessFile{
+			Options:      req.Options,
 			HapiqVersion: version.String(),
 			DownloadTime: start,
 			Source:       d.GetSourceType(),
