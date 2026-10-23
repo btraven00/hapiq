@@ -98,6 +98,7 @@ func (d *GEODownloader) downloadSRA(
 		result.Files = append(result.Files, sub.Files...)
 		result.BytesDownloaded += sub.BytesDownloaded
 		result.Warnings = append(result.Warnings, sub.Warnings...)
+		result.Errors = append(result.Errors, sub.Errors...)
 		downloaded += len(sub.Files)
 	}
 	return nil

@@ -96,17 +96,21 @@ func (d *SRADownloader) GetMetadata(ctx context.Context, id string) (*downloader
 		return nil, fmt.Errorf("no runs found for %s in ENA", id)
 	}
 
-	var totalBytes int64
+	var (
+		totalBytes int64
+		fileCount  int
+	)
 	for _, r := range runs {
 		for _, f := range r.Files {
 			totalBytes += f.Bytes
+			fileCount++
 		}
 	}
 
 	meta := &downloaders.Metadata{
 		Source:    d.GetSourceType(),
 		ID:        id,
-		FileCount: len(runs),
+		FileCount: fileCount,
 		TotalSize: totalBytes,
 		Custom:    map[string]any{"runs": runs},
 	}
@@ -214,9 +218,13 @@ func (d *SRADownloader) Download(ctx context.Context, req *downloaders.DownloadR
 			fi, err := d.downloadWithMD5(ctx, p.file.HTTPSURL(), targetPath, p.file.MD5)
 			if err != nil {
 				dlResults <- dlResult{err: err, msg: p.file.Name}
-			} else {
-				dlResults <- dlResult{fi: fi}
+				return
 			}
+			// downloadWithMD5 checked the file against ENA's md5 on every path.
+			if p.file.MD5 != "" {
+				fi.SourceChecksum = "md5:" + p.file.MD5
+			}
+			dlResults <- dlResult{fi: fi}
 		}()
 	}
 
@@ -227,7 +235,7 @@ func (d *SRADownloader) Download(ctx context.Context, req *downloaders.DownloadR
 
 	for r := range dlResults {
 		if r.err != nil {
-			result.Warnings = append(result.Warnings,
+			result.Errors = append(result.Errors,
 				fmt.Sprintf("failed to download %s: %v", r.msg, r.err))
 		} else if r.fi != nil {
 			result.Files = append(result.Files, *r.fi)
@@ -393,6 +401,8 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 
 	written, err := io.Copy(io.MultiWriter(f, mdHash), resp.Body)
 	if err != nil {
+		// Don't leave a truncated file at its final path.
+		_ = os.Remove(targetPath)
 		return nil, fmt.Errorf("write %s: %w", targetPath, err)
 	}
 	gotMD5 := hex.EncodeToString(mdHash.Sum(nil))

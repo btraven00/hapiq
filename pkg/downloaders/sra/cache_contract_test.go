@@ -98,3 +98,20 @@ func TestSRADownloadWithMD5NoCache(t *testing.T) {
 		t.Fatal("no-cache: content mismatch")
 	}
 }
+
+// A transfer cut off mid-body is an error and leaves nothing at dest.
+func TestSRADownloadWithMD5Truncated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte("abc"))
+	}))
+	t.Cleanup(srv.Close)
+
+	dest := filepath.Join(t.TempDir(), "out.fastq.gz")
+	if _, err := NewSRADownloader().downloadWithMD5(context.Background(), srv.URL+"/blob", dest, ""); err == nil {
+		t.Fatal("truncated transfer: want an error")
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("truncated file left at dest (stat err=%v)", err)
+	}
+}
