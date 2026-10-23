@@ -28,6 +28,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/scanpy"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
+	"github.com/btraven00/hapiq/pkg/downloaders/tenx"
 	urldownloader "github.com/btraven00/hapiq/pkg/downloaders/url"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
@@ -614,6 +615,15 @@ func initializeDownloaders() error {
 		return fmt.Errorf("failed to register Hugging Face downloader: %w", err)
 	}
 
+	// Register 10x Genomics downloader (from a saved dataset page JSON)
+	tenxDL := tenx.New(
+		tenx.WithVerbose(!quiet),
+		tenx.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(tenxDL); err != nil {
+		return fmt.Errorf("failed to register 10x downloader: %w", err)
+	}
+
 	// Register URL downloader (direct HTTP/HTTPS fetch)
 	urlDL := urldownloader.New(
 		urldownloader.WithVerbose(!quiet),
@@ -634,6 +644,10 @@ func initializeDownloaders() error {
 
 	if err := downloaders.RegisterAlias("huggingface", "hf"); err != nil {
 		return fmt.Errorf("failed to register huggingface alias: %w", err)
+	}
+
+	if err := downloaders.RegisterAlias("10xgenomics", "10x"); err != nil {
+		return fmt.Errorf("failed to register 10xgenomics alias: %w", err)
 	}
 
 	return nil
