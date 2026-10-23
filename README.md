@@ -64,7 +64,7 @@ go build -o hapiq .
 | `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
 | `experimenthub` | `EH<digits>` (e.g. `EH1039`) | Bioconductor ExperimentHub; metadata catalog cached locally for a week |
 | `hf` | `<owner>/<name>` or `<owner>/<name>@<revision>` (e.g. `scikit-learn/iris`) | Hugging Face Hub datasets; the revision is pinned to a commit and every file is checked against the Hub's sha256 / git hash. Set `HF_TOKEN` for gated or private datasets; their files are never cached or shared with LAN peers |
-| `10x` | Path to a dataset page JSON saved from the browser (see below) | 10x Genomics example datasets; every file is checked against the md5 10x publishes |
+| `10x` | Dataset slug from the page URL (e.g. `10k-hgmm-5p-gemx`), `<slug>@<timestamp>`, or a saved page | 10x Genomics example datasets; file list from the Internet Archive's copy of the page, every file checked against the md5 10x publishes |
 | `url` | Any `http://` or `https://` URL | Direct single-file fetch; filename from `Content-Disposition` or URL path |
 
 `ncbi` is an alias for `geo`. `ena` is an alias for `sra`. `huggingface` is an alias for `hf`. `10xgenomics` is an alias for `10x`.
@@ -250,8 +250,8 @@ hapiq download experimenthub EH1039 --out ./data
 # Hugging Face Hub dataset (pinned to the commit main points at now)
 hapiq download hf cornell-movie-review-data/rotten_tomatoes --out ./data/rt
 
-# 10x Genomics: matrices and summaries only, no BAM/FASTQ (page JSON saved from the browser)
-hapiq download 10x ~/Downloads/10k-hgmm-5p-gemx.json --out ./data/10k-hgmm-5p --include-ext .h5,.csv,.html
+# 10x Genomics: matrices and summaries only, no BAM/FASTQ (slug from the dataset page URL)
+hapiq download 10x 10k-hgmm-5p-gemx --out ./data/10k-hgmm-5p --include-ext .h5,.csv,.html
 
 # Direct URL (single file)
 hapiq download url https://example.com/data.h5ad --out ./data
@@ -286,16 +286,18 @@ species).
 ### 10x Genomics datasets
 
 The 10x datasets site is behind a bot checkpoint, so hapiq does not fetch it.
-The files themselves are on open hosts, and the dataset page's JSON lists all
-of them with sizes and md5s. Save that JSON once per dataset from your browser:
+Each dataset page embeds its file list (URL, size and md5 of every file), and
+the Internet Archive keeps copies of those pages. `hapiq download 10x <slug>`
+reads the list from the latest Wayback Machine snapshot and downloads the files
+from 10x's open hosts, checking each md5. The slug is the last part of the page
+URL (`https://www.10xgenomics.com/datasets/<slug>`).
 
-1. Open the dataset page, e.g. `https://www.10xgenomics.com/datasets/10k-hgmm-5p-gemx`.
-2. DevTools (F12) → Network → reload → click the request ending in
-   `datasets/<slug>.json` → Response → save or copy it to a file.
-3. `hapiq download 10x <file>.json --out <dir>` (filters and `--dry-run` work as usual).
+`hapiq.json` records the snapshot as `<slug>@<timestamp>`, so `hapiq refetch`
+uses the same file list; pass that form to pin a snapshot yourself. A copy of
+the page data is kept as `<dir>/<slug>.10x.json`.
 
-A copy of the JSON is kept as `<dir>/<slug>.10x.json`, and `hapiq.json` points
-at it, so `hapiq refetch <dir>` works without the browser.
+If a page has no archived copy (new datasets), save it from your browser
+(Ctrl+S) and pass the saved `.html` file instead of the slug.
 
 ---
 
