@@ -39,6 +39,7 @@ them easy to pipe into 'hapiq download':
 Supported sources:
   geo  - NCBI Gene Expression Omnibus (uses eutils esearch/esummary)
   vcp  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
+  scperturb - scPerturb harmonised perturbation datasets
   experimenthub - Bioconductor ExperimentHub (uses cached metadata sqlite)
 
 Examples:
@@ -46,6 +47,7 @@ Examples:
   hapiq search geo "scRNA-seq pancreas" --organism "Mus musculus"
   hapiq search vcp "Perturb-Seq" --limit 10
   hapiq search vcp "Perturb-Seq" --assay "Perturb-Seq" --organism "Homo sapiens"
+  hapiq search scperturb RPE1
   hapiq search vcp "Perturb-Seq" -q | xargs -I{} hapiq download vcp {} --out ./data`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSearch,

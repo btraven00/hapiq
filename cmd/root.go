@@ -29,7 +29,8 @@ provenance tracking. Point it at a source and ID; it handles the rest.
 Supported sources: geo, figshare, zenodo, ensembl
 
 "Hapiq" means "the one who fetches" in Quechua.`,
-	SilenceUsage: true,
+	SilenceUsage:  true,
+	SilenceErrors: true, // main prints the error; cobra printing it too doubled it
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
