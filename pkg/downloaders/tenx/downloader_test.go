@@ -5,6 +5,7 @@ import (
 	"crypto/md5" // #nosec G501 -- test fixture md5
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,7 +47,13 @@ func writePage(t *testing.T, srv *httptest.Server, corrupt bool) string {
 	return p
 }
 
-func fakeCDN(t *testing.T) *httptest.Server {
+const testSnapshot = "20260311105855"
+
+// fakeCDN serves the dataset files and, for the archive tests, a Wayback
+// availability API and snapshot. *archived is the snapshot HTML ("" = no
+// archived copy); it is set after the server exists, since the page lists
+// the server's URLs.
+func fakeCDN(t *testing.T, archived *string) *httptest.Server {
 	t.Helper()
 	body := map[string]string{
 		"metrics_summary.csv":           "metric,value\n",
@@ -54,6 +61,16 @@ func fakeCDN(t *testing.T) *httptest.Server {
 		"filtered_feature_bc_matrix.h5": "hdf5",
 	}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/wayback/available":
+			available := archived != nil && *archived != ""
+			_, _ = fmt.Fprintf(w, `{"archived_snapshots":{"closest":{"available":%v,"status":"200","timestamp":%q}}}`,
+				available, map[bool]string{true: testSnapshot}[available])
+			return
+		case r.URL.Path == "/web/"+testSnapshot+"id_/https://www.10xgenomics.com/datasets/test-ds":
+			_, _ = io.WriteString(w, *archived)
+			return
+		}
 		name := strings.TrimPrefix(r.URL.Path, "/samples/cell-vdj/8.0.0/ds_sample/ds_sample_")
 		b, ok := body[name]
 		if !ok {
@@ -69,11 +86,25 @@ func fakeCDN(t *testing.T) *httptest.Server {
 func newTestDownloader(srv *httptest.Server) *TenxDownloader {
 	d := New()
 	d.client = srv.Client()
+	d.archiveAPI = srv.URL + "/wayback/available"
+	d.waybackBase = srv.URL + "/web/"
 	return d
 }
 
+// asHTML wraps a _next/data page JSON the way a rendered page embeds it.
+func asHTML(t *testing.T, pageJSON string) string {
+	t.Helper()
+	b, err := os.ReadFile(pageJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return `<!DOCTYPE html><html><body><div id="__next"></div>` +
+		`<script id="__NEXT_DATA__" type="application/json">{"props":` + string(b) +
+		`,"page":"/datasets/[slug]","buildId":"x"}</script></body></html>`
+}
+
 func TestDownloadFromPageJSON(t *testing.T) {
-	srv := fakeCDN(t)
+	srv := fakeCDN(t, nil)
 	d := newTestDownloader(srv)
 	ctx := context.Background()
 	page := writePage(t, srv, false)
@@ -119,7 +150,7 @@ func TestDownloadFromPageJSON(t *testing.T) {
 }
 
 func TestDownloadRejectsMD5Mismatch(t *testing.T) {
-	srv := fakeCDN(t)
+	srv := fakeCDN(t, nil)
 	out := t.TempDir()
 	res, err := newTestDownloader(srv).Download(context.Background(), &downloaders.DownloadRequest{
 		ID: writePage(t, srv, true), OutputDir: out,
@@ -142,5 +173,64 @@ func TestValidateRejectsListingJSON(t *testing.T) {
 	vr, err := New().Validate(context.Background(), p)
 	if err != nil || vr.Valid {
 		t.Fatalf("listing JSON should be invalid: valid=%v err=%v", vr.Valid, err)
+	}
+}
+
+// A slug is resolved through the Wayback Machine: the latest snapshot's
+// __NEXT_DATA__ gives the file list, and hapiq.json pins that snapshot.
+func TestDownloadFromArchivedPage(t *testing.T) {
+	var archived string
+	srv := fakeCDN(t, &archived)
+	archived = asHTML(t, writePage(t, srv, false))
+	d := newTestDownloader(srv)
+	ctx := context.Background()
+
+	meta, err := d.GetMetadata(ctx, "test-ds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.FileCount != 3 || meta.Custom["file_list_from"] != d.waybackBase+testSnapshot+"/https://www.10xgenomics.com/datasets/test-ds" {
+		t.Errorf("metadata: files=%d from=%v", meta.FileCount, meta.Custom["file_list_from"])
+	}
+
+	out := t.TempDir()
+	res, err := d.Download(ctx, &downloaders.DownloadRequest{ID: "test-ds", OutputDir: out, Metadata: meta})
+	if err != nil || !res.Success || len(res.Files) != 3 {
+		t.Fatalf("err=%v success=%v errors=%v files=%d", err, res.Success, res.Errors, len(res.Files))
+	}
+	w, _ := os.ReadFile(filepath.Join(out, "hapiq.json"))
+	if !strings.Contains(string(w), `"original_id": "test-ds@`+testSnapshot+`"`) {
+		t.Errorf("hapiq.json should pin the snapshot:\n%s", w)
+	}
+
+	// The pinned form skips the availability lookup and gives the same list.
+	if _, err := New().fetchPage(ctx, "nope@123"); err == nil {
+		t.Error("a malformed timestamp should not be accepted")
+	}
+	pinned, err := d.GetMetadata(ctx, "test-ds@"+testSnapshot)
+	if err != nil || pinned.FileCount != 3 {
+		t.Fatalf("pinned: %v files=%v", err, pinned)
+	}
+}
+
+func TestNotArchived(t *testing.T) {
+	empty := ""
+	srv := fakeCDN(t, &empty)
+	vr, err := newTestDownloader(srv).Validate(context.Background(), "test-ds")
+	if err != nil || vr.Valid || len(vr.Errors) != 1 || !strings.Contains(vr.Errors[0], "no archived copy") {
+		t.Fatalf("valid=%v errors=%v, want a 'no archived copy' error", vr.Valid, vr.Errors)
+	}
+}
+
+// A page saved from the browser (Ctrl+S) carries the same __NEXT_DATA__.
+func TestDownloadFromSavedHTML(t *testing.T) {
+	srv := fakeCDN(t, nil)
+	html := filepath.Join(t.TempDir(), "page.html")
+	if err := os.WriteFile(html, []byte(asHTML(t, writePage(t, srv, false))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := newTestDownloader(srv).Download(context.Background(), &downloaders.DownloadRequest{ID: html, OutputDir: t.TempDir()})
+	if err != nil || !res.Success || len(res.Files) != 3 {
+		t.Fatalf("err=%v success=%v errors=%v files=%d", err, res.Success, res.Errors, len(res.Files))
 	}
 }
