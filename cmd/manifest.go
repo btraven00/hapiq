@@ -177,6 +177,8 @@ func buildEntryOptions(o *manifest.Options) (*downloaders.DownloadOptions, error
 		// Manifest runs are non-interactive by definition.
 		NonInteractive: true,
 		SkipExisting:   true,
+		// The entry folder is the dataset folder: no <identifier>/<id> nesting.
+		FlatOutput: true,
 	}
 	if o == nil {
 		return out, nil

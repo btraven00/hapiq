@@ -32,6 +32,9 @@ type SpeciesInfo struct {
 func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *EnsemblRequest, outputDir string, options *downloaders.DownloadOptions, result *downloaders.DownloadResult) error {
 	// Create output directory structure
 	targetDir := filepath.Join(outputDir, fmt.Sprintf("ensembl_%s_release-%s_%s", req.Database, req.Version, req.Content))
+	if options != nil && options.FlatOutput {
+		targetDir = outputDir
+	}
 	dryRun := options != nil && options.DryRun
 	speciesDir := targetDir
 	if dryRun {

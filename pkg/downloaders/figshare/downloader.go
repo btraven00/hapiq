@@ -220,6 +220,7 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 
 	// Check directory and handle conflicts
 	dirChecker := common.NewDirectoryChecker(req.OutputDir)
+	dirChecker.Flat = req.Options != nil && req.Options.FlatOutput
 
 	dirStatus, err := dirChecker.CheckAndPrepare(cleanID)
 	if err != nil {

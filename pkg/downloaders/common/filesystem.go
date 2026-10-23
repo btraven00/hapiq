@@ -21,6 +21,7 @@ import (
 // DirectoryChecker handles directory validation and conflict resolution.
 type DirectoryChecker struct {
 	OutputDir string
+	Flat      bool // target OutputDir itself, not <OutputDir>/<id>
 }
 
 // NewDirectoryChecker creates a new directory checker.
@@ -30,9 +31,13 @@ func NewDirectoryChecker(outputDir string) *DirectoryChecker {
 	}
 }
 
-// CheckAndPrepare validates the target directory and detects conflicts.
+// CheckAndPrepare validates the target directory, <OutputDir>/<id> (or
+// OutputDir itself when Flat), and detects conflicts.
 func (dc *DirectoryChecker) CheckAndPrepare(id string) (*downloaders.DirectoryStatus, error) {
 	targetDir := filepath.Join(dc.OutputDir, SanitizeFilename(id))
+	if dc.Flat {
+		targetDir = dc.OutputDir
+	}
 
 	status := &downloaders.DirectoryStatus{
 		TargetPath: targetDir,
