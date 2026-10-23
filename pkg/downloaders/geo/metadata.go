@@ -470,22 +470,39 @@ func (d *GEODownloader) makeEUtilsRequest(ctx context.Context, url string) ([]by
 		url = url + separator + "api_key=" + d.apiKey
 	}
 
-	// Note: Rate limiting is applied by the caller, not here to avoid double rate limiting
+	// Note: Rate limiting is applied by the caller, not here to avoid double rate limiting.
+	// The limiter is per process, so back-to-back hapiq runs can still hit
+	// HTTP 429; back off and retry a few times before giving up.
+	var resp *http.Response
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
+	for attempt := 0; ; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
 
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
+		resp, err = d.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			break
+		}
+
+		_ = resp.Body.Close()
+
+		if attempt == eUtilsMaxRetries {
+			return nil, fmt.Errorf("E-utilities rate limit exceeded (HTTP 429). Consider setting NCBI_API_KEY environment variable for higher limits")
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(eUtilsBackoff << attempt):
+		}
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("E-utilities rate limit exceeded (HTTP 429). Consider setting NCBI_API_KEY environment variable for higher limits")
-	}
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("E-utilities request failed with status %d", resp.StatusCode)
