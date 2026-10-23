@@ -24,6 +24,7 @@ import (
 	"github.com/btraven00/hapiq/pkg/downloaders/figshare"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
 	"github.com/btraven00/hapiq/pkg/downloaders/hca"
+	"github.com/btraven00/hapiq/pkg/downloaders/huggingface"
 	"github.com/btraven00/hapiq/pkg/downloaders/scanpy"
 	"github.com/btraven00/hapiq/pkg/downloaders/scperturb"
 	"github.com/btraven00/hapiq/pkg/downloaders/sra"
@@ -601,6 +602,18 @@ func initializeDownloaders() error {
 		return fmt.Errorf("failed to register scanpy downloader: %w", err)
 	}
 
+	// Register Hugging Face Hub downloader (datasets)
+	hfOpts := []huggingface.Option{
+		huggingface.WithVerbose(!quiet),
+		huggingface.WithTimeout(time.Duration(downloadTimeout) * time.Second),
+	}
+	if token := os.Getenv("HF_TOKEN"); token != "" {
+		hfOpts = append(hfOpts, huggingface.WithToken(token))
+	}
+	if err := downloaders.Register(huggingface.New(hfOpts...)); err != nil {
+		return fmt.Errorf("failed to register Hugging Face downloader: %w", err)
+	}
+
 	// Register URL downloader (direct HTTP/HTTPS fetch)
 	urlDL := urldownloader.New(
 		urldownloader.WithVerbose(!quiet),
@@ -617,6 +630,10 @@ func initializeDownloaders() error {
 
 	if err := downloaders.RegisterAlias("ena", "sra"); err != nil {
 		return fmt.Errorf("failed to register ENA alias: %w", err)
+	}
+
+	if err := downloaders.RegisterAlias("huggingface", "hf"); err != nil {
+		return fmt.Errorf("failed to register huggingface alias: %w", err)
 	}
 
 	return nil
