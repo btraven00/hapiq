@@ -254,3 +254,34 @@ func TestSeriesPlanAndFetchWarnOnFailure(t *testing.T) {
 		}
 	}
 }
+
+// FlatOutput writes into OutputDir itself; by default a series nests under
+// <OutputDir>/<id>. manifest get relies on the flat form.
+func TestDownloadFlatOutput(t *testing.T) {
+	srv, _ := fakeGEOFTP(t)
+	d := newTestDownloader(srv.URL)
+
+	for _, flat := range []bool{false, true} {
+		out := t.TempDir()
+		res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+			ID:        testGSE,
+			OutputDir: out,
+			Metadata:  &downloaders.Metadata{ID: testGSE},
+			Options: &downloaders.DownloadOptions{
+				FilenameGlob: "*metadata*", NonInteractive: true, SkipExisting: true, FlatOutput: flat, // as manifest get
+			},
+		})
+		if err != nil || !res.Success {
+			t.Fatalf("flat=%v: err=%v errors=%v", flat, err, res.Errors)
+		}
+
+		want := filepath.Join(out, testGSE, "hapiq.json")
+		if flat {
+			want = filepath.Join(out, "hapiq.json")
+		}
+
+		if res.WitnessFile != want {
+			t.Errorf("flat=%v: witness at %s, want %s", flat, res.WitnessFile, want)
+		}
+	}
+}

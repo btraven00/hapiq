@@ -56,6 +56,9 @@ type DownloadOptions struct {
 	SkipExisting         bool              `json:"skip_existing"`
 	NonInteractive       bool              `json:"non_interactive"`
 	Force                bool              `json:"force"` // overwrite existing files without prompting
+	// FlatOutput writes into OutputDir itself instead of <OutputDir>/<id>
+	// (geo, figshare and ensembl nest by default).
+	FlatOutput bool `json:"flat_output,omitempty"`
 }
 
 // ValidationResult contains the outcome of ID validation.
