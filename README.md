@@ -250,6 +250,28 @@ Each download writes a `hapiq.json` witness file containing the full metadata, p
 
 ---
 
+### `hapiq refetch`
+
+Re-download a dataset into its folder from the `hapiq.json` there, so the data
+can be deleted and only the witness kept.
+
+```bash
+rm -r data/GSE264667/supplementary
+hapiq refetch data/GSE264667            # several folders at once also work
+```
+
+It downloads the same source, ID and filters (`--include-ext` and so on) back
+into the folder, keeping files that are still on disk. Every file listed in
+`hapiq.json` is then checked against its recorded checksum: a file that changed
+upstream fails the run, is removed, and `hapiq.json` is left as recorded. On
+success the run is merged into `hapiq.json`.
+
+GEO and figshare download into `<out>/<id>`, so their folders must keep that
+name. Ensembl is not supported yet (its `hapiq.json` does not record the
+species).
+
+---
+
 ### `hapiq cache serve`
 
 Serve the local blob cache to other hapiq instances so a lab or a workshop
@@ -323,6 +345,9 @@ Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
   "download_stats": { "duration": "4m32s", "bytes_downloaded": 134217728 }
 }
 ```
+
+The data can be deleted and restored later from this file alone with
+[`hapiq refetch`](#hapiq-refetch).
 
 ---
 
