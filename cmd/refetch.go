@@ -63,7 +63,7 @@ func refetchDir(ctx context.Context, dir string) (err error) {
 	// recorded one back, so a changed upstream is not written into provenance.
 	defer func() {
 		if err != nil {
-			_ = os.WriteFile(witnessPath, recorded, 0o600)
+			_ = os.WriteFile(witnessPath, recorded, 0o600) // #nosec G703 -- restores the hapiq.json read above, in the user-specified dataset dir
 		}
 	}()
 
