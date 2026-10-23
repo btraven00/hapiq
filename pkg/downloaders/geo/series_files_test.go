@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -228,30 +229,68 @@ func TestDownloadRerunSkipsEverything(t *testing.T) {
 	}
 }
 
-// Failures are reported as warnings, not silently dropped.
-func TestSeriesPlanAndFetchWarnOnFailure(t *testing.T) {
-	srv := httptest.NewServer(http.NotFoundHandler())
+// A listed supplementary file that fails (missing or truncated) is an error (the run fails); the
+// guessed SOFT file only warns. Nothing failed is listed or left on disk.
+func TestSeriesFetchFailures(t *testing.T) {
+	base := "/series/GSE147nnn/" + testGSE
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case base + "/suppl/":
+			_, _ = w.Write([]byte(`<a href="gone.csv.gz">gone.csv.gz</a>   2020-03-23 12:48   35M
+<a href="short.csv.gz">short.csv.gz</a>   2020-03-23 12:48   35M`))
+		case base + "/suppl/short.csv.gz": // truncated mid-transfer
+			w.Header().Set("Content-Length", "100")
+			_, _ = w.Write([]byte("abc"))
+		case base + "/matrix/" + testGSE + "_series_matrix.txt.gz":
+			_, _ = w.Write([]byte("payload")) // served, so no E-utils fallback
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 	t.Cleanup(srv.Close)
 
 	d := newTestDownloader(srv.URL)
-	ctx := context.Background()
+	dir := t.TempDir()
 	result := &downloaders.DownloadResult{}
 
-	files := d.planSeriesFiles(ctx, testGSE, nil, result)
+	if err := d.downloadSeries(context.Background(), testGSE, dir, nil, result); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := paths(result.Files); len(got) != 1 || got[0] != "metadata/"+testGSE+"_series_matrix.txt.gz" {
+		t.Errorf("only the matrix should be listed, got %v", got)
+	}
+
+	for _, want := range []string{"supplementary/gone.csv.gz", "supplementary/short.csv.gz"} {
+		if !slices.ContainsFunc(result.Errors, func(e string) bool { return strings.Contains(e, want) }) {
+			t.Errorf("missing error for %s in %v", want, result.Errors)
+		}
+
+		if _, err := os.Stat(filepath.Join(dir, want)); !os.IsNotExist(err) {
+			t.Errorf("failed %s left on disk (stat err=%v)", want, err)
+		}
+	}
+
+	soft := "metadata/" + testGSE + "_family.soft.gz"
+	if !slices.ContainsFunc(result.Warnings, func(w string) bool { return strings.Contains(w, soft) }) {
+		t.Errorf("missing warning for %s in %v", soft, result.Warnings)
+	}
+}
+
+// An unlistable suppl/ leaves just the metadata files, with a warning.
+func TestSeriesPlanWarnsWhenUnlistable(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+
+	result := &downloaders.DownloadResult{}
+
+	files := newTestDownloader(srv.URL).planSeriesFiles(context.Background(), testGSE, nil, result)
 	if len(files) != 2 {
 		t.Errorf("unlistable suppl/ should leave just the 2 metadata files, got %v", paths(files))
 	}
 
-	d.fetchFile(ctx, srv.URL+"/missing.gz", t.TempDir(), "supplementary/missing.gz", nil, result)
-
-	if len(result.Files) != 0 {
-		t.Errorf("failed fetch should not be listed, got %v", paths(result.Files))
-	}
-
-	for _, want := range []string{"could not list supplementary files", "failed to download supplementary/missing.gz"} {
-		if !slices.ContainsFunc(result.Warnings, func(w string) bool { return strings.Contains(w, want) }) {
-			t.Errorf("missing warning %q in %v", want, result.Warnings)
-		}
+	if !slices.ContainsFunc(result.Warnings, func(w string) bool { return strings.Contains(w, "could not list supplementary files") }) {
+		t.Errorf("missing listing warning in %v", result.Warnings)
 	}
 }
 
