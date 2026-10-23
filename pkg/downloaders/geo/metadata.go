@@ -125,6 +125,8 @@ func (d *GEODownloader) getSeriesMetadata(ctx context.Context, id string) (*down
 		for _, e := range listing {
 			metadata.TotalSize += max(e.Size, 0)
 		}
+
+		metadata.FileCount = len(listing) + 2 // + series matrix and SOFT
 	}
 
 	// First check if we have any file count information already
