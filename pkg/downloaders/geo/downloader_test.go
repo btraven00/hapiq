@@ -598,3 +598,31 @@ type testError struct {
 func (e *testError) Error() string {
 	return e.msg
 }
+
+// E-utilities HTTP 429 is retried with backoff, not returned at once.
+func TestMakeEUtilsRequestRetries429(t *testing.T) {
+	old := eUtilsBackoff
+	eUtilsBackoff = time.Millisecond
+	t.Cleanup(func() { eUtilsBackoff = old })
+
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls <= 2 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := NewGEODownloader().makeEUtilsRequest(context.Background(), srv.URL)
+	if err != nil || string(got) != "ok" || calls != 3 {
+		t.Fatalf("got %q, err=%v after %d calls; want ok after 3", got, err, calls)
+	}
+
+	calls = -10 // always 429
+	if _, err := NewGEODownloader().makeEUtilsRequest(context.Background(), srv.URL); err == nil {
+		t.Fatal("persistent 429 should fail")
+	}
+}

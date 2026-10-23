@@ -22,6 +22,9 @@ import (
 
 // Rate limiting for E-utilities (3 requests per second without API key, 10 with API key).
 var (
+	eUtilsMaxRetries = 3           // retries after an HTTP 429
+	eUtilsBackoff    = time.Second // doubled per retry: 1 s, 2 s, 4 s
+
 	lastEUtilsRequest         time.Time
 	eUtilsRateLimit           = 400 * time.Millisecond // More conservative: 2.5 requests/second
 	eUtilsRateLimitWithAPIKey = 120 * time.Millisecond // 8 requests/second (conservative 10/sec limit)
