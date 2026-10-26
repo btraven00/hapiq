@@ -193,7 +193,7 @@ Applied per file before anything is written to disk.
 | `--skip-existing` | false | Skip files that already exist locally |
 | `--force` | false | Overwrite existing files without prompting |
 | `-y, --yes` | false | Non-interactive mode (auto-confirm prompts) |
-| `-t, --timeout N` | 300 | Timeout in seconds |
+| `-t, --timeout N` | 300 | Seconds without any data received before a request is abandoned |
 
 #### Output
 
@@ -363,7 +363,7 @@ Every `hapiq download` writes a `hapiq.json` file alongside the downloaded data:
 
 ```json
 {
-  "hapiq_version": "0.1.0",
+  "hapiq_version": "0.1.2",
   "download_time": "2026-04-16T02:00:00Z",
   "source": "geo",
   "original_id": "GSE133344",

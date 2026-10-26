@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-26
+
+### Added
+
+- **Hugging Face Hub datasets** (`hf`, alias `huggingface`):
+  `hapiq download hf <owner>/<name>[@revision]`. The revision is pinned to a
+  commit sha, and every file is checked against the Hub's sha256 (LFS) or git
+  blob sha1. `HF_TOKEN` is sent for gated and private datasets; their files
+  bypass the blob cache and LAN peers. `hapiq search hf <query>` lists Hub
+  datasets, most downloaded first.
+- **10x Genomics datasets** (`10x`, alias `10xgenomics`):
+  `hapiq download 10x <slug>` reads the file list from the Internet Archive's
+  copy of the dataset page and downloads from 10x's open hosts, checking each
+  md5. `<slug>@<timestamp>` pins a snapshot; a page saved from the browser
+  (HTML or JSON) also works.
+- **`hapiq refetch <dir>`** re-downloads a dataset from its `hapiq.json` and
+  checks every file against its recorded checksum. `ensembl` is not supported
+  yet.
+
+### Changed
+
+- **`--timeout` is a stall limit.** It now abandons a request only when no
+  data arrives for that many seconds. Before, it also capped the whole
+  transfer, so files taking over 5 minutes were cut off.
+
 ### Fixed
 
 - **GEO series filters:** `--filename-pattern`, `--include-ext`,
@@ -22,6 +47,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Witness stats:** `download_stats` describes the latest run only. Before,
   byte and file counts added up across runs into the same directory.
   GEO downloads now report `files_skipped`.
+- **Failed files fail the run.** A file that failed mid-transfer in figshare,
+  SRA and GEO (listed supplementary files) was only a warning: the run
+  exited 0 and could leave the truncated file in place. It is now an error
+  and the partial file is removed.
+- **Checksums from the source.** figshare and Zenodo files are verified
+  against the md5 they publish, and the md5 (also ENA's for SRA) is recorded
+  as `source_checksum` in `hapiq.json`.
+- **ExperimentHub:** EH ids are resolved to their rdatapath ids before
+  fetching. Before, e.g. EH3796 downloaded EH3760's file and reported
+  success. Search lists each resource once under its EH id.
+- **`manifest get`:** geo, figshare and ensembl entries land in the entry
+  folder instead of a nested `<identifier>/<id>/`.
+- **`hapiq.json` options:** biostudies, experimenthub, hca, scperturb, url
+  and vcp now record the download options (filters) in provenance.
+- **GEO:** the series file count comes from the FTP listing; off-site links
+  in FTP listings are ignored; E-utilities HTTP 429 is retried with backoff.
+- **HTTP fetches send `Accept: */*`**, so Cloudflare-fronted hosts serve HTML
+  files unmodified (they failed their published md5 before).
+- **Cache:** an unwritable cache dir falls back to no cache instead of
+  failing every download.
+- **CLI:** errors are printed once; `search --help` lists scperturb; a
+  dry-run summary no longer says "Files downloaded"; a plain `go build` on a
+  tag reports the tag version.
+
+### Security
+
+- Go 1.26.10 (GO-2026-6809, GO-2026-6611..6617) and x/net v0.60.0.
 
 ## [0.1.1] - 2026-10-05
 
