@@ -1,6 +1,8 @@
 package common
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
@@ -68,5 +70,35 @@ func TestFormatEstimate(t *testing.T) {
 
 	if got := FormatEstimate(2048); got != FormatBytes(2048) {
 		t.Errorf("FormatEstimate(2048) = %q, want %q", got, FormatBytes(2048))
+	}
+}
+
+// Regression: experimenthub without a cache and sra (md5) wrote hapiq.json
+// entries without a sha256. WriteWitnessFile now fills one in, for paths
+// relative to the folder and for full paths.
+func TestWriteWitnessFileFillsSHA256(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const helloSHA = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+
+	w := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{
+		{Path: "a.txt"}, // relative to dir
+		{Path: filepath.Join(dir, "a.txt"), Checksum: "b1946ac92492d2347c6235b4d2611184", ChecksumType: "md5"},
+		{Path: "missing.txt"}, // unreadable: left empty
+	}}
+	if err := WriteWitnessFile(dir, w); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadWitnessFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{helloSHA, helloSHA, ""} {
+		f := got.Files[i]
+		if f.Checksum != want || (want != "" && f.ChecksumType != "sha256") {
+			t.Errorf("%s: got %s:%s, want sha256:%s", f.Path, f.ChecksumType, f.Checksum, want)
+		}
 	}
 }

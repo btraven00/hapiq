@@ -315,8 +315,8 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 						Path:         targetPath,
 						OriginalName: filepath.Base(targetPath),
 						Size:         sz,
-						Checksum:     gotMD5,
-						ChecksumType: "md5",
+						Checksum:     sha256hex,
+						ChecksumType: "sha256",
 						SourceURL:    url,
 						DownloadTime: time.Now(),
 						CacheHit:     true,
@@ -371,8 +371,8 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 						Path:         targetPath,
 						OriginalName: filepath.Base(targetPath),
 						Size:         written,
-						Checksum:     gotMD5,
-						ChecksumType: "md5",
+						Checksum:     sha256hex,
+						ChecksumType: "sha256",
 						SourceURL:    url,
 						DownloadTime: time.Now(),
 					}, nil
@@ -384,8 +384,8 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 				Path:         targetPath,
 				OriginalName: filepath.Base(targetPath),
 				Size:         written,
-				Checksum:     gotMD5,
-				ChecksumType: "md5",
+				Checksum:     sha256hex,
+				ChecksumType: "sha256",
 				SourceURL:    url,
 				DownloadTime: time.Now(),
 			}, nil
@@ -399,13 +399,14 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 	}
 	defer f.Close()
 
-	written, err := io.Copy(io.MultiWriter(f, mdHash), resp.Body)
+	written, err := io.Copy(io.MultiWriter(f, mdHash, shaHash), resp.Body)
 	if err != nil {
 		// Don't leave a truncated file at its final path.
 		_ = os.Remove(targetPath)
 		return nil, fmt.Errorf("write %s: %w", targetPath, err)
 	}
 	gotMD5 := hex.EncodeToString(mdHash.Sum(nil))
+	sha256hex := hex.EncodeToString(shaHash.Sum(nil))
 	if expectedMD5 != "" && gotMD5 != expectedMD5 {
 		_ = os.Remove(targetPath)
 		return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
@@ -415,8 +416,8 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
 		Size:         written,
-		Checksum:     gotMD5,
-		ChecksumType: "md5",
+		Checksum:     sha256hex,
+		ChecksumType: "sha256",
 		SourceURL:    url,
 		DownloadTime: time.Now(),
 	}, nil
