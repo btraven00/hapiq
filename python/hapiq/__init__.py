@@ -1,9 +1,11 @@
+from ._version import __version__
 from ._runner import HapiqError
 from .dataset import Dataset
 from .search import search
 from .types import DownloadResult, FileInfo, Metadata, SearchResult
 
 __all__ = [
+    "__version__",
     "Dataset",
     "search",
     "Metadata",
