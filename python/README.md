@@ -6,10 +6,11 @@ The library implements the **HDL (Has Data Locally)** pattern: a `Dataset` objec
 
 ## Installation
 
-The wheel ships a pre-compiled `hapiq` binary — no Go toolchain required.
+Wheels for Linux (x86_64, aarch64) and macOS 12+ (x86_64, arm64) ship a static
+`hapiq` binary of the same version, so no Go toolchain is required.
 
 ```bash
-pip install hapiq   # TODO: publish to PyPI
+pip install hapiq
 ```
 
 For development, install from the repo:
@@ -113,14 +114,16 @@ Like `fetch()` but returns the full result including checksum info, download sta
 
 ```bash
 cd python/
-pip install -e .
+pip install -e .                             # builds hapiq/bin/hapiq; needs Go
 pytest tests/ -m "not integration"          # unit tests (no network)
 pytest tests/ -m integration                # integration tests (hits GEO)
 HAPIQ_DOWNLOAD_TEST=1 pytest tests/ -m integration  # includes actual file download
 ```
 
+The bundled binary must report the package version (`hapiq/_version.py`).
+After changing Go code, run `pip install -e .` again to rebuild it, or delete
+`hapiq/bin/hapiq` to use `hapiq` from `PATH`.
+
 ## TODO
 
-- [ ] Publish to PyPI with platform-specific wheels (Linux x86_64, macOS arm64/x86_64, Windows x86_64)
-- [ ] GitHub Actions workflow for cross-platform wheel builds via `cibuildwheel`
 - [ ] Async `fetch()` variant for use in notebook environments

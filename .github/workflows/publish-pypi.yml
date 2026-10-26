@@ -1,0 +1,65 @@
+name: Publish to PyPI
+
+# A vX.Y.Z tag builds one wheel per platform, each carrying a static hapiq
+# binary stamped X.Y.Z, and publishes them as the Python package hapiq X.Y.Z.
+# No sdist: installing one would need a Go toolchain.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: Wheel (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set package version from tag
+        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > python/hapiq/_version.py
+
+      - name: Build wheel
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: pipx run build --wheel --outdir dist python/
+
+      - name: Smoke test
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          /tmp/venv/bin/python -c "from hapiq._binary import find_binary; print(find_binary())"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.whl
+
+  publish:
+    needs: wheels
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
