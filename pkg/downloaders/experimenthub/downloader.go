@@ -370,7 +370,8 @@ func (d *ExperimentHubDownloader) downloadFile(ctx context.Context, url, targetP
 	}
 	defer f.Close()
 
-	written, err := io.Copy(f, resp.Body)
+	h := sha256.New()
+	written, err := io.Copy(io.MultiWriter(f, h), resp.Body)
 	if err != nil {
 		_ = os.Remove(targetPath)
 		return nil, "", fmt.Errorf("write %s: %w", filepath.Base(targetPath), err)
@@ -379,6 +380,8 @@ func (d *ExperimentHubDownloader) downloadFile(ctx context.Context, url, targetP
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		Size:         written,
+		Checksum:     hex.EncodeToString(h.Sum(nil)),
+		ChecksumType: "sha256",
 		SourceURL:    url,
 		DownloadTime: downloadTime,
 		ContentType:  contentType,

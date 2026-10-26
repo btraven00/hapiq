@@ -282,6 +282,8 @@ func CalculateFileChecksum(filePath string) (string, error) {
 func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
+	fillSHA256(targetDir, witness.Files)
+
 	// Merge with any existing witness file.
 	if existing, err := LoadWitnessFile(targetDir); err == nil {
 		witness = mergeWitnessFiles(existing, witness)
@@ -301,6 +303,29 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 	}
 
 	return nil
+}
+
+// fillSHA256 gives every file a local sha256, whatever its downloader
+// recorded, so hapiq.json always carries one checksum type per file. Paths
+// are either relative to targetDir (geo, figshare) or as passed to --out.
+// An unreadable file keeps an empty checksum rather than losing hapiq.json.
+func fillSHA256(targetDir string, files []downloaders.FileWitness) {
+	for i := range files {
+		f := &files[i]
+		if f.ChecksumType == "sha256" && f.Checksum != "" {
+			continue
+		}
+		candidates := []string{f.Path}
+		if !filepath.IsAbs(f.Path) {
+			candidates = []string{filepath.Join(targetDir, f.Path), f.Path}
+		}
+		for _, p := range candidates {
+			if sum, err := CalculateFileChecksum(p); err == nil {
+				f.Checksum, f.ChecksumType = sum, "sha256"
+				break
+			}
+		}
+	}
 }
 
 // mergeWitnessFiles merges prev and next into a single WitnessFile.
