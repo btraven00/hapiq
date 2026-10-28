@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-28
+
+### Added
+
+- **Python package on PyPI:** `pip install hapiq` installs wheels for Linux
+  (x86_64, aarch64) and macOS 12+ (x86_64, arm64) that ship a static `hapiq`
+  binary of the same version. There is no sdist.
+
+### Changed
+
+- **Every file in `hapiq.json` has a sha256.** experimenthub files downloaded
+  without the cache had no checksum at all. SRA entries recorded ENA's md5 as
+  the file checksum; they now record sha256 like every other source, and the
+  md5 stays in `source_checksum`.
+
+### Fixed
+
+- **Python:** the bundled binary must report the package version, so an
+  editable install no longer runs a stale build. Wheels are tagged for their
+  platform (they were `py3-none-any`), the package imports on Python 3.9, and
+  its license is declared as GPL-3.0-or-later (it said MIT).
+
 ## [0.1.2] - 2026-10-26
 
 ### Added
@@ -133,6 +155,8 @@ First tagged release. Earlier builds were published only as
   when stdin closes at the prompt, it falls back to the `-y` behaviour instead
   of failing with EOF.
 
-[Unreleased]: https://github.com/btraven00/hapiq/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/btraven00/hapiq/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/btraven00/hapiq/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/btraven00/hapiq/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/btraven00/hapiq/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/btraven00/hapiq/releases/tag/v0.1.0
