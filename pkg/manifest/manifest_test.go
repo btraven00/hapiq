@@ -246,3 +246,61 @@ func TestFromWitness_RegularSource(t *testing.T) {
 		t.Errorf("URL should be empty for non-url source, got %q", entry.URL)
 	}
 }
+
+func TestFromWitness_KeepsFilters(t *testing.T) {
+	dir := t.TempDir()
+	witness := `{
+		"source": "zenodo",
+		"original_id": "14518762",
+		"files": [],
+		"options": {"filename_glob": "Pathway_*", "max_file_size": 1048576, "include_raw": true, "max_concurrent": 8}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "hapiq.json"), []byte(witness), 0o644); err != nil {
+		t.Fatalf("write witness: %v", err)
+	}
+
+	entry, err := FromWitness(filepath.Join(dir, "hapiq.json"))
+	if err != nil {
+		t.Fatalf("FromWitness() error: %v", err)
+	}
+	if entry.Options == nil {
+		t.Fatal("Options = nil, want the recorded filters")
+	}
+	if entry.Options.FilenameGlob != "Pathway_*" {
+		t.Errorf("FilenameGlob = %q, want Pathway_*", entry.Options.FilenameGlob)
+	}
+	if entry.Options.MaxFileSize != "1048576" {
+		t.Errorf("MaxFileSize = %q, want 1048576", entry.Options.MaxFileSize)
+	}
+	if entry.Options.ExcludeRaw {
+		t.Error("ExcludeRaw = true, want false")
+	}
+
+	out, err := RenderEntry(entry)
+	if err != nil {
+		t.Fatalf("RenderEntry() error: %v", err)
+	}
+	entries, err := Load(writeManifest(t, out))
+	if err != nil {
+		t.Fatalf("Load(rendered) error: %v", err)
+	}
+	if got := entries[0].Options; got == nil || got.FilenameGlob != "Pathway_*" {
+		t.Errorf("round-tripped Options = %+v, want filename_pattern Pathway_*", got)
+	}
+}
+
+func TestFromWitness_NoFiltersNoOptions(t *testing.T) {
+	dir := t.TempDir()
+	witness := `{"source": "zenodo", "original_id": "1", "files": [],
+		"options": {"include_raw": true, "max_concurrent": 8, "skip_existing": true}}`
+	if err := os.WriteFile(filepath.Join(dir, "hapiq.json"), []byte(witness), 0o644); err != nil {
+		t.Fatalf("write witness: %v", err)
+	}
+	entry, err := FromWitness(filepath.Join(dir, "hapiq.json"))
+	if err != nil {
+		t.Fatalf("FromWitness() error: %v", err)
+	}
+	if entry.Options != nil {
+		t.Errorf("Options = %+v, want nil when no filter was set", entry.Options)
+	}
+}

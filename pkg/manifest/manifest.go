@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -124,6 +125,7 @@ func FromWitness(witnessPath string) (*Entry, error) {
 	} else {
 		entry.Accession = fmt.Sprintf("%s:%s", w.Source, w.OriginalID)
 	}
+	entry.Options = optionsFromDownload(w.Options)
 	for _, f := range w.Files {
 		name := f.Path
 		if name == "" {
@@ -136,6 +138,33 @@ func FromWitness(witnessPath string) (*Entry, error) {
 		})
 	}
 	return entry, nil
+}
+
+// optionsFromDownload keeps the filters recorded in a witness, so that
+// replaying the manifest selects the same files. Returns nil when no filter
+// was set.
+func optionsFromDownload(o *downloaders.DownloadOptions) *Options {
+	if o == nil {
+		return nil
+	}
+	out := Options{
+		IncludeExts:          o.IncludeExts,
+		ExcludeExts:          o.ExcludeExts,
+		FilenameGlob:         o.FilenameGlob,
+		Subset:               o.Subset,
+		Organism:             o.Organism,
+		ExcludeRaw:           !o.IncludeRaw,
+		ExcludeSupplementary: o.ExcludeSupplementary,
+		IncludeSRA:           o.IncludeSRA,
+		LimitFiles:           o.LimitFiles,
+	}
+	if o.MaxFileSize > 0 {
+		out.MaxFileSize = fmt.Sprintf("%d", o.MaxFileSize)
+	}
+	if reflect.ValueOf(out).IsZero() {
+		return nil
+	}
+	return &out
 }
 
 // RenderEntry emits a YAML snippet for a single entry as one item of a
