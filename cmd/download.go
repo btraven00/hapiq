@@ -152,8 +152,13 @@ func runDownload(_ *cobra.Command, args []string) error {
 			dir := datasetDir(validationResult.SourceType, validationResult.ID, outputDir)
 			loc, err := fetchLocked(ctx, pinned, dir, opts)
 			if err == nil {
-				_, _ = fmt.Fprintf(os.Stderr, "\n🔒 %s: %d files from %s, sha256 verified against %s\n",
-					acc, len(pinned.Files), loc, lp)
+				if !quiet {
+					_, _ = fmt.Fprintf(os.Stderr, "\n🔒 %s: %d files from %s, sha256 verified against %s\n",
+						acc, len(pinned.Files), loc, lp)
+				}
+				if output == outputFormatJSON {
+					return outputJSON(lockedResult(pinned, dir))
+				}
 				return nil
 			}
 			_, _ = fmt.Fprintf(os.Stderr, "⚠️  no verified remote copy (%v); fetching upstream\n", err)

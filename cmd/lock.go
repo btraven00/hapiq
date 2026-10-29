@@ -237,3 +237,20 @@ func init() {
 	downloadCmd.Flags().StringVar(&lockPath, "lock", "",
 		"fetch locked datasets from their remote copy (default: $HAPIQ_LOCK)")
 }
+
+// lockedResult is the --output json answer for a dataset fetched from a remote.
+func lockedResult(e *remote.Entry, dir string) *downloaders.DownloadResult {
+	res := &downloaders.DownloadResult{Success: true, WitnessFile: filepath.Join(dir, "hapiq.json")}
+	for _, f := range e.Files {
+		res.Files = append(res.Files, downloaders.FileInfo{
+			Path:         filepath.Join(dir, filepath.FromSlash(f.Path)),
+			OriginalName: filepath.Base(f.Path),
+			Checksum:     f.SHA256,
+			ChecksumType: "sha256",
+			Size:         f.Size,
+		})
+		res.BytesTotal += f.Size
+		res.BytesDownloaded += f.Size
+	}
+	return res
+}
