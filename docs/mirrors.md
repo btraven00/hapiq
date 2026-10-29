@@ -59,9 +59,11 @@ HAPIQ_REMOTES=thoa                       # priority order, upstream always last
 # thoa: the job's own credentials, used only to download
 ```
 
-`HAPIQ_LOCK=<path>` names the lockfile. Without it, hapiq searches for
-`hapiq.lock` upward from the working directory, which finds it in a monorepo
-with the plan and modules in one tree.
+hapiq uses a lockfile only when one is named explicitly: `HAPIQ_LOCK=<path>`,
+or `--lock <path>`. hapiq never searches for one. The VM's runner sets it
+once, e.g. `HAPIQ_LOCK=$PWD/hapiq.lock` in `run.sh`. If the named file is
+missing, hapiq fails instead of falling back. On the laptop,
+`hapiq lock add` writes `./hapiq.lock` unless `--lock` names another path.
 
 With no lockfile and no `HAPIQ_SERVER`, hapiq keeps the records in its local
 `index.db` and pushes them itself (`push_on_fetch`). This is the laptop mode. Fetch
