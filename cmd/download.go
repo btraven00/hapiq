@@ -175,7 +175,7 @@ func runDownload(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("no files downloaded")
 	}
 
-	if countCacheHits(result) < len(result.Files) {
+	if countCacheHits(result) < downloadedFiles(result) {
 		_, _ = fmt.Fprintf(os.Stderr, "\n🎉 Download completed successfully!\n")
 	}
 	return nil
@@ -392,14 +392,18 @@ func displayResults(result *downloaders.DownloadResult) {
 	if dryRun {
 		filesLabel = "Files that would be downloaded"
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "   %s: %d\n", filesLabel, len(result.Files))
+	downloaded := downloadedFiles(result)
+	_, _ = fmt.Fprintf(os.Stderr, "   %s: %d\n", filesLabel, downloaded)
+	if skipped := len(result.Files) - downloaded; skipped > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "   Files already present: %d\n", skipped)
+	}
 	cacheHits := countCacheHits(result)
 	if cacheHits > 0 {
-		_, _ = fmt.Fprintf(os.Stderr, "   Cache hits: %d/%d (no network traffic)\n", cacheHits, len(result.Files))
+		_, _ = fmt.Fprintf(os.Stderr, "   Cache hits: %d/%d (no network traffic)\n", cacheHits, downloaded)
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "   Data downloaded: %s\n", common.FormatBytes(result.BytesDownloaded))
 
-	if result.BytesTotal > 0 {
+	if result.BytesTotal > 0 && downloaded == len(result.Files) { // skipped bytes count in BytesTotal only
 		percentage := float64(result.BytesDownloaded) / float64(result.BytesTotal) * percentageMultiplier
 		_, _ = fmt.Fprintf(os.Stderr, "   Completion: %.1f%%\n", percentage)
 	}
@@ -462,6 +466,8 @@ func displayFileList(result *downloaders.DownloadResult) {
 				cacheLabel := ""
 				if file.CacheHit {
 					cacheLabel = " [cached]"
+				} else if file.Skipped {
+					cacheLabel = " [already present]"
 				}
 				_, _ = fmt.Fprintf(os.Stderr, "   %s (%s)%s\n", file.Path, common.FormatBytes(file.Size), cacheLabel)
 				if file.Checksum != "" {
@@ -657,6 +663,18 @@ func countCacheHits(result *downloaders.DownloadResult) int {
 	n := 0
 	for _, f := range result.Files {
 		if f.CacheHit {
+			n++
+		}
+	}
+	return n
+}
+
+// downloadedFiles counts the files this run fetched, leaving out those
+// skipped as already present.
+func downloadedFiles(result *downloaders.DownloadResult) int {
+	n := 0
+	for _, f := range result.Files {
+		if !f.Skipped {
 			n++
 		}
 	}

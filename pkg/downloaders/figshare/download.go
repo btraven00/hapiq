@@ -68,7 +68,7 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 		// Skip if file exists and skip_existing is enabled
 		targetPath := filepath.Join(targetDir, common.SanitizeFilename(file.Name))
 		if options != nil && options.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, file.Name, file.DownloadURL); ok {
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing file: %s\n", file.Name)
 				}
@@ -76,6 +76,9 @@ func (d *FigshareDownloader) downloadArticle(ctx context.Context, id, targetDir 
 				if progressTracker != nil {
 					progressTracker.SkipFile(file.Name, "file already exists")
 				}
+
+				result.Files = append(result.Files, fi)
+				result.FilesSkipped++
 
 				continue
 			}

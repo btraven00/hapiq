@@ -278,7 +278,11 @@ func (d *ZenodoDownloader) Download(ctx context.Context, req *downloaders.Downlo
 		}
 
 		result.Files = append(result.Files, *fileInfo)
-		result.BytesDownloaded += fileInfo.Size
+		if fileInfo.Skipped {
+			result.FilesSkipped++
+		} else {
+			result.BytesDownloaded += fileInfo.Size
+		}
 	}
 
 	// Create witness file
@@ -599,17 +603,11 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 	outputPath := filepath.Join(outputDir, file.Key)
 
 	if options != nil && options.SkipExisting {
-		if _, err := os.Stat(outputPath); err == nil {
+		if fi, ok := common.SkippedFile(outputPath, file.Key, file.Links.Self); ok {
 			if d.verbose {
 				_, _ = fmt.Fprintf(os.Stderr, "Skipping existing file: %s\n", file.Key)
 			}
-			return &downloaders.FileInfo{
-				Path:         outputPath,
-				OriginalName: file.Key,
-				SourceURL:    file.Links.Self,
-				Size:         file.Size,
-				DownloadTime: time.Now(),
-			}, nil
+			return &fi, nil
 		}
 	}
 
@@ -664,8 +662,8 @@ func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult,
 			BytesTotal:      result.BytesTotal,
 			BytesDownloaded: result.BytesDownloaded,
 			FilesTotal:      len(result.Files),
-			FilesDownloaded: len(result.Files),
-			FilesSkipped:    0, // TODO: Track this properly
+			FilesDownloaded: len(result.Files) - result.FilesSkipped,
+			FilesSkipped:    result.FilesSkipped,
 			FilesFailed:     len(result.Errors),
 			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			ResumedDownload: false, // TODO: Implement resume functionality
@@ -684,6 +682,7 @@ func (d *ZenodoDownloader) createWitnessFile(result *downloaders.DownloadResult,
 			ChecksumType:   file.ChecksumType,
 			SourceChecksum: file.SourceChecksum,
 			DownloadTime:   file.DownloadTime,
+			Skipped:        file.Skipped,
 		})
 	}
 

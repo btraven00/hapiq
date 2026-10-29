@@ -127,14 +127,20 @@ func TestSeriesDownloadHonorsFiltersAndSkipExisting(t *testing.T) {
 		t.Errorf("filtered-out file was requested %d times", n)
 	}
 
-	// Second run into the same directory: everything is skipped, nothing re-fetched.
+	// Second run into the same directory: everything is skipped, nothing
+	// re-fetched, and the skipped files are still listed for hapiq.json.
 	run2 := &downloaders.DownloadResult{}
 	if err := d.downloadSeries(ctx, testGSE, dir, opts, run2); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(run2.Files) != 0 || run2.FilesSkipped != len(want) {
-		t.Errorf("run 2: files=%d skipped=%d, want 0 and %d", len(run2.Files), run2.FilesSkipped, len(want))
+	if got := paths(run2.Files); !slices.Equal(got, want) || run2.FilesSkipped != len(want) {
+		t.Errorf("run 2: files=%v skipped=%d, want %v all skipped", got, run2.FilesSkipped, want)
+	}
+	for _, f := range run2.Files {
+		if !f.Skipped {
+			t.Errorf("run 2: %s not marked Skipped", f.Path)
+		}
 	}
 
 	for _, p := range []string{

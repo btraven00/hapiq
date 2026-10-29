@@ -11,6 +11,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/cache"
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
 func TestGetSourceType(t *testing.T) {
@@ -207,6 +208,7 @@ func TestDownload_SkipExisting(t *testing.T) {
 		ID:        srv.URL + "/data.bin",
 		OutputDir: dir,
 		Options:   &downloaders.DownloadOptions{SkipExisting: true},
+		Metadata:  &downloaders.Metadata{},
 	}
 
 	result, err := d.Download(ctx, req)
@@ -218,6 +220,19 @@ func TestDownload_SkipExisting(t *testing.T) {
 	}
 	if getCount != 0 {
 		t.Errorf("SkipExisting issued %d GET(s), want 0", getCount)
+	}
+	if len(result.Files) != 1 || !result.Files[0].Skipped || result.FilesSkipped != 1 || result.BytesDownloaded != 0 {
+		t.Fatalf("files %+v, skipped %d, bytes %d; want one skipped file, 0 bytes downloaded",
+			result.Files, result.FilesSkipped, result.BytesDownloaded)
+	}
+
+	// The skipped file is still recorded in hapiq.json.
+	w, err := common.LoadWitnessFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Files) != 1 || w.Files[0].Path != "data.bin" || w.Files[0].ChecksumType != "sha256" {
+		t.Errorf("hapiq.json files = %+v, want data.bin with a sha256", w.Files)
 	}
 }
 

@@ -292,7 +292,9 @@ func (d *EnsemblDownloader) Download(ctx context.Context, req *downloaders.Downl
 	// Calculate final statistics
 	result.Duration = time.Since(startTime)
 	for _, file := range result.Files {
-		result.BytesDownloaded += file.Size
+		if !file.Skipped {
+			result.BytesDownloaded += file.Size
+		}
 		result.BytesTotal += file.Size
 	}
 

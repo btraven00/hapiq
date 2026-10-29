@@ -303,7 +303,9 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 	// Calculate final statistics
 	result.Duration = time.Since(startTime)
 	for _, file := range result.Files {
-		result.BytesDownloaded += file.Size
+		if !file.Skipped {
+			result.BytesDownloaded += file.Size
+		}
 		result.BytesTotal += file.Size
 	}
 
@@ -340,8 +342,8 @@ func (d *FigshareDownloader) Download(ctx context.Context, req *downloaders.Down
 			BytesTotal:      result.BytesTotal,
 			BytesDownloaded: result.BytesDownloaded,
 			FilesTotal:      len(result.Files),
-			FilesDownloaded: len(result.Files),
-			FilesSkipped:    0,
+			FilesDownloaded: len(result.Files) - result.FilesSkipped,
+			FilesSkipped:    result.FilesSkipped,
 			FilesFailed:     0,
 			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			MaxConcurrent:   1,

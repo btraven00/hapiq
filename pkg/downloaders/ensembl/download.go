@@ -145,14 +145,8 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 
 			// Skip if file exists and skip_existing is enabled
 			if options != nil && options.SkipExisting {
-				if _, err := os.Stat(targetPath); err == nil {
-					fileChan <- &downloaders.FileInfo{
-						Path:         targetPath,
-						OriginalName: fileName,
-						Size:         0, // We don't know the size without downloading
-						DownloadTime: time.Now(),
-						SourceURL:    downloadURL,
-					}
+				if fi, ok := common.SkippedFile(targetPath, fileName, downloadURL); ok {
+					fileChan <- &fi
 					errChan <- nil
 					return
 				}
@@ -180,6 +174,9 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 		case file := <-fileChan:
 			if file != nil {
 				result.Files = append(result.Files, *file)
+				if file.Skipped {
+					result.FilesSkipped++
+				}
 			}
 		case <-ctx.Done():
 			return ctx.Err()
@@ -204,8 +201,8 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 			BytesTotal:      result.BytesTotal,
 			BytesDownloaded: result.BytesDownloaded,
 			FilesTotal:      len(urls),
-			FilesDownloaded: len(result.Files),
-			FilesSkipped:    0,
+			FilesDownloaded: len(result.Files) - result.FilesSkipped,
+			FilesSkipped:    result.FilesSkipped,
 			FilesFailed:     len(downloadErrors),
 			AverageSpeed:    0, // Will be calculated later
 			MaxConcurrent:   maxConcurrent,

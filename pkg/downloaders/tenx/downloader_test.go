@@ -144,7 +144,7 @@ func TestDownloadFromPageJSON(t *testing.T) {
 	res, err = d.Download(ctx, &downloaders.DownloadRequest{
 		ID: keep, OutputDir: out, Options: &downloaders.DownloadOptions{SkipExisting: true},
 	})
-	if err != nil || !res.Success || len(res.Files) != 1 || res.FilesSkipped != 2 {
+	if err != nil || !res.Success || len(res.Files) != 3 || res.FilesSkipped != 2 { // skipped files are listed too
 		t.Fatalf("refetch: err=%v errors=%v files=%d skipped=%d", err, res.Errors, len(res.Files), res.FilesSkipped)
 	}
 }

@@ -274,6 +274,23 @@ func CalculateFileChecksum(filePath string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// SkippedFile returns a Skipped FileInfo for path when a file is already
+// there, so a file left in place under SkipExisting still reaches hapiq.json.
+func SkippedFile(path, originalName, sourceURL string) (downloaders.FileInfo, bool) {
+	st, err := os.Stat(path)
+	if err != nil || st.IsDir() {
+		return downloaders.FileInfo{}, false
+	}
+	return downloaders.FileInfo{
+		DownloadTime: st.ModTime(),
+		Path:         path,
+		OriginalName: originalName,
+		SourceURL:    sourceURL,
+		Size:         st.Size(),
+		Skipped:      true,
+	}, true
+}
+
 // WriteWitnessFile writes a hapiq.json file with download metadata.
 // If a hapiq.json already exists in targetDir, the new file list is merged
 // into the existing record (deduplicating by path) so that incremental
@@ -282,7 +299,6 @@ func CalculateFileChecksum(filePath string) (string, error) {
 func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error {
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
-	fillSHA256(targetDir, witness.Files)
 	relativePaths(targetDir, witness.Files)
 
 	// Merge with any existing witness file.
@@ -290,6 +306,10 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 		relativePaths(targetDir, existing.Files)
 		witness = mergeWitnessFiles(existing, witness)
 	}
+
+	// After the merge, so a skipped file keeps its recorded checksum
+	// instead of being re-hashed on every run.
+	fillSHA256(targetDir, witness.Files)
 
 	file, err := os.Create(filepath.Clean(witnessPath)) // #nosec G304 -- internal witness path
 	if err != nil {
@@ -385,6 +405,29 @@ func mergeWitnessFiles(prev, next *downloaders.WitnessFile) *downloaders.Witness
 		}
 	}
 	merged.Files = append(extra, next.Files...)
+
+	// A file skipped as already present keeps what prev recorded for it,
+	// unless its size changed since.
+	prevByPath := make(map[string]downloaders.FileWitness, len(prev.Files))
+	for _, f := range prev.Files {
+		prevByPath[f.Path] = f
+	}
+	for i := len(extra); i < len(merged.Files); i++ {
+		f := &merged.Files[i]
+		p, ok := prevByPath[f.Path]
+		if !f.Skipped || !ok || p.Size != f.Size {
+			continue
+		}
+		if p.Checksum != "" {
+			f.Checksum, f.ChecksumType = p.Checksum, p.ChecksumType
+		}
+		if p.SourceChecksum != "" {
+			f.SourceChecksum = p.SourceChecksum
+		}
+		if !p.DownloadTime.IsZero() {
+			f.DownloadTime = p.DownloadTime
+		}
+	}
 
 	// When the two downloads are for different accessions, preserve prev's
 	// dataset-level provenance in the Datasets slice so it is not silently
