@@ -1,0 +1,24 @@
+# Expected values: Zenodo records API, record 14518762, A_readme.txt
+# (md5, size), 2026-10-28.
+
+- name: refetch-001-restores-deleted-file
+  steps:
+    - run: hapiq download zenodo 14518762 --out $OUT -y --filename-pattern "A_readme.txt"
+      files: [{path: A_readme.txt, md5: b05ff3d3117887faa4aaff1414030317}]
+    - run: rm "$(find . -name A_readme.txt)"
+      files: [{path: A_readme.txt, absent: true}]
+      skip_witness_invariant: true
+    - run: hapiq refetch "$(dirname "$(find . -name hapiq.json)")"
+      files: [{path: A_readme.txt, size: 1539, md5: b05ff3d3117887faa4aaff1414030317}]
+
+- name: refetch-002-detects-tampering
+  why: a changed file fails the run, and hapiq.json is put back as it was
+  steps:
+    - run: hapiq download zenodo 14518762 --out $OUT -y --filename-pattern "A_readme.txt"
+    - run: cp "$(find . -name hapiq.json)" ../witness.before && echo tampered >> "$(find . -name A_readme.txt)"
+      skip_witness_invariant: true
+    - run: hapiq refetch "$(dirname "$(find . -name hapiq.json)")"
+      fails: true
+      skip_witness_invariant: true
+    - run: cmp ../witness.before "$(find . -name hapiq.json)"
+      skip_witness_invariant: true

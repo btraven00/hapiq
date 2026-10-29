@@ -1,0 +1,25 @@
+# Expected values: sha256sum of curl downloads from
+# https://ftp.ncbi.nlm.nih.gov/geo/series/GSE126nnn/GSE126954/suppl/, 2026-10-28.
+# GEO publishes no checksums.
+
+- name: geo-001-include-ext
+  why: BUGS.md 2026-10-20; RAW.tar, filelist.txt and the hhs.gov footer link must not come along
+  steps:
+    - run: hapiq download geo GSE126954 --out $OUT -y --include-ext .csv.gz
+      files:
+        - {path: GSE126954_cell_annotation.csv.gz, size: 2814304, sha256: 9e4b1e7ca80b903bb06f0cc764790dd9845b91e923b38d6a47ca1b31b4fe30e9}
+        - {path: GSE126954_gene_annotation.csv.gz, size: 177278, sha256: c258ebe332000f14b47937ee5eabd59463fb3b4759fce4c87a1bbe75f2396ef5}
+        - {path: GSE126954_RAW.tar, absent: true}
+        - {path: filelist.txt, absent: true}
+        - {path: GSE126954_gene_by_cell_count_matrix.txt.gz, absent: true}
+        - {path: "*family.soft.gz"}
+      output_not_contains: [hhs.gov]
+      witness: {source: geo, original_id: GSE126954}
+
+- name: geo-002-dry-run-writes-no-data
+  steps:
+    - run: hapiq download geo GSE126954 --out $OUT -y --dry-run --include-ext .csv.gz
+      output_contains: [GSE126954_cell_annotation.csv.gz]
+      output_not_contains: [hhs.gov]
+      files:
+        - {path: "*.csv.gz", absent: true}

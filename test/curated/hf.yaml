@@ -1,0 +1,9 @@
+# Expected values: sha256sum of a curl download of
+# https://huggingface.co/datasets/scikit-learn/iris/resolve/main/Iris.csv, 2026-10-28.
+
+- name: hf-001-small-dataset
+  steps:
+    - run: hapiq download hf scikit-learn/iris --out $OUT -y
+      files:
+        - {path: Iris.csv, size: 5107, sha256: 600ac44f23c2e6e0ae37daac8ceb2baba4df963efa580eb31b3b576b28e34c55}
+      witness: {source: hf}
