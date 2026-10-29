@@ -205,13 +205,11 @@ func witnessInvariant(fail func(string, ...any), witness string) {
 	}
 	dir := filepath.Dir(witness)
 	for _, f := range w.Files {
-		// ponytail: some sources record absolute paths; accept both until hapiq.json settles on relative.
-		p := f.Path
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(dir, p)
-		}
+		p := filepath.Join(dir, f.Path)
 		st, err := os.Stat(p)
 		switch {
+		case filepath.IsAbs(f.Path):
+			fail("hapiq.json lists %s, want a path relative to its folder", f.Path)
 		case err != nil:
 			fail("hapiq.json lists %s, not on disk", f.Path)
 		case st.Size() != f.Size:
