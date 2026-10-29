@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -92,8 +91,9 @@ func runManifestGet(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(downloadTimeout)*time.Second)
-	defer cancel()
+	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
+	// deadline for the run: a multi-GB manifest may legitimately take hours.
+	ctx := context.Background()
 
 	if viper.GetString("cache.mode") == "on" {
 		cfg := cache.ConfigFromViper()
@@ -237,5 +237,5 @@ func init() {
 	manifestGetCmd.Flags().BoolVar(&manifestContinueOnFail, "continue-on-error", false,
 		"keep going after an entry fails instead of stopping")
 	manifestGetCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
-		"timeout in seconds for the whole run")
+		"seconds without any data received before a request is abandoned")
 }
