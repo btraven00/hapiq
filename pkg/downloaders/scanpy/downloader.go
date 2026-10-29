@@ -130,6 +130,10 @@ func (d *Downloader) Download(ctx context.Context, req *downloaders.DownloadRequ
 				if d.verbose {
 					_, _ = fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", fname)
 				}
+				if fi, ok := common.SkippedFile(targetPath, fname, f.URL); ok {
+					result.Files = append(result.Files, fi)
+					result.FilesSkipped++
+				}
 				continue
 			case opts != nil && (opts.Force || opts.NonInteractive):
 				// overwrite silently
@@ -188,7 +192,7 @@ func (d *Downloader) Download(ctx context.Context, req *downloaders.DownloadRequ
 				BytesTotal:      result.BytesDownloaded,
 				BytesDownloaded: result.BytesDownloaded,
 				FilesTotal:      len(result.Files),
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 				AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 			},
 			Options: opts,

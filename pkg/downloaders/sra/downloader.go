@@ -197,10 +197,12 @@ func (d *SRADownloader) Download(ctx context.Context, req *downloaders.DownloadR
 		targetPath := filepath.Join(runDir, p.file.Name)
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, p.file.Name, p.file.HTTPSURL()); ok {
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing: %s\n", p.file.Name)
 				}
+				result.Files = append(result.Files, fi) // workers only send on dlResults
+				result.FilesSkipped++
 				continue
 			}
 		}

@@ -202,10 +202,12 @@ func (d *BioStudiesDownloader) Download(ctx context.Context, req *downloaders.Do
 		}
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, filepath.Base(targetPath), f.DownloadURL(study.Accno)); ok {
 				if d.verbose {
 					fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", f.Path)
 				}
+				result.Files = append(result.Files, fi)
+				result.FilesSkipped++
 				continue
 			}
 		}
@@ -242,7 +244,7 @@ func (d *BioStudiesDownloader) Download(ctx context.Context, req *downloaders.Do
 			DownloadStats: &downloaders.DownloadStats{
 				Duration:        result.Duration,
 				BytesDownloaded: result.BytesDownloaded,
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 			},
 		}
 		for i, f := range result.Files {

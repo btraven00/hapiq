@@ -96,6 +96,7 @@ func (d *GEODownloader) downloadSRA(
 			continue
 		}
 		result.Files = append(result.Files, sub.Files...)
+		result.FilesSkipped += sub.FilesSkipped
 		result.BytesDownloaded += sub.BytesDownloaded
 		result.Warnings = append(result.Warnings, sub.Warnings...)
 		result.Errors = append(result.Errors, sub.Errors...)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -176,10 +175,12 @@ func (d *ScPerturbDownloader) Download(ctx context.Context, req *downloaders.Dow
 		targetPath := filepath.Join(req.OutputDir, fname)
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, fname, ds.DownloadURL()); ok {
 				if d.verbose {
 					fmt.Printf("⏭️  Skipping existing: %s\n", fname)
 				}
+				result.Files = append(result.Files, fi)
+				result.FilesSkipped++
 				continue
 			}
 		}
@@ -214,7 +215,7 @@ func (d *ScPerturbDownloader) Download(ctx context.Context, req *downloaders.Dow
 			DownloadStats: &downloaders.DownloadStats{
 				Duration:        result.Duration,
 				BytesDownloaded: result.BytesDownloaded,
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 			},
 		}
 		for i, f := range result.Files {

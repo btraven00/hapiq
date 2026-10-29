@@ -213,10 +213,12 @@ func (d *HFDownloader) Download(ctx context.Context, req *downloaders.DownloadRe
 		targetPath := filepath.Join(req.OutputDir, filepath.FromSlash(f.Path))
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, path.Base(f.Path), d.fileURL(info.ID, info.SHA, f.Path)); ok {
 				if d.verbose {
 					fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", f.Path)
 				}
+				fi.Path = f.Path
+				result.Files = append(result.Files, fi)
 				result.FilesSkipped++
 				continue
 			}
@@ -255,7 +257,7 @@ func (d *HFDownloader) Download(ctx context.Context, req *downloaders.DownloadRe
 				BytesTotal:      result.BytesTotal,
 				BytesDownloaded: result.BytesDownloaded,
 				FilesTotal:      len(selected),
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 				FilesSkipped:    result.FilesSkipped,
 				FilesFailed:     len(result.Errors),
 				AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),

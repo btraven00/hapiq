@@ -182,7 +182,11 @@ func (d *URLDownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	}
 
 	result.Files = append(result.Files, *fi)
-	result.BytesDownloaded = fi.Size
+	if fi.Skipped {
+		result.FilesSkipped++
+	} else {
+		result.BytesDownloaded = fi.Size
+	}
 	result.BytesTotal = fi.Size
 	result.Duration = time.Since(start)
 	result.Success = true
@@ -259,10 +263,14 @@ func (d *URLDownloader) downloadDirectory(ctx context.Context, dirURL string, re
 			continue
 		}
 		result.Files = append(result.Files, *fi)
-		result.BytesDownloaded += fi.Size
+		result.BytesTotal += fi.Size
+		if fi.Skipped {
+			result.FilesSkipped++
+		} else {
+			result.BytesDownloaded += fi.Size
+		}
 	}
 
-	result.BytesTotal = result.BytesDownloaded
 	result.Duration = time.Since(start)
 	result.Success = true
 
@@ -299,6 +307,9 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	if _, statErr := root.Stat(targetName); statErr == nil {
 		switch {
 		case opts != nil && opts.SkipExisting:
+			if fi, ok := common.SkippedFile(targetPath, filename, rawURL); ok {
+				return &fi, nil, nil
+			}
 			return nil, nil, nil
 		case opts != nil && (opts.Force || opts.NonInteractive):
 			// Force or --yes: overwrite silently.
@@ -376,7 +387,7 @@ func (d *URLDownloader) writeWitness(req *downloaders.DownloadRequest, result *d
 		return
 	}
 
-	req.Metadata.TotalSize = result.BytesDownloaded
+	req.Metadata.TotalSize = result.BytesTotal
 	req.Metadata.FileCount = len(result.Files)
 
 	files := make([]downloaders.FileWitness, 0, len(result.Files))
@@ -395,10 +406,11 @@ func (d *URLDownloader) writeWitness(req *downloaders.DownloadRequest, result *d
 		Files:        files,
 		DownloadStats: &downloaders.DownloadStats{
 			Duration:        result.Duration,
-			BytesTotal:      result.BytesDownloaded,
+			BytesTotal:      result.BytesTotal,
 			BytesDownloaded: result.BytesDownloaded,
 			FilesTotal:      len(files),
-			FilesDownloaded: len(files),
+			FilesDownloaded: len(files) - result.FilesSkipped,
+			FilesSkipped:    result.FilesSkipped,
 			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
 		},
 	}
