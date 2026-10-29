@@ -283,9 +283,11 @@ func WriteWitnessFile(targetDir string, witness *downloaders.WitnessFile) error 
 	witnessPath := filepath.Join(targetDir, "hapiq.json")
 
 	fillSHA256(targetDir, witness.Files)
+	relativePaths(targetDir, witness.Files)
 
 	// Merge with any existing witness file.
 	if existing, err := LoadWitnessFile(targetDir); err == nil {
+		relativePaths(targetDir, existing.Files)
 		witness = mergeWitnessFiles(existing, witness)
 	}
 
@@ -325,6 +327,37 @@ func fillSHA256(targetDir string, files []downloaders.FileWitness) {
 				break
 			}
 		}
+	}
+}
+
+// relativePaths rewrites file paths relative to targetDir, the folder that
+// holds hapiq.json, so the record survives a cd or a moved folder. Downloaders
+// pass paths relative to targetDir, to the working directory, or absolute. A
+// path that names nothing under targetDir is left as given.
+func relativePaths(targetDir string, files []downloaders.FileWitness) {
+	base, err := filepath.Abs(targetDir)
+	if err != nil {
+		return
+	}
+	for i := range files {
+		p := files[i].Path
+		if p == "" {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			if _, err := os.Stat(filepath.Join(targetDir, p)); err == nil {
+				continue
+			}
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(base, abs)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		files[i].Path = rel
 	}
 }
 
