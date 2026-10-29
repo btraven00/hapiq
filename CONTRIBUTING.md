@@ -225,6 +225,10 @@ func ValidateIdentifier(input string) ValidationResult {
 
 - Unit tests in `*_test.go` files alongside source code
 - Integration tests in `test/` directory
+- Curated end-to-end suite in `test/curated/`: real downloads checked against
+  published checksums, not run in CI. `make curated` runs it all (slow, needs
+  the network, about 400 MB); `make curated RUN=geo-` runs one provider. See
+  [test/curated/README.md](test/curated/README.md) for writing cases.
 - Use table-driven tests for multiple test cases
 - Test both success and error cases
 

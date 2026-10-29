@@ -1,7 +1,7 @@
 # Hapiq Makefile
 # Common development tasks for the hapiq CLI tool
 
-.PHONY: help build test clean install run fmt vet lint lint-fix install-lint deps tidy check coverage benchmark
+.PHONY: help build test clean install run fmt vet lint lint-fix install-lint deps tidy check coverage benchmark curated
 
 # Default target
 help: ## Show this help message
@@ -37,6 +37,10 @@ install: ## Install hapiq to GOPATH/bin
 test: ## Run all tests
 	@echo "Running tests..."
 	go test -v ./...
+
+# Run the curated end-to-end suite (network, ~400 MB; see test/curated/README.md)
+curated: ## Run the curated e2e suite (RUN=geo- for one provider)
+	go test -tags curated -timeout 0 -v ./test/curated $(if $(RUN),-run 'TestCurated/$(RUN)')
 
 # Run tests with coverage
 coverage: ## Run tests with coverage report
