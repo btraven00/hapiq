@@ -125,7 +125,7 @@ func FromWitness(witnessPath string) (*Entry, error) {
 	} else {
 		entry.Accession = fmt.Sprintf("%s:%s", w.Source, w.OriginalID)
 	}
-	entry.Options = optionsFromDownload(w.Options)
+	entry.Options = FiltersFromDownload(w.Options)
 	for _, f := range w.Files {
 		name := f.Path
 		if name == "" {
@@ -140,10 +140,10 @@ func FromWitness(witnessPath string) (*Entry, error) {
 	return entry, nil
 }
 
-// optionsFromDownload keeps the filters recorded in a witness, so that
+// FiltersFromDownload keeps the filters recorded in a witness, so that
 // replaying the manifest selects the same files. Returns nil when no filter
 // was set.
-func optionsFromDownload(o *downloaders.DownloadOptions) *Options {
+func FiltersFromDownload(o *downloaders.DownloadOptions) *Options {
 	if o == nil {
 		return nil
 	}

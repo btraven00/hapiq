@@ -172,3 +172,12 @@ func init() {
 	refetchCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"stall limit in seconds: fail a request when no data arrives for this long")
 }
+
+// datasetDir is the folder a CLI download of source/id into out writes to.
+func datasetDir(source, id, out string) string {
+	switch source {
+	case "geo", "figshare": // these download into <out>/<id>
+		return filepath.Join(out, common.SanitizeFilename(id))
+	}
+	return out
+}

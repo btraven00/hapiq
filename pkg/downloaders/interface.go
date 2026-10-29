@@ -160,8 +160,12 @@ type WitnessFile struct {
 	Source        string           `json:"source"`
 	OriginalID    string           `json:"original_id"`
 	ResolvedURL   string           `json:"resolved_url,omitempty"`
-	Files         []FileWitness    `json:"files"`
-	Collections   []Collection     `json:"collections,omitempty"`
+	// FetchedFrom names the remote copy the files came from ("thoa:<id>"),
+	// empty for an upstream download; Digest is the locked file set digest.
+	FetchedFrom string        `json:"fetched_from,omitempty"`
+	Digest      string        `json:"digest,omitempty"`
+	Files       []FileWitness `json:"files"`
+	Collections []Collection  `json:"collections,omitempty"`
 	// Datasets accumulates per-accession provenance when multiple distinct
 	// datasets are downloaded into the same output directory.
 	Datasets []DatasetRecord `json:"datasets,omitempty"`

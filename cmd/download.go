@@ -32,6 +32,8 @@ import (
 	urldownloader "github.com/btraven00/hapiq/pkg/downloaders/url"
 	"github.com/btraven00/hapiq/pkg/downloaders/vcp"
 	"github.com/btraven00/hapiq/pkg/downloaders/zenodo"
+	"github.com/btraven00/hapiq/pkg/manifest"
+	"github.com/btraven00/hapiq/pkg/remote"
 )
 
 // No need for local constants, using shared ones from constants.go
@@ -135,6 +137,29 @@ func runDownload(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// A locked dataset comes from its remote copy, before any upstream call.
+	var pinned *remote.Entry
+	if lp := lockFilePath(""); lp != "" && !dryRun {
+		lock, err := remote.LoadLock(lp)
+		if err != nil {
+			return fmt.Errorf("lockfile: %w", err)
+		}
+		opts := createDownloadRequest(validationResult, nil).Options
+		acc := validationResult.SourceType + ":" + validationResult.ID
+		if pinned = lock.Find(acc, manifest.FiltersFromDownload(opts)); pinned == nil {
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  %s (with these filters) is not in %s; fetching upstream. Pin it with: hapiq lock add <dir>\n", acc, lp)
+		} else {
+			dir := datasetDir(validationResult.SourceType, validationResult.ID, outputDir)
+			loc, err := fetchLocked(ctx, pinned, dir, opts)
+			if err == nil {
+				_, _ = fmt.Fprintf(os.Stderr, "\n🔒 %s: %d files from %s, sha256 verified against %s\n",
+					acc, len(pinned.Files), loc, lp)
+				return nil
+			}
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  no verified remote copy (%v); fetching upstream\n", err)
+		}
+	}
+
 	metadata, err := getAndDisplayMetadata(ctx, sourceType, validationResult.ID)
 	if err != nil {
 		return err
@@ -145,6 +170,17 @@ func runDownload(_ *cobra.Command, args []string) error {
 	result, err := performDownload(ctx, sourceType, downloadRequest)
 	if err != nil {
 		return err
+	}
+
+	if pinned != nil && result.Success && result.WitnessFile != "" {
+		got, err := remote.EntryFromDir(filepath.Dir(result.WitnessFile))
+		if err != nil {
+			return fmt.Errorf("check against lock: %w", err)
+		}
+		if got.Digest != pinned.Digest {
+			return fmt.Errorf("upstream content for %s changed: locked %s, got %s; re-pin with: hapiq lock add --update %s",
+				pinned.Accession, short(pinned.Digest), short(got.Digest), filepath.Dir(result.WitnessFile))
+		}
 	}
 
 	if expectedHash != "" {
