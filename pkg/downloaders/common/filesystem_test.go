@@ -102,3 +102,52 @@ func TestWriteWitnessFileFillsSHA256(t *testing.T) {
 		}
 	}
 }
+
+// Regression: manifest get --parent-dir data recorded data/good/LICENSE (relative
+// to the working directory) and sra, url and experimenthub recorded absolute
+// paths. hapiq.json now records every path relative to its own folder.
+func TestWriteWitnessFileRelativePaths(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := filepath.Join("data", "good")
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a", "b", "c", filepath.Join("sub", "d")} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An earlier run recorded an absolute path; it must merge with "a", not duplicate it.
+	prev := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{{Path: filepath.Join(absDir, "a")}}}
+	if err := WriteWitnessFile(dir, prev); err != nil {
+		t.Fatal(err)
+	}
+	w := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{
+		{Path: filepath.Join(absDir, "a")},        // absolute
+		{Path: filepath.Join(dir, "b")},           // relative to the working directory
+		{Path: "c"},                               // relative to the folder
+		{Path: filepath.Join(absDir, "sub", "d")}, // absolute, nested
+		{Path: "/elsewhere/e"},                    // outside the folder: left as given
+	}}
+	if err := WriteWitnessFile(dir, w); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadWitnessFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a", "b", "c", filepath.Join("sub", "d"), "/elsewhere/e"}
+	if len(got.Files) != len(want) {
+		t.Fatalf("got %d files %v, want %v", len(got.Files), got.Files, want)
+	}
+	for i, f := range got.Files {
+		if f.Path != want[i] {
+			t.Errorf("file %d: path %q, want %q", i, f.Path, want[i])
+		}
+	}
+}
