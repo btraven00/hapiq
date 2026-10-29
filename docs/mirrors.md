@@ -344,8 +344,8 @@ the transparent fetch works.
 
 ## Open questions for thoa
 
-1. ~~Uploads fail with `Provider 'local' is not configured`~~ (hotfixed 2026-10-29; python client
-   0.1.8 too). This blocks everything.
+1. ~~Uploads fail with `Provider 'local' is not configured`~~: hotfixed on
+   2026-10-29.
 2. Can a job download datasets that a different credential (the server's
    key) uploaded? This is trivial with one account; with sharing, it is
    question 5. And how do the job's credentials appear in the VM?
