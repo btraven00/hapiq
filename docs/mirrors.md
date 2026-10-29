@@ -8,8 +8,11 @@ omnibenchmark runs a whole benchmark (snakemake) inside one thoa VM. Its data
 modules call hapiq to fetch their inputs by accession, so every run pulls the
 same public datasets from GEO, Zenodo, … again, from inside the VM. thoa has
 its own dataset store: files are content-addressed by md5 and a dataset is a
-list of file ids. Fetching from thoa is closer to the VM and doesn't depend on
-the upstream repository being up.
+list of file ids. That store is the platform's internal data lake. The point
+of this design is that thoa executors get their inputs from the lake, not
+from public repositories and not from a hapiq server. The hapiq server only
+maps accession + filters to lake datasets and fills the lake on a miss. It
+never serves dataset bytes to VMs.
 
 We want hapiq to treat thoa like a git remote for datasets, without the
 benchmark plan ever naming a thoa id:
