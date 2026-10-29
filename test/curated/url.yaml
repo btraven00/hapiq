@@ -1,0 +1,28 @@
+# Expected values: sha256sum of a curl download of hapiq's LICENSE at tag
+# v0.1.2, 2026-10-28. A tagged file on GitHub never changes.
+
+- name: url-001-plain
+  steps:
+    - run: hapiq download url https://raw.githubusercontent.com/btraven00/hapiq/v0.1.2/LICENSE --out $OUT -y
+      files:
+        - {path: LICENSE, size: 35149, sha256: 3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986}
+      witness: {source: url}
+
+- name: url-002-404-fails-cleanly
+  steps:
+    - run: hapiq download url https://raw.githubusercontent.com/btraven00/hapiq/main/no-such-file.txt --out $OUT -y
+      fails: true
+      files:
+        - {path: no-such-file.txt, absent: true}
+
+- name: url-003-404-dry-run-fails
+  why: BUGS.md 2026-10-25 (open); the dry run reports a dead link as "would be downloaded"
+  steps:
+    - run: hapiq download url https://raw.githubusercontent.com/btraven00/hapiq/main/no-such-file.txt --out $OUT -y --dry-run
+      fails: true
+
+- name: url-004-hash-mismatch-fails
+  steps:
+    - run: hapiq download url https://raw.githubusercontent.com/btraven00/hapiq/v0.1.2/LICENSE --out $OUT -y --hash sha256:0000000000000000000000000000000000000000000000000000000000000000
+      fails: true
+      skip_witness_invariant: true

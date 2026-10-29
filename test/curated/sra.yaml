@@ -1,0 +1,9 @@
+# Expected values: ENA filereport API (fastq_md5, fastq_bytes), 2026-10-28.
+
+- name: sra-001-paired-fastq
+  why: both mates of a paired run, about 200 MB
+  steps:
+    - run: hapiq download sra SRR390728 --out $OUT -y
+      files:
+        - {path: SRR390728_1.fastq.gz, size: 101304405, md5: a04ed1f37028cda9486eec9726237796}
+        - {path: SRR390728_2.fastq.gz, size: 101858469, md5: 3d440434c968624acaa4f787d48efe2f}

@@ -1,0 +1,18 @@
+# Expected values: figshare API, articles/20029387/files (computed_md5, size), 2026-10-28.
+# Article 20029387 is Replogle 2022, about 300 GB; the cases touch one 80 MB file.
+
+- name: figshare-001-pattern-80mb
+  steps:
+    - run: hapiq download figshare 20029387 --out $OUT -y --filename-pattern "*essential_raw_bulk*"
+      files:
+        - {path: K562_essential_raw_bulk_01.h5ad, size: 79766954, md5: 8321d5d3ffc99db2a5c71edca4189735}
+        - {path: "*singlecell*", absent: true}
+      witness: {source: figshare}
+
+- name: figshare-002-dry-run-writes-no-data
+  why: BUGS.md 2026-10-20; the dry run wrote 19 GB
+  steps:
+    - run: hapiq download figshare 20029387 --out $OUT -y --dry-run --filename-pattern "*essential_raw_bulk*"
+      output_contains: [K562_essential_raw_bulk_01.h5ad]
+      files:
+        - {path: "*.h5ad", absent: true}

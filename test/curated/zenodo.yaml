@@ -1,0 +1,22 @@
+# Expected values: Zenodo records API (md5 and size per file), 2026-10-28.
+# Record 14518762 has 12 files, among them a 309 MB zip and small .rds files.
+
+- name: zenodo-001-filename-pattern
+  why: glob selects 2 of 12 files; HClust_Pathway_* must not match "Pathway_*"
+  steps:
+    - run: hapiq download zenodo 14518762 --out $OUT -y --filename-pattern "Pathway_*"
+      files:
+        - {path: Pathway_genelist.rds, size: 20666, md5: f107354d6d075364a3c94e34f1ff5134}
+        - {path: Pathway_Exclusive_genelist.rds, size: 9038, md5: 25ac1b6bed69e6488ff993ea08424e79}
+        - {path: HClust_Pathway_celltype_specific_genelist.rds, absent: true}
+        - {path: "*.zip", absent: true}
+      witness: {source: zenodo}
+
+- name: zenodo-002-dry-run-writes-no-data
+  why: BUGS.md 2026-10-19; the dry run used to start the 309 MB download
+  steps:
+    - run: hapiq download zenodo 14518762 --out $OUT -y --dry-run --include-ext .zip
+      output_contains: [DE_results_all_pathway.zip]
+      files:
+        - {path: DE_results_all_pathway.zip, absent: true}
+        - {path: "*.rds", absent: true}

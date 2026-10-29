@@ -1,0 +1,11 @@
+# Expected values: sha256sum of a curl download from the OSN bucket,
+# https://mghp.osn.xsede.org/bir190004-bucket01/ExperimentHub/SingleCellMultiModal/cord_blood/v1.0.0/scRNAseq_Counts.rda,
+# 2026-10-28. It matches the sha256 recorded in BUGS.md.
+
+- name: experimenthub-001-eh-id
+  why: BUGS.md 2026-10-20; EH3796 once fetched mouse_gastrulation's scnmt_met_cgi.rda
+  steps:
+    - run: hapiq download experimenthub EH3796 --out $OUT -y
+      files:
+        - {path: scRNAseq_Counts.rda, size: 23323502, sha256: b328aa4fa6acaa0bf5a0ce9a3f19736f4e8e976209d3a37a713591302438b974}
+        - {path: scnmt_met_cgi.rda, absent: true}
