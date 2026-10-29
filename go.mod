@@ -3,7 +3,7 @@ module github.com/btraven00/hapiq
 go 1.26.10
 
 require (
-	github.com/btraven00/thoa-go v0.0.0-20261029215846-913b84034c65
+	github.com/btraven00/thoa-go v0.0.0-20261029220056-6b02254c14e1
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/libp2p/zeroconf/v2 v2.2.0
 	github.com/spf13/cobra v1.9.1

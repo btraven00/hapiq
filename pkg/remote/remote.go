@@ -34,6 +34,9 @@ type Location struct {
 	Type     string `yaml:"type"`     // adaptor type, e.g. "thoa"
 	Endpoint string `yaml:"endpoint"` // store API base URL
 	ID       string `yaml:"dataset"`  // store-native id
+	// Files maps dataset path -> the store's file id, for stores that keep no
+	// path map of their own (a thoa import).
+	Files map[string]string `yaml:"files,omitempty"`
 }
 
 func (l Location) String() string { return l.Type + ":" + l.ID }
