@@ -27,6 +27,12 @@ benchmark plan ever naming a thoa id:
 The data module needs only environment variables and never writes records.
 Nothing in the plan changes after the first upload.
 
+**MVP: lock mode, no server.** Until a public server exists, the records
+travel in a `hapiq.lock` next to the benchmark plan. You warm it from a
+laptop (`hapiq lock add`), and it's committed with the plan. The VM reads it
+like the server's lookup answer. Both modes use the same record format,
+fetch path, hash checks and hard failure. See *Lockfile*.
+
 ## Model
 
 | git | hapiq |
@@ -53,8 +59,12 @@ HAPIQ_REMOTES=thoa                       # priority order, upstream always last
 # thoa: the job's own credentials, used only to download
 ```
 
-With no `HAPIQ_SERVER`, hapiq keeps the records in its local `index.db` and
-pushes them itself (`push_on_fetch`). This is the laptop mode. Fetch
+`HAPIQ_LOCK=<path>` names the lockfile. Without it, hapiq searches for
+`hapiq.lock` upward from the working directory, which finds it in a monorepo
+with the plan and modules in one tree.
+
+With no lockfile and no `HAPIQ_SERVER`, hapiq keeps the records in its local
+`index.db` and pushes them itself (`push_on_fetch`). This is the laptop mode. Fetch
 resolution, the hash check and the hard failure are the same code in both
 modes. Only who pushes differs.
 Config-file equivalent:
@@ -104,6 +114,38 @@ whenever it sees different content for that key:
 key's record on the server (it needs the write token). The next fetch goes
 upstream and records the new digest. `hapiq remote ls [accession]` shows the
 records.
+
+## Lockfile
+
+`hapiq.lock` sits next to the benchmark plan and is committed with it. It
+holds one record per key, in the format the server's `GET` returns:
+
+```yaml
+- accession: geo:GSE123456
+  filters: {include_ext: [.h5ad]}   # canonical
+  digest: 9f86d0…
+  files:
+    - {path: GSE123456_matrix.h5ad, size: 123, sha256: …, md5: …}
+  remotes:
+    - {type: thoa, endpoint: https://api.thoa.io, dataset: 3fa85f64-…}
+```
+
+- **`hapiq lock add <source> <id> [filters]`** runs on the laptop, which has
+  the thoa key. It fetches from upstream or the cache, pushes to every
+  remote in `order`, verifies, and writes or refreshes the entry. This is
+  the warm-up and the pin in one step, like `go get`.
+- **`hapiq lock`** checks that every entry's remote copy still exists (`Stat`)
+  and reports any that are gone.
+- **`hapiq lock update <source> <id> [filters]`** re-fetches from upstream and
+  accepts a new digest. It replaces `invalidate` in lock mode.
+- **In the VM**, the lock is read-only. A key missing from the lock is fetched
+  from upstream, with a warning naming the `lock add` command to run. The VM
+  never pushes, because it can't update the committed lock.
+- **Entries are sorted by key** and written deterministically, so diffs stay
+  readable.
+
+Records are looked up in this order: `hapiq.lock`, then `HAPIQ_SERVER`, then
+the local `index.db`.
 
 ## Server
 
@@ -183,8 +225,9 @@ test vectors.
 Each of `hapiq download`, `manifest get` and `refetch` handles an accession
 in five steps:
 
-1. Compute the key and look it up (`GET /v1/remotes`, or the local
-   `index.db`). If the server can't be reached, warn and go upstream.
+1. Compute the key and look it up: `hapiq.lock`, then `GET /v1/remotes`,
+   then the local `index.db`. If the server can't be reached, warn and go
+   upstream.
    `pending` means there is no record yet, and the server is filling it.
 2. For each remote in `order` with a record: `Fetch` it into the cache, then
    check every file against the record's sha256. On a mismatch,
@@ -301,7 +344,7 @@ the transparent fetch works.
 
 ## Open questions for thoa
 
-1. Uploads fail with `Provider 'local' is not configured` (python client
+1. ~~Uploads fail with `Provider 'local' is not configured`~~ (hotfixed 2026-10-29; python client
    0.1.8 too). This blocks everything.
 2. Can a job download datasets that a different credential (the server's
    key) uploaded? This is trivial with one account; with sharing, it is
@@ -328,12 +371,18 @@ the transparent fetch works.
 1. The prerequisite fixes above.
 2. `pkg/remote`: types, `Digest` with test vectors, canonical filters,
    registry, and the hash check, tested against a fake `Remote`.
-3. Tables, the local-records path, and fetch resolution with the hard failure
-   in `download`, `manifest get` and `refetch`; `push_on_fetch`; `hapiq push`;
+3. Lock mode, the MVP: `hapiq.lock` read and write; fetch resolution with
+   the hard failure in `download`, `manifest get` and `refetch`;
+   `hapiq lock add`, `lock` and `lock update`.
+4. `pkg/remote/thoa`, then a beta run in a monorepo (plan and modules in
+   one tree).
+5. Local `index.db` records, `push_on_fetch`, `hapiq push`,
    `hapiq remote ls` and `invalidate`.
-4. Server: `/v1/remotes` with the fill worker, `write_token`, `routes`,
+6. Server: `/v1/remotes` with the fill worker, `write_token`, `routes`,
    `autotls`, and `hapiq remote warm`; document them in
    [lan-sharing.md](lan-sharing.md).
-5. `pkg/remote/thoa`. Steps 2–4 can be built against the fake now. Real use
-   waits on thoa questions 1 and 2.
-6. Warm-up with the `dir` adaptor.
+7. Warm-up with the `dir` adaptor.
+
+Steps 2 and 3 can be built against the fake remote. The upload blocker
+(question 1) has been hotfixed. For the MVP, the job's thoa credentials come
+from environment variables (question 2).
