@@ -17,11 +17,12 @@ benchmark plan ever naming a thoa id:
 1. The plan names an accession and its filters, as today.
 2. The data module's hapiq asks a **hapiq server** whether a verified copy
    exists on thoa. If one does, hapiq downloads from thoa.
-3. If none exists, hapiq fetches from upstream, pushes the files to thoa, and
-   reports the new dataset id back to the server. The next run gets a hit.
+3. If none exists, the VM fetches from upstream itself. The miss also
+   makes the server fetch the same key, push it to thoa with its own key and
+   record the dataset id: a pull-through cache. The next run gets a hit.
 
-The data module needs only environment variables. Nothing in the plan
-changes after the first upload.
+The data module needs only environment variables and never writes records.
+Nothing in the plan changes after the first upload.
 
 ## Model
 
@@ -44,13 +45,15 @@ costs time, never correctness.
 
 ```sh
 HAPIQ_SERVER=https://hapiq.example.org   # the records server
-HAPIQ_TOKEN=…                            # read-only, or read-write to record pushes
+HAPIQ_TOKEN=…                            # read token
 HAPIQ_REMOTES=thoa                       # priority order, upstream always last
-# thoa: the job's own credentials (THOA_API_KEY or the VM's job identity)
+# thoa: the job's own credentials, used only to download
 ```
 
-With no `HAPIQ_SERVER`, hapiq keeps the records in its local `index.db`. The
-code path is the same; only the place the records live changes.
+With no `HAPIQ_SERVER`, hapiq keeps the records in its local `index.db` and
+pushes them itself (`push_on_fetch`). This is the laptop mode. Fetch
+resolution, the hash check and the hard failure are the same code in both
+modes. Only who pushes differs.
 Config-file equivalent:
 
 ```toml
@@ -101,24 +104,33 @@ records.
 
 ## Server
 
-The same `hapiq cache serve`, with a records API added:
+The same `hapiq cache serve`, with `[remotes.thoa]` configured, so it holds
+a thoa key. It is the only writer of records:
 
 ```
 GET    /v1/remotes?accession=…&filters=<canonical, urlencoded>   read token
-POST   /v1/remotes      {key, accession, filters, digest, files, type, endpoint, remote_id}   write token
 DELETE /v1/remotes?accession=…&filters=…[&type=…]                 write token
 ```
 
-- `GET` always returns `200` with a JSON list: at most one record per
-  (type, endpoint), each with its `files` (path, size, sha256, md5).
-- `POST` with a key that already has a different digest returns `409`. That
-  is the server side of the hard failure. The same digest is idempotent:
-  `200`, and the existing record is kept. If two VMs push at once, the first
-  wins and the second's thoa dataset is left orphaned (it is only a list of
-  file ids).
-- **Tokens:** `cache.server.token` stays as it is, the read scope.
-  `cache.server.write_token` is new, and `POST` and `DELETE` require it.
-  The read token also covers the existing blob routes.
+- **`GET`:** returns `200` with `{"status": "ready", "records": […]}` (at most
+  one per (type, endpoint), each with its `files`: path, size, sha256, md5),
+  or `{"status": "pending"}` on a miss.
+- **A miss** queues the key for the server's fill worker and returns at once.
+  The VM doesn't wait; it fetches upstream itself.
+- **The fill worker** fetches the key through the server's own cache, pushes
+  to every remote in its `order`, runs `Stat` and the hash check, and only
+  then writes the record. It is single-flight per key, so ten VMs missing at
+  once cause one fill. Upstream content that differs from an existing record
+  fails the fill, and the failure shows in `GET` as
+  `{"status": "failed", "error": …}`, with no new record.
+- **The queue lives in memory.** A restart loses it, and the next miss queues
+  the key again.
+- **The server pays the bandwidth.** It downloads every missed dataset once
+  and uploads it to thoa once. Its blob cache is subject to the usual
+  `hapiq cache gc`; the records outlive the blobs.
+- **Tokens:** the read token (`cache.server.token`) covers lookups, and hence
+  fills, plus the existing blob routes. The new `cache.server.write_token`
+  covers `DELETE`. VMs get only the read token.
 - **Public serving:** thoa VMs reach the server over the internet.
   `cache.server.autotls = "hapiq.example.org"` serves HTTPS with Let's
   Encrypt (`golang.org/x/crypto/acme/autocert`). `cache.server.routes =
@@ -148,9 +160,9 @@ CREATE TABLE remote_files (       -- file list behind each digest
 );
 ```
 
-Pushes that fail are retried by `hapiq push` from a local `remote_pending`
-table; a VM that dies loses only its pending row, and the next run's miss
-pushes again.
+In laptop mode, pushes that fail are retried by `hapiq push` from a local
+`remote_pending` table. The server needs no such table: a failed fill
+is retried on the next miss.
 
 ## File set digest
 
@@ -170,25 +182,28 @@ in five steps:
 
 1. Compute the key and look it up (`GET /v1/remotes`, or the local
    `index.db`). If the server can't be reached, warn and go upstream.
+   `pending` means there is no record yet, and the server is filling it.
 2. For each remote in `order` with a record: `Fetch` it into the cache, then
    check every file against the record's sha256. On a mismatch,
    `ErrNotFound`, `ErrForbidden` or a provider error (quota, for example),
    log one line and try the next remote.
 3. If no remote delivers, fetch upstream. If a record exists, compare digests
    and fail hard on a difference (see above).
-4. If there was no record and `push_on_fetch` is set, `Push`, then `Stat` and
-   check the paths, sizes and md5 values, then `POST` the record. A failed
-   push or `POST` produces a warning and never fails the fetch. A `409` is a
-   hard failure: another run recorded different content for the key while
-   this one was fetching.
+4. Laptop mode only (no server): if there was no record and `push_on_fetch`
+   is set, `Push`, then `Stat` and check paths, sizes and md5, then write
+   the record. A failed push gives a warning and queues the key in
+   `remote_pending`; it never fails the fetch. With a server, the client never
+   pushes; the miss in step 1 already queued the fill.
 5. hapiq.json records `fetched_from` (`thoa:<dataset>` or `upstream`) and the
    digest, so a run can be traced to the exact files afterwards.
 
 ## Push (manual)
 
-`hapiq push <remote> <dir>...` pushes folders that came from upstream (for
-warming up the server from a laptop) and records them like step 4. With no
-folder, it retries `remote_pending`. A folder that holds more than one
+`hapiq push <remote> <dir>...` is laptop mode: it pushes folders that came
+from upstream and records them locally, as in step 4. With no folder, it
+retries `remote_pending`. To warm up a server, run `hapiq remote warm
+<manifest.yaml>` instead: it sends one lookup per entry, which queues the
+fills. A folder that holds more than one
 accession (`datasets` in hapiq.json) is refused. A file with an empty
 checksum or missing on disk is refused too.
 
@@ -285,8 +300,9 @@ the transparent fetch works.
 
 1. Uploads fail with `Provider 'local' is not configured` (python client
    0.1.8 too). This blocks everything.
-2. Can a job push and download datasets with its own credentials? We believe
-   it can upload; confirm download, and how the credentials appear in the VM.
+2. Can a job download datasets that a different credential (the server's
+   key) uploaded? This is trivial with one account; with sharing, it is
+   question 5. And how do the job's credentials appear in the VM?
 3. Does `GET /files` return each file's md5 and size?
 4. Are datasets permanent, or can they expire?
 5. Sharing: does another account get 404 or 403 for an unshared id? Will
@@ -312,7 +328,8 @@ the transparent fetch works.
 3. Tables, the local-records path, and fetch resolution with the hard failure
    in `download`, `manifest get` and `refetch`; `push_on_fetch`; `hapiq push`;
    `hapiq remote ls` and `invalidate`.
-4. Server: `/v1/remotes`, `write_token`, `routes`, `autotls`; document them in
+4. Server: `/v1/remotes` with the fill worker, `write_token`, `routes`,
+   `autotls`, and `hapiq remote warm`; document them in
    [lan-sharing.md](lan-sharing.md).
 5. `pkg/remote/thoa`. Steps 2–4 can be built against the fake now. Real use
    waits on thoa questions 1 and 2.
