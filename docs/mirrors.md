@@ -1,319 +1,321 @@
-# Mirrors: pushing fetched datasets to remote stores
+# Remotes: datasets on stores other than upstream
 
 Status: **proposed** — design record, nothing here is implemented yet.
 
 ## Context
 
-hapiq fetches datasets from upstream repositories (GEO, Zenodo, …) by
-canonical accession and keeps the bytes in a local content-addressed cache
-([cache-server.md](cache-server.md)). Some consumers can't read that cache:
-the motivating one is omnibenchmark running on a remote compute platform
-(thoa), whose jobs take their inputs from the platform's own dataset store.
-Today that means re-uploading the same public dataset by hand for every
-benchmark, with nothing recording that "thoa dataset `ds-…`" *is*
-`geo:GSE123456`. This pattern can easily be extended to any configurable
-cluster-local cache.
+omnibenchmark runs a whole benchmark (snakemake) inside one thoa VM. Its data
+modules call hapiq to fetch their inputs by accession, so every run pulls the
+same public datasets from GEO, Zenodo, … again, from inside the VM. thoa has
+its own dataset store: files are content-addressed by md5 and a dataset is a
+list of file ids. Fetching from thoa is closer to the VM and doesn't depend on
+the upstream repository being up.
 
-We want hapiq to:
+We want hapiq to treat thoa like a git remote for datasets:
 
-1. **Push** a fetched dataset to a configured remote store (a *mirror*).
-2. **Record** the mapping "accession + exact file set → location on remote".
-3. **Answer** "is there a verified copy of `geo:GSE123456` on `thoa`?" from
-   the cache server, so a consumer (omnibenchmark's data stage) can use the
-   mirrored copy and fall back to upstream when there is none.
+1. **Fetch** an accession from upstream (or the local cache), as today.
+2. **Push** its files to a configured remote, which creates a thoa dataset.
+   Either explicitly or automatically after each upstream fetch.
+3. **Record** "this accession and file set is dataset `X` on remote `R`" in
+   the manifest, which is committed with the benchmark and works as a lockfile.
+4. **Fetch transparently from the remote** next time: if a remote that ranks
+   above upstream holds a verified copy, hapiq downloads from there. If it
+   doesn't, hapiq falls back to upstream.
 
-Stores differ (thoa, S3, a lab NAS, …), so each one is an *adaptor* behind a
-common interface, the same way sources are adaptors behind `Downloader`.
+The store is one adaptor behind a small interface (as sources are behind
+`Downloader`); thoa is the first, and the only one planned.
 
-## Principle: identity vs. location
+## Model
 
-**A dataset's identity is its canonical accession plus the digest of its
-file set. A mirror is only a location.**
-
-- Benchmark plans and manifests reference `geo:GSE123456` (optionally pinned
-  by digest), never a store-specific id like a thoa dataset id.
-- A mirror record asserts: *remote `R` holds, under id `X`, exactly the file
-  set with digest `D`, which is what accession `A` resolved to.* The digest
-  makes the "same as" claim checkable instead of trusted.
-- If the record is missing, stale, or its digest doesn't match what the
-  consumer pinned, the consumer fetches upstream. A lost mirror costs time,
-  never correctness or reproducibility.
-
-## Terms
-
-| term | meaning |
+| git | hapiq |
 |---|---|
-| **remote** | a configured, named store instance, e.g. `thoa` or `lab-s3` (like an rclone remote) |
-| **adaptor** | the code for one store type (`thoa`, `s3`, …); one adaptor serves many remotes |
-| **file set** | the files of one fetched dataset: dataset-relative paths with size, sha256 and md5 |
-| **digest** | sha256 identifying a file set (definition below) |
-| **mirror record** | (accession, digest, remote) → remote id, plus push/verify times |
+| ref name | accession + options, i.e. one manifest entry |
+| commit | the entry's file set (paths + sha256), identified by its digest |
+| `origin`, upstream | the source repository (GEO, Zenodo, …) |
+| other remotes, in priority order | `[remotes.<name>]` in config, e.g. `thoa` |
+| `git push <remote>` | `hapiq push <remote>`: upload, create dataset, record its id |
+| `refs/remotes/<r>/*`, committed | `remotes:` field in the manifest entry |
+| `refs/remotes/<r>/*`, local only | `remote_refs` table in `index.db` |
+| `git fetch` from a remote | download from the highest-priority remote that verifies |
 
-## File set digest
-
-Defined so that any implementation (Go, omnibenchmark's Python) can recompute
-it from a file list:
-
-1. For each file, take its dataset-relative path: slash-separated, clean
-   (no `.`/`..` segments, no leading `/`), UTF-8.
-2. Form one line per file: `<sha256 hex lowercase><two spaces><path>\n`
-   (i.e. `sha256sum` output format).
-3. Sort lines bytewise by path; concatenate.
-4. digest = sha256 of the result, lowercase hex.
-
-Empty files are included. Directory entries are not. The digest covers names
-and content only; sizes and timestamps are implied by or irrelevant to it.
-
-The witness `hapiq.json` stores whichever checksum the source provided (often
-md5, sometimes none), so the push step computes sha256 itself — or takes it
-from the cache index (`urls.sha256`) when the file came through the cache.
-
-## Adaptor interface
-
-New package `pkg/mirror`:
-
-```go
-package mirror
-
-// File is one file of a set, as pushed.
-type File struct {
-	Path   string // dataset-relative, slash-separated, clean
-	Local  string // local file to read (often a cache blob or its materialization)
-	Size   int64
-	SHA256 string // hex
-	MD5    string // hex; many stores (thoa, S3 single-part ETag, Azure, GCS) verify with md5
-}
-
-// Fileset is what gets pushed: one accession's files.
-type Fileset struct {
-	Accession string // canonical "source:id"
-	Files     []File
-}
-
-// Digest implements the definition in docs/mirrors.md.
-func (fs Fileset) Digest() string
-
-// Location is where a pushed file set landed.
-type Location struct {
-	RemoteID string // store-native id: thoa dataset id, S3 prefix, …
-	URI      string // optional, human-readable: "thoa:ds-…", "s3://bucket/prefix"
-}
-
-// RemoteFile is a file as the store reports it.
-type RemoteFile struct {
-	Path string
-	Size int64
-	Hash string // "<algo>:<hex>" as the store keeps it (md5 for thoa), "" if none
-}
-
-// Mirror is implemented once per store type.
-type Mirror interface {
-	// Push uploads fs and returns its location. Must preserve Files[i].Path as
-	// the path inside the remote dataset. Should skip bytes the store already
-	// has (most stores dedupe by md5); must not fail because content exists.
-	Push(ctx context.Context, fs Fileset) (Location, error)
-
-	// Stat lists what the store holds at loc, for verification and liveness.
-	// Returns ErrNotFound if loc no longer exists.
-	Stat(ctx context.Context, loc Location) ([]RemoteFile, error)
-}
-
-var ErrNotFound = errors.New("mirror: location not found")
-```
-
-Deliberately small. Two methods cover push, verify-after-push, and the
-consumer-side liveness check. Not in the interface (see Non-goals): delete,
-list-all, pull.
-
-Adaptors register by type name, mirroring `downloaders.Register`:
-
-```go
-// Factory builds a Mirror from its remote's config section.
-type Factory func(name string, cfg map[string]any) (Mirror, error)
-
-func Register(typ string, f Factory)
-func Open(name string) (Mirror, error) // looks up [mirrors.<name>] in config
-```
-
-### Verification
-
-`Verify(fs Fileset, remote []RemoteFile) error` is a shared helper, not
-adaptor code: it compares path sets and sizes exactly, and compares hashes
-whenever the store reports an algorithm the `File` carries (md5 or sha256).
-It runs after every push and in `hapiq mirror verify`. An adaptor whose
-store reports no hashes gets path+size verification only, and the record
-says so (`verified = 'size'` vs `'hash'`).
+**Identity vs. location.** A dataset is identified by its accession and its
+file set. A remote copy is only a location. A remote record is used only when
+the files it delivers match the hashes the manifest pins. A lost, stale or
+unreadable remote copy costs time, never correctness.
 
 ## Config
 
-Named remotes in the existing config (`~/.hapiqrc`), one table each; `type`
-selects the adaptor, other keys belong to the adaptor:
-
 ```toml
-[mirrors.thoa]
-type = "thoa"
-# credentials come from the adaptor's own resolution:
-# THOA_API_KEY, ~/.config/gothoa/config.yaml, or ~/.thoa/credentials
+[remotes]
+order        = ["thoa"]   # tried in this order before upstream; upstream is always last
+push_on_fetch = true      # after an upstream fetch, push to every remote in `order`
 
-[mirrors.lab-s3]          # future adaptor, shown for shape
-type   = "s3"
-bucket = "lab-datasets"
-prefix = "hapiq/"
+[remotes.thoa]
+type = "thoa"
+# endpoint defaults to https://api.thoa.io
+# credentials: THOA_API_KEY, ~/.config/gothoa/config.yaml, or ~/.thoa/credentials
 ```
 
-Credentials are never written into `index.db` or served by the cache server.
+`--remote <name>` and `--no-remotes` override `order` per command;
+`--no-push` overrides `push_on_fetch`. Credentials never go into the
+manifest, `index.db`, or anything the cache server serves.
 
 ## Records
 
-Two tables in the cache's `index.db`:
+### In the manifest (shared, committed)
+
+A manifest entry gets an optional `remotes` field. It needs a `files` list with
+sha256 hashes, which `manifest gen` writes since every hapiq.json file now has
+a sha256:
+
+```yaml
+- identifier: pbmc3k
+  accession: geo:GSE123456
+  files:
+    - name: GSE123456_matrix.h5ad
+      hash: sha256:9f86d0…
+  remotes:
+    - type: thoa
+      endpoint: https://api.thoa.io
+      dataset: 3fa85f64-…        # thoa dataset public id
+      pushed_at: 2026-10-29T10:00:00Z
+```
+
+The record is keyed by `type` + `endpoint`, not by the local remote name.
+`thoa` in one person's config and `thoa` in another's resolve to the same
+records when they point at the same endpoint. This matters once thoa
+shares datasets between accounts. Today the dataset only works with the
+pusher's account. Later, another account can read it if it was shared, and
+otherwise gets `ErrForbidden` and falls through (see *Sharing*).
+
+`manifest gen` copies matching `remote_refs` rows into the entry, and
+`hapiq push --manifest m.yaml` writes the field back in place.
+
+### In `index.db` (local)
+
+Written by every successful push. This is the record for plain
+`hapiq download` runs that have no manifest, and the source `manifest gen`
+reads from:
 
 ```sql
-CREATE TABLE mirror_sets (
-  digest      TEXT NOT NULL,      -- file set digest
-  path        TEXT NOT NULL,      -- dataset-relative
-  sha256      TEXT NOT NULL,
-  md5         TEXT NOT NULL,
-  size        INTEGER NOT NULL,
+CREATE TABLE remote_refs (
+  accession   TEXT NOT NULL,   -- canonical source:id
+  digest      TEXT NOT NULL,   -- file set digest (below)
+  type        TEXT NOT NULL,   -- adaptor type, "thoa"
+  endpoint    TEXT NOT NULL,
+  remote_id   TEXT NOT NULL,   -- thoa dataset public id
+  pushed_at   INTEGER NOT NULL,
+  verified_at INTEGER,
+  PRIMARY KEY (accession, digest, type, endpoint)
+);
+
+CREATE TABLE remote_files (    -- file list behind each digest; survives blob gc
+  digest TEXT NOT NULL, path TEXT NOT NULL,
+  sha256 TEXT NOT NULL, md5 TEXT NOT NULL, size INTEGER NOT NULL,
   PRIMARY KEY (digest, path)
 );
 
-CREATE TABLE mirrors (
-  accession   TEXT NOT NULL,      -- canonical source:id
-  digest      TEXT NOT NULL,
-  remote      TEXT NOT NULL,      -- configured remote name, e.g. "thoa"
-  remote_id   TEXT NOT NULL,
-  uri         TEXT,
-  pushed_at   INTEGER NOT NULL,
-  verified_at INTEGER,            -- last successful Stat+Verify
-  verified    TEXT,               -- 'hash' | 'size'
+CREATE TABLE remote_pending (  -- pushes that failed or were deferred
+  accession TEXT NOT NULL, digest TEXT NOT NULL, remote TEXT NOT NULL,
+  dir TEXT NOT NULL,           -- folder holding hapiq.json
+  last_error TEXT, queued_at INTEGER NOT NULL,
   PRIMARY KEY (accession, digest, remote)
 );
 ```
 
-`mirror_sets` stores the file list behind each digest, so the digest can be
-recomputed and verification works even after the local blobs are gc'd. One
-accession may have several digests: upstream revisions, or different
-`options` filters (a filtered subset is a different file set, honestly
-labelled by its digest).
+`index.db` is created on first use even when `cache.mode = "off"`; only the
+blob cache stays off.
 
-## CLI
+## File set digest
 
+The key for local records. Any implementation can recompute it from a file
+list:
+
+1. Per file: its path relative to the folder holding hapiq.json, slash-separated,
+   clean (no `.`/`..`, no leading `/`), UTF-8 in NFC.
+2. One line per file: `<sha256 lowercase hex><two spaces><path>\n`.
+3. Sort lines bytewise by path, concatenate, sha256, lowercase hex.
+
+Rejected, not encoded: an empty file set, duplicate paths, paths with `\n`
+or `\r`, paths that collide case-insensitively. These all fail push with a
+clear error. Empty files are included and directories are not.
+`pkg/remote` ships test vectors.
+
+## Fetch
+
+For `hapiq download`, `manifest get` and `refetch`, per accession:
+
+1. Find candidate records for the accession and options: the manifest
+   entry's `remotes`, then `remote_refs` rows. Then walk `[remotes] order`.
+   For each configured remote with a matching (type, endpoint) record, call
+   `Fetch`.
+2. Verify every delivered file against the pinned sha256: from the manifest
+   `files`, or from `remote_files` for local records. Any mismatch, a missing
+   file, `ErrNotFound` or `ErrForbidden` → log one line, move to the next
+   remote.
+3. Upstream is always last. With no records at all, hapiq fetches from
+   upstream as today.
+4. The witness records where the bytes came from: `fetched_from:
+   thoa:<dataset>` or `upstream`.
+
+Fetched bytes go through the local cache like any other download, so a second
+fetch in the same VM is a cache hit.
+
+An entry with no sha256 pins (no `files`, or only md5) is never served from a
+remote; hapiq fetches it from upstream and warns once. thoa reports only md5,
+so the sha256 pins are what make a thoa copy trustworthy.
+
+## Push
+
+`hapiq push <remote> <dir>...` or `hapiq push <remote> --manifest m.yaml
+--parent-dir <dir>`:
+
+1. Read `<dir>/hapiq.json`. Refuse a folder that holds more than one accession
+   (`datasets` in hapiq.json); push those per entry from a manifest.
+2. Build the file set from the witness: paths relative to `<dir>`, sha256 from
+   the witness, md5 computed (thoa needs it). Refuse a file with an empty
+   checksum or one missing on disk.
+3. If a record (accession, digest, type, endpoint) exists and `Stat` verifies
+   it, print it and stop.
+4. `Push`, then `Stat` + verify paths, sizes and md5. Only then write
+   `remote_refs` + `remote_files`, clear `remote_pending`, and update the
+   manifest when given one.
+5. Print `accession  digest  remote  dataset`.
+
+`hapiq push <remote>` with no folder pushes everything in `remote_pending`.
+
+**Push on fetch.** When `push_on_fetch` is on and a fetch came from upstream,
+hapiq queues a `remote_pending` row and pushes right after the fetch. A failed
+push warns and leaves the row queued; it never fails the fetch. Remote
+fetches don't push.
+
+**Orphans.** If hapiq dies between `Push` and the record write, the thoa
+dataset is left without a record, and the next push creates another one.
+Repeat file uploads are free (thoa dedupes by md5) and an orphan dataset is a
+list of file ids, so this is accepted. Remote cleanup is a non-goal.
+
+## Warm-up (later)
+
+A thoa job takes one input dataset, staged into the VM before the script
+runs. Warm-up builds that dataset from every manifest entry's thoa files
+(md5-addressed, so no re-upload) under `<digest>/<path>`. It adds a `dir`
+remote with `path = <staging dir>` at the head of `order` in the VM. hapiq
+then links staged files instead of downloading them. It's the same
+protocol, only one more adaptor. It waits until transparent fetch works.
+
+## Sharing
+
+Records name the endpoint, not the account. When thoa ships sharing, a
+consumer on another account can use a shared dataset id from the committed
+manifest unchanged. Without access, `ErrForbidden` falls through to the next
+remote or upstream. With `push_on_fetch`, the consumer then pushes its own
+copy and appends a second record. One entry may hold several thoa records,
+which are tried newest first. No account names are stored.
+
+## Adaptor interface
+
+New package `pkg/remote`:
+
+```go
+type File struct {
+	Path   string // relative, clean, NFC
+	Local  string // file to read when pushing
+	Size   int64
+	SHA256 string
+	MD5    string
+}
+
+type Fileset struct {
+	Accession string
+	Files     []File
+}
+
+func (fs Fileset) Digest() (string, error) // rejects the cases listed above
+
+type Location struct{ Type, Endpoint, ID string }
+
+type RemoteFile struct {
+	Path string
+	Size int64
+	Hash string // "md5:<hex>", "" if the store keeps none
+}
+
+type Remote interface {
+	Push(ctx context.Context, fs Fileset) (Location, error)
+	Stat(ctx context.Context, loc Location) ([]RemoteFile, error)
+	// Fetch downloads loc into dest, preserving paths; the caller verifies.
+	Fetch(ctx context.Context, loc Location, dest string) error
+}
+
+var (
+	ErrNotFound  = errors.New("remote: location not found")
+	ErrForbidden = errors.New("remote: no access")
+)
+
+type Factory func(name string, cfg map[string]any) (Remote, error)
+func Register(typ string, f Factory)
+func Open(name string) (Remote, error) // [remotes.<name>]
 ```
-hapiq mirror push <remote> <dir>...       # dir = a download dir with hapiq.json
-hapiq mirror push <remote> --manifest m.yaml --parent-dir <dir>
-hapiq mirror ls [--remote R] [accession]
-hapiq mirror verify [--remote R] [accession]
-```
 
-`push`:
+`ctx` carries no run-wide deadline. Transfers use the same per-request stall
+limit as downloads (`common.SetIdleTimeout`), so a 25 GB push isn't killed
+partway through.
 
-1. Read `<dir>/hapiq.json`; accession = `source:original_id`; files =
-   witness `files[].path` relative to `<dir>`.
-2. Hash every file (sha256 + md5 in one read; reuse `urls.sha256` on cache
-   hits) and build the `Fileset`.
-3. If a record (accession, digest, remote) exists and `Stat` still verifies,
-   print it and stop — pushing is idempotent.
-4. `Push`, then `Stat` + `Verify`; write `mirror_sets` and `mirrors` rows
-   only after verification passes.
-5. Print `accession  digest  remote  remote_id`.
+### thoa adaptor
 
-Manual push first. Automatic push-on-fetch (`[mirrors] auto_push = ["thoa"]`)
-is a later, separate decision.
+`pkg/remote/thoa`, a thin wrapper over `github.com/btraven00/thoa-go`:
 
-## Cache server endpoint
+- `Push`: `Upload(map[path]local)`, which returns the dataset public id.
+- `Stat`: `Files(id)` plus sizes and md5. HTTP 404 → `ErrNotFound`,
+  401/403 → `ErrForbidden`.
+- `Fetch`: `Download(id, dest, nil, nil)`. The download quota
+  (`remaining_downloads`) is the provider's concern; its error goes up
+  as an ordinary fetch failure, and hapiq falls through to the next remote.
 
-```
-GET /v1/mirrors?accession=geo:GSE123456[&remote=thoa][&digest=<hex>]
-```
+## Prerequisites (bugs in hapiq today)
 
-Behind the existing bearer-token guard. Always `200` with a JSON list (empty
-when nothing matches), newest `pushed_at` first:
+- hapiq.json paths must be relative to their folder for every source:
+  manifest-001, branch `fix/witness-relative-paths`.
+- `--skip-existing` drops already-present files from hapiq.json `files`
+  (`FilesSkipped`), so a re-run gives an incomplete file set. They must be
+  listed, or push sends a partial dataset.
+- `manifest gen` must keep `options`: manifest-002, `fix/manifest-gen-options`.
+- `--timeout` must be a stall limit everywhere: `fix/manifest-stall-timeout`.
 
-```json
-[{
-  "accession": "geo:GSE123456",
-  "digest": "9f86d0…",
-  "remote": "thoa",
-  "remote_id": "ds-…",
-  "uri": "thoa:ds-…",
-  "pushed_at": 1761200000,
-  "verified_at": 1761200100,
-  "verified": "hash",
-  "files": [{"path": "GSE123456_matrix.h5ad", "size": 123, "sha256": "…", "md5": "…"}]
-}]
-```
+## Open questions for thoa
 
-`files` is included so the consumer can recompute the digest itself and
-check it against its pin without trusting the server.
-
-## Consumer protocol (omnibenchmark data stage)
-
-1. The plan names the dataset by accession, pinned by digest (or by a
-   `files` list with sha256, from which the digest is computed).
-2. Query `GET /v1/mirrors?accession=…&remote=<platform>&digest=<pin>`.
-3. Hit → recompute the digest from `files`, compare to the pin, then hand
-   `remote_id` to the platform (for thoa: `thoa run --input-dataset <id>`).
-   If `verified_at` is old, the consumer may ask the platform whether the id
-   still exists before relying on it.
-4. Miss, mismatch, or the id is gone → fetch upstream via hapiq as today
-   (and optionally push, so the next run hits).
-
-A record without a matching digest is never used. Unpinned plans may take the
-newest record for the accession, but should log the digest they got so the
-run is reproducible after the fact.
-
-## First adaptor: thoa
-
-`pkg/mirror/thoa`, a thin wrapper over the Go client
-`github.com/btraven00/thoa-go` (a port of the MIT-licensed python `thoa`
-dataset code; compatible with hapiq's GPL-3.0).
-
-- `Push`: `Upload(map[path]local)` — the map form keeps dataset paths
-  relative and stable instead of leaking local cache paths. Returns
-  `RemoteID` = dataset public id, `URI` = `thoa:<id>`. thoa skips files it
-  already holds by md5, so re-pushes are cheap.
-- `Stat`: `Files(id)` for paths; sizes and md5 from `GET /files?dataset_public_id=`.
-  `ErrNotFound` when the dataset lookup is empty.
-
-Known blockers and questions for the thoa team, before this is useful:
-
-- Imports of `provider: local` currently fail server-side with
-  `Provider 'local' is not configured` (reproduced with the official python
-  client 0.1.8).
-- Datasets carry `remaining_downloads`. Does using a dataset as a job input
-  decrement it? Benchmarks re-read inputs constantly; a read quota on job
-  inputs would rule thoa out as a cache.
-- Does `thoa run --input-dataset <id>` work as of 0.1.8?
-- Are datasets permanent, or can they expire or be deleted?
-- Does `GET /files` return each file's md5? If not, verification is
-  size-only.
-- `thoa-go` isn't published yet: hapiq needs it on GitHub (or a `replace`
-  directive during development).
+1. Uploads fail with `Provider 'local' is not configured` (python client
+   0.1.8 too). This blocks everything.
+2. Can a job VM authenticate to the API (an API key in the job environment),
+   so hapiq inside the VM can call `Download`?
+3. Does `GET /files` return each file's md5 and size, so `Stat` can verify by
+   hash?
+4. Are datasets permanent, or can they expire?
+5. Sharing: which status does an unshared dataset id return to another
+   account (404 or 403)? And will shared datasets be readable through the
+   same `Download` path?
+6. Warm-up: can a dataset be built from existing file ids with new paths?
+7. `thoa-go` has to be published on GitHub, or use a `replace` directive
+   until it is.
 
 ## Non-goals
 
-- **General-purpose sync.** For mirroring a cache or download tree to S3,
-  SFTP, Drive, etc., use rclone on a hapiq output dir. Adaptors exist only for
-  stores rclone can't reach, or where the store's own dataset ids are what
-  consumers need (thoa).
-- **Delete / remote GC.** Records outlive remote data gracefully (consumers
-  fall back), so deletion can wait. Add an optional `Deleter` interface when
-  a store needs quota management.
-- **Pulling from mirrors.** Using a mirror as a download source when upstream
-  is down would be an optional `Fetcher` interface. It's a natural extension
-  but a different feature.
-- **Listing remotes.** Records are the source of truth for what hapiq
-  pushed; adaptors don't need to enumerate stores.
+- General sync to S3, SFTP and the like: use rclone on a hapiq output folder.
+- Remote delete or garbage collection.
+- Listing or discovering datasets on a remote. Records are the only index,
+  because thoa datasets carry no name.
+- Serving remote records from the cache server. Add a `GET /v1/remotes`
+  endpoint if something outside hapiq ever needs it.
 
 ## Implementation order
 
-1. `pkg/mirror`: types, `Digest`, `Verify`, registry, with tests (digest
-   test vectors so other implementations can check themselves).
-2. Tables in `pkg/cache/sqlite.go`.
-3. `pkg/mirror/thoa` adaptor; `hapiq mirror push` / `ls` / `verify`.
-4. `GET /v1/mirrors` on the cache server; document it in
-   [lan-sharing.md](lan-sharing.md).
-5. omnibenchmark resolver (separate repo).
-
-Steps 1, 2 and 4 don't depend on thoa and can land first; 3 can be built and
-tested against a fake server, but real use waits on the blockers above.
+1. Prerequisite fixes above.
+2. `pkg/remote`: types, `Digest` with test vectors, registry, verify helper,
+   tested against a fake `Remote`.
+3. `index.db` tables; `hapiq push` (manual + pending); the manifest
+   `remotes` field in `manifest gen`, `manifest get` and `push --manifest`.
+4. Fetch resolution in `download`, `manifest get` and `refetch`;
+   `push_on_fetch`.
+5. `pkg/remote/thoa`. Steps 2–4 can be built against the fake now; real use
+   waits on thoa questions 1 and 2.
+6. Warm-up with the `dir` adaptor.
