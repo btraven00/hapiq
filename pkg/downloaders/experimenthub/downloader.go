@@ -204,10 +204,11 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 		targetPath := filepath.Join(req.OutputDir, common.SanitizeFilename(filename))
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, filename, url); ok {
 				if d.verbose {
 					fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", filename)
 				}
+				result.Files = append(result.Files, fi)
 				result.FilesSkipped++
 				continue
 			}
@@ -255,7 +256,7 @@ func (d *ExperimentHubDownloader) Download(ctx context.Context, req *downloaders
 				BytesTotal:      result.BytesDownloaded,
 				BytesDownloaded: result.BytesDownloaded,
 				FilesTotal:      len(ri.Paths),
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 				FilesSkipped:    result.FilesSkipped,
 				FilesFailed:     len(result.Errors),
 				AverageSpeed:    averageSpeed(result.BytesDownloaded, result.Duration),

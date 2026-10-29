@@ -114,7 +114,7 @@ type DownloadResult struct {
 	Duration        time.Duration `json:"duration"`
 	BytesTotal      int64         `json:"bytes_total"`
 	BytesDownloaded int64         `json:"bytes_downloaded"`
-	FilesSkipped    int           `json:"files_skipped"` // already on disk under SkipExisting; not in Files
+	FilesSkipped    int           `json:"files_skipped"` // already on disk under SkipExisting; in Files with Skipped set
 	Success         bool          `json:"success"`
 }
 
@@ -132,6 +132,9 @@ type FileInfo struct {
 	ContentType    string `json:"content_type,omitempty"`
 	Size           int64  `json:"size"`
 	CacheHit       bool   `json:"cache_hit,omitempty"`
+	// Skipped marks a file left in place under SkipExisting: on disk, but
+	// not downloaded by this run.
+	Skipped bool `json:"skipped,omitempty"`
 }
 
 // DatasetRecord captures provenance for a single dataset/accession within a
@@ -178,6 +181,7 @@ type FileWitness struct {
 	ContentType    string `json:"content_type,omitempty"`
 	Size           int64  `json:"size"`
 	CacheHit       bool   `json:"cache_hit,omitempty"`
+	Skipped        bool   `json:"-"` // see FileInfo.Skipped
 }
 
 // DownloadStats contains performance and operational statistics.

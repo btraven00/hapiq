@@ -151,3 +151,62 @@ func TestWriteWitnessFileRelativePaths(t *testing.T) {
 		}
 	}
 }
+
+// Regression: a run that skipped every file as already present (e.g. an
+// interrupted download resumed with --skip-existing) must still list them.
+func TestWriteWitnessFileAllSkipped(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const helloSHA = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+
+	fi, ok := SkippedFile(filepath.Join(dir, "a.txt"), "a.txt", "https://x/a.txt")
+	if !ok || !fi.Skipped || fi.Size != 6 {
+		t.Fatalf("SkippedFile = %+v, %v", fi, ok)
+	}
+	if _, ok := SkippedFile(filepath.Join(dir, "missing"), "", ""); ok {
+		t.Error("SkippedFile reported a missing file")
+	}
+
+	w := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{downloaders.FileWitness(fi)}}
+	if err := WriteWitnessFile(dir, w); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadWitnessFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 1 || got.Files[0].Path != "a.txt" || got.Files[0].Checksum != helloSHA {
+		t.Errorf("files = %+v, want a.txt with sha256 %s", got.Files, helloSHA)
+	}
+}
+
+// A skipped file keeps the checksum an earlier run recorded instead of being
+// re-hashed: the recorded value is fake, so a re-hash would replace it.
+func TestWriteWitnessFileSkippedKeepsPrevChecksum(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const fake = "0000000000000000000000000000000000000000000000000000000000000000"
+	prev := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{
+		{Path: "a.txt", Size: 6, Checksum: fake, ChecksumType: "sha256", SourceChecksum: "md5:abc"},
+	}}
+	if err := WriteWitnessFile(dir, prev); err != nil {
+		t.Fatal(err)
+	}
+
+	fi, _ := SkippedFile(filepath.Join(dir, "a.txt"), "a.txt", "")
+	next := &downloaders.WitnessFile{OriginalID: "x", Files: []downloaders.FileWitness{downloaders.FileWitness(fi)}}
+	if err := WriteWitnessFile(dir, next); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadWitnessFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Files) != 1 || got.Files[0].Checksum != fake || got.Files[0].SourceChecksum != "md5:abc" {
+		t.Errorf("files = %+v, want prev's checksums kept", got.Files)
+	}
+}

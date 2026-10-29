@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -366,11 +365,13 @@ func (d *GEODownloader) fetchFile(ctx context.Context, url, targetDir, relPath s
 	targetPath := filepath.Join(targetDir, relPath)
 
 	if options != nil && options.SkipExisting {
-		if _, err := os.Stat(targetPath); err == nil {
+		if fi, ok := common.SkippedFile(targetPath, filepath.Base(relPath), url); ok {
 			if d.verbose {
 				fmt.Printf("⏭️  Skipping existing file: %s\n", relPath)
 			}
 
+			fi.Path = relPath
+			result.Files = append(result.Files, fi)
 			result.FilesSkipped++
 
 			return nil

@@ -382,10 +382,12 @@ func (d *TenxDownloader) Download(ctx context.Context, req *downloaders.Download
 		targetPath := filepath.Join(req.OutputDir, f.name)
 
 		if opts != nil && opts.SkipExisting {
-			if _, err := os.Stat(targetPath); err == nil {
+			if fi, ok := common.SkippedFile(targetPath, f.name, f.URL); ok {
 				if d.verbose {
 					fmt.Fprintf(os.Stderr, "⏭️  Skipping existing: %s\n", f.name)
 				}
+				fi.Path = f.name
+				result.Files = append(result.Files, fi)
 				result.FilesSkipped++
 				continue
 			}
@@ -432,7 +434,7 @@ func (d *TenxDownloader) Download(ctx context.Context, req *downloaders.Download
 				BytesTotal:      result.BytesTotal,
 				BytesDownloaded: result.BytesDownloaded,
 				FilesTotal:      len(selected),
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 				FilesSkipped:    result.FilesSkipped,
 				FilesFailed:     len(result.Errors),
 				AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),

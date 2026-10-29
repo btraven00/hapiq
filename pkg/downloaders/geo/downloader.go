@@ -373,14 +373,16 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 	// Calculate final statistics
 	result.Duration = time.Since(startTime)
 	for _, file := range result.Files {
-		result.BytesDownloaded += file.Size
+		if !file.Skipped {
+			result.BytesDownloaded += file.Size
+		}
 		result.BytesTotal += file.Size
 	}
 
 	// Determine success based on actual download results
 	// Success means: no critical errors AND at least some files downloaded OR only warnings
 	hasCriticalErrors := len(result.Errors) > 0
-	hasDownloadedFiles := len(result.Files) > 0 || result.FilesSkipped > 0 // all-skipped = already complete
+	hasDownloadedFiles := len(result.Files) > 0 // skipped files included: all-skipped = already complete
 
 	if hasCriticalErrors {
 		result.Success = false
@@ -409,8 +411,8 @@ func (d *GEODownloader) Download(ctx context.Context, req *downloaders.DownloadR
 			Duration:        result.Duration,
 			BytesTotal:      result.BytesTotal,
 			BytesDownloaded: result.BytesDownloaded,
-			FilesTotal:      len(result.Files) + result.FilesSkipped,
-			FilesDownloaded: len(result.Files),
+			FilesTotal:      len(result.Files),
+			FilesDownloaded: len(result.Files) - result.FilesSkipped,
 			FilesSkipped:    result.FilesSkipped,
 			FilesFailed:     0,
 			AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
