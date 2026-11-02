@@ -1,0 +1,29 @@
+# Paper metadata: read by paper.typ (PDF) and copied into paper.md (JOSS) by `make paper`.
+# Edit here, not in paper.md.
+title: 'hapiq: fetching datasets from scientific repositories with verifiable provenance'
+tags:
+  - Go
+  - bioinformatics
+  - reproducibility
+  - data provenance
+  - single-cell
+authors:
+  - name: Ben Carrillo
+    orcid: 0009-0003-5704-4151
+    affiliation: "1, 2"
+    corresponding: true
+  - name: Author 2
+    orcid: 0000-0000-0000-0000
+    affiliation: "1, 2"
+    corresponding: false
+  - name: Author 3
+    orcid: 0000-0000-0000-0000
+    affiliation: "1, 2"
+    corresponding: false
+affiliations:
+  - name: Department of Molecular Life Sciences, University of Zurich, Switzerland
+    index: 1
+  - name: SIB Swiss Institute of Bioinformatics, Switzerland                     
+    index: 2
+date: 2 November 2026
+bibliography: paper.bib

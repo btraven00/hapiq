@@ -1,0 +1,163 @@
+// Body of the paper. Shared by paper.typ (PDF) and paper.md (JOSS, via pandoc).
+// Keep to plain markup: headings, paragraphs, lists, code, @citations.
+// pandoc's typst reader does not follow #figure labels or #cite(form: ...).
+
+= Summary
+
+Most computational biology starts by downloading someone else's data: a Gene
+Expression Omnibus (GEO) series, a Zenodo record, a Human Cell Atlas project.
+Each repository has its own identifiers, file layout and API, so this step is
+usually a mix of browser clicks, `wget` lines and one-off scripts, and what
+was actually fetched, from where, and in which version is rarely written down.
+`hapiq` ("the one who fetches" in Quechua) is a command-line tool that
+downloads datasets from 13 scientific repositories by their native accession,
+lets the user select files before any byte is transferred, and writes a
+machine-readable record, the witness file `hapiq.json`, with the source,
+metadata and a SHA-256 checksum for every file. From that record alone the
+dataset can be deleted and later restored and verified with `hapiq refetch`.
+`hapiq` is a single static Go binary, also installable from PyPI with a thin
+Python interface.
+
+= Statement of need
+
+Reproducible analyses require that input data be identified precisely and
+recoverable later @sandve2013ten @wilkinson2016fair. In practice, the
+accession quoted in a methods section names a record, not the bytes that were
+analysed: GEO series bundle raw archives, processed matrices and
+supplementary tables of very different sizes @barrett2013geo; Zenodo and
+figshare records can hold dozens of files; Hugging Face datasets change
+under a branch name. Researchers who need one count matrix from a series
+download the whole series or write a scraper, and neither leaves a record of
+which files were used.
+
+`hapiq` targets three groups. Analysts get one command for many repositories
+(GEO, SRA/ENA, Zenodo, figshare, Ensembl, BioStudies/ArrayExpress, Human Cell
+Atlas @regev2017hca, Bioconductor ExperimentHub @huber2015bioconductor,
+scPerturb @peidli2024scperturb, CZI Virtual Cell Platform, Hugging Face Hub,
+10x Genomics example datasets and plain URLs), with search, dry runs and
+file filters. Benchmark and pipeline authors get a declarative manifest that
+pins datasets by accession and expected checksums, so a pipeline's data stage
+fails loudly when an upstream file changes. Labs and course organisers get a
+local content-addressed cache and, experimentally, a way to share it over
+the network, so a dataset is fetched from the origin once rather than once
+per machine.
+
+= State of the field
+
+Several mature tools cover one repository each. GEOquery
+@davis2007geoquery parses GEO records into R objects; the SRA Toolkit
+@sratoolkit, pysradb @choudhary2019pysradb and ffq @galvez2023ffq resolve and
+fetch sequencing runs; `zenodo_get` @zenodoget downloads Zenodo records;
+ExperimentHub @huber2015bioconductor serves curated Bioconductor resources.
+nf-core/fetchngs @ewels2020nfcore wraps sequencing-run retrieval in a
+Nextflow pipeline. These tools are good at their repository, but each has its
+own interface and none records a checksummed list of what was downloaded
+that a different tool could verify. DataLad @halchenko2021datalad provides
+strong provenance by versioning data with git-annex, at the cost of adopting
+a git-based workflow for the whole project.
+
+We chose to build rather than contribute because the missing piece is
+cross-cutting: a single file-selection model, a single provenance record and
+a single cache applied uniformly across repositories. Adding these to each
+existing tool would mean several language ecosystems and several
+maintainers' agreement on one format. `hapiq` instead complements them: its
+witness file is plain JSON with standard checksums, and the repository
+adaptors call the same public endpoints those tools use. Where a mature
+tool is the better fit (e.g. SRA's own `prefetch` for controlled-access
+runs), `hapiq` does not try to replace it.
+
+= Software design
+
+Each repository is an adaptor implementing a small Go interface: validate an
+identifier, fetch metadata, and download a filtered file list. Adaptors
+resolve accessions to concrete files and, where the repository publishes
+them, to its own checksums (md5 for Zenodo, figshare, ENA and 10x; sha256 or
+git blob hashes for Hugging Face). Shared code applies the same filters to
+every source before transfer (`--include-ext`, `--exclude-ext`,
+`--filename-pattern`, `--max-file-size`, and source-specific ones such as
+GEO sample subsets), so `--dry-run` and the real download use the same file
+list.
+
+```bash
+hapiq search geo "Perturb-seq K562" --limit 5
+hapiq download geo GSE133344 --out data --filename-pattern 'GSE133344_filtered_*' --dry-run
+hapiq download geo GSE133344 --out data --filename-pattern 'GSE133344_filtered_*'
+rm -r data/GSE133344/supplementary && hapiq refetch data/GSE133344
+```
+
+Every run writes `hapiq.json` next to the data. It records the tool version,
+source, accession, resolved revision where one exists (a Hugging Face commit,
+a 10x page snapshot), the filters used, repository metadata, and for every
+file its path, size, origin URL, SHA-256 and the repository's own checksum.
+A failed or truncated transfer fails the run and removes the partial file
+rather than leaving it behind with a warning. `hapiq refetch` replays the
+recorded request and checks every file against the record; a file that
+changed upstream is reported as an error, not silently accepted.
+
+For batch use, a manifest is a closed-schema YAML list of entries, each
+naming an accession or URL, optional filters and expected file hashes;
+`hapiq manifest get` materialises it into a directory tree. Unknown fields
+are rejected, so typos in a manifest do not pass unnoticed.
+
+The optional cache stores files in a content-addressed store keyed by
+SHA-256, with an SQLite index from origin URL to hash, and materialises them
+into output directories by reflink, hardlink, symlink or copy, so
+re-running a download into a new directory costs no network traffic.
+
+`hapiq` has unit tests run in continuous integration and a separate curated
+end-to-end suite that downloads real records and checks results against
+facts known independently of `hapiq`: checksums the repository publishes,
+which files a filter must keep, and exit codes. Every fixed bug gets a
+permanent case in that suite.
+
+== Experimental features
+
+Two features extend the cache beyond one machine. Both are usable but their
+interfaces and formats may still change.
+
+*Peer-to-peer cache.* `hapiq cache serve` exposes the local cache over HTTP
+to other `hapiq` instances, which find peers from a static list, an
+introducer node that relays the peers it has seen, or mDNS on the local
+link. Because clients verify every blob against its SHA-256 while streaming,
+peers need no mutual trust: a peer serving wrong bytes is skipped, the
+origin is used instead, and the witness still records the origin URL. The
+intended uses are a lab whose machines fetch the same public data, and a
+workshop where many participants would otherwise pull one large dataset
+through a single uplink.
+
+*Remotes.* Compute platforms often cannot read a local cache and keep their
+own dataset stores. Remotes treat such a store like a git remote for
+datasets: a dataset is identified by its accession, its file filters and a
+digest over its files' paths and SHA-256 values, and a copy on a remote
+store is only a location for it. A first prototype pins datasets to copies
+on one platform's store in a lockfile committed next to a benchmark plan
+(`hapiq lock add`, then `hapiq download --lock`). Copies are verified
+against the recorded checksums, and when upstream content no longer matches
+the pinned digest the run fails instead of silently using new data. A
+records server that fills remote stores on a miss, as a pull-through cache,
+is in design.
+
+= Research impact statement
+
+// TODO: replace with concrete, checkable uses (projects, courses, papers).
+`hapiq` is being integrated as the data-fetching layer of the omnibenchmark
+benchmarking framework, where benchmark plans reference datasets by
+accession and the witness checksums make dataset identity checkable across
+compute environments. It is used in our group to assemble single-cell and
+perturbation datasets for method benchmarks. Releases are distributed as
+static binaries and on PyPI; a Bioconda recipe is under review.
+
+= AI usage disclosure
+
+// TODO: author to confirm or correct this paragraph; JOSS requires it.
+Generative AI coding assistants (Anthropic's Claude via Claude Code) were
+used during development to draft code, tests and documentation, and to draft
+this paper. All changes were reviewed by the author before merging, are
+covered by unit tests and, for download behaviour, by the curated end-to-end
+suite against live repositories. All statements and references in this paper
+were checked by the author.
+
+= Acknowledgements
+
+// TODO: funding, people.
+We thank TODO.
