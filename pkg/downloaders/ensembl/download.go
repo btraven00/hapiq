@@ -163,7 +163,9 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 		}(i, url)
 	}
 
-	// Collect results
+	// Collect results: every worker ends with exactly one errChan send, after
+	// its fileChan send, so once all errChan results are in, every file is
+	// already buffered in fileChan.
 	var downloadErrors []string
 	for i := 0; i < len(urls); i++ {
 		select {
@@ -171,15 +173,15 @@ func (d *EnsemblDownloader) downloadEnsemblData(ctx context.Context, req *Ensemb
 			if err != nil {
 				downloadErrors = append(downloadErrors, err.Error())
 			}
-		case file := <-fileChan:
-			if file != nil {
-				result.Files = append(result.Files, *file)
-				if file.Skipped {
-					result.FilesSkipped++
-				}
-			}
 		case <-ctx.Done():
 			return ctx.Err()
+		}
+	}
+	for len(fileChan) > 0 {
+		file := <-fileChan
+		result.Files = append(result.Files, *file)
+		if file.Skipped {
+			result.FilesSkipped++
 		}
 	}
 

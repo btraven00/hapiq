@@ -457,7 +457,10 @@ func BenchmarkEnsemblDownloader_cleanEnsemblID(b *testing.B) {
 }
 
 // fakeProto serves the species list and records every other URL requested.
-type fakeProto struct{ others []string }
+type fakeProto struct {
+	others  []string
+	species []string // species list entries; default escherichia_coli
+}
 
 func (f *fakeProto) Head(ctx context.Context, u string) (*ProtocolResponse, error) {
 	return f.Get(ctx, u)
@@ -465,8 +468,15 @@ func (f *fakeProto) Head(ctx context.Context, u string) (*ProtocolResponse, erro
 
 func (f *fakeProto) Get(_ context.Context, u string) (*ProtocolResponse, error) {
 	if strings.HasSuffix(u, ".txt") {
-		line := "escherichia_coli\tescherichia_coli\tEnsemblBacteria\t562\tASM584v2\tENA\t1\t2\t3\t4\t5\t6\t7\tbacteria_0_collection_core_47_100_1\n"
-		return &ProtocolResponse{StatusCode: 200, Body: io.NopCloser(strings.NewReader(line))}, nil
+		names := f.species
+		if len(names) == 0 {
+			names = []string{"escherichia_coli"}
+		}
+		var list strings.Builder
+		for _, n := range names {
+			list.WriteString(n + "\t" + n + "\tEnsemblBacteria\t562\tASM584v2\tENA\t1\t2\t3\t4\t5\t6\t7\tbacteria_0_collection_core_47_100_1\n")
+		}
+		return &ProtocolResponse{StatusCode: 200, Body: io.NopCloser(strings.NewReader(list.String()))}, nil
 	}
 	f.others = append(f.others, u)
 	return &ProtocolResponse{StatusCode: 200, Body: io.NopCloser(strings.NewReader("payload"))}, nil
@@ -498,5 +508,58 @@ func TestEnsemblDownloader_DryRun(t *testing.T) {
 	}
 	if _, err := os.Stat(outDir); !os.IsNotExist(err) {
 		t.Errorf("dry run touched output dir %s", outDir)
+	}
+}
+
+// A file already on disk under SkipExisting comes back Skipped and counted,
+// without being fetched.
+func TestEnsemblDownloader_SkipExisting(t *testing.T) {
+	proto := &fakeProto{}
+	d := NewEnsemblDownloader()
+	d.protoClient = proto
+	outDir := t.TempDir()
+	req := &downloaders.DownloadRequest{
+		ID: "bacteria:47:pep", OutputDir: outDir, Metadata: &downloaders.Metadata{Source: "ensembl"},
+		Options: &downloaders.DownloadOptions{DryRun: true},
+	}
+	plan, err := d.Download(context.Background(), req)
+	if err != nil || len(plan.Files) != 1 {
+		t.Fatalf("dry run err=%v files=%+v", err, plan.Files)
+	}
+	target := plan.Files[0].Path
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("have"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req.Options = &downloaders.DownloadOptions{SkipExisting: true}
+	res, err := d.Download(context.Background(), req)
+	if err != nil || !res.Success {
+		t.Fatalf("err=%v result=%+v", err, res)
+	}
+	if len(res.Files) != 1 || !res.Files[0].Skipped || res.FilesSkipped != 1 {
+		t.Fatalf("files=%+v skipped=%d, want one skipped", res.Files, res.FilesSkipped)
+	}
+	if len(proto.others) != 0 {
+		t.Errorf("skipped file was fetched: %v", proto.others)
+	}
+}
+
+// Regression: each worker sent on fileChan and errChan but the collector read
+// only one message per URL, so with several files some FileInfos were dropped
+// from result.Files and hapiq.json.
+func TestEnsemblDownloader_KeepsEveryFile(t *testing.T) {
+	d := NewEnsemblDownloader()
+	d.protoClient = &fakeProto{species: []string{"escherichia_coli", "bacillus_subtilis"}}
+	res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID: "bacteria:47:pep", OutputDir: t.TempDir(), Metadata: &downloaders.Metadata{Source: "ensembl"},
+	})
+	if err != nil || !res.Success {
+		t.Fatalf("err=%v result=%+v", err, res)
+	}
+	if len(res.Files) != 2 {
+		t.Fatalf("got %d files, want 2: %+v", len(res.Files), res.Files)
 	}
 }
