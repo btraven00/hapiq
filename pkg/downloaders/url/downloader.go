@@ -304,10 +304,11 @@ func (d *URLDownloader) downloadOne(ctx context.Context, rawURL, filename, outpu
 	}
 	defer func() { _ = root.Close() }()
 
-	if _, statErr := root.Stat(targetName); statErr == nil {
+	if st, statErr := root.Stat(targetName); statErr == nil {
 		switch {
 		case opts != nil && opts.SkipExisting:
-			if fi, ok := common.SkippedFile(targetPath, filename, rawURL); ok {
+			// st comes from the root: no os.Stat on the remote-supplied name.
+			if fi, ok := common.SkippedFileFromStat(targetPath, filename, rawURL, st); ok {
 				return &fi, nil, nil
 			}
 			return nil, nil, nil
