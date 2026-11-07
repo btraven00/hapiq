@@ -720,3 +720,36 @@ func TestFigshareDownloader_VerifiesAgainstSource(t *testing.T) {
 		t.Errorf("truncated file left on disk: %v %v", matches, matches2)
 	}
 }
+
+// Regression: a file already on disk under --skip-existing is listed in
+// result.Files (and so in hapiq.json), marked Skipped, not dropped.
+func TestFigshareDownloader_SkipExistingListsFile(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/files/") {
+			w.Write([]byte("payload"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id": 1, "title": "t", "files": [
+			{"id": 1, "name": "good.csv", "size": 7, "download_url": "` + server.URL + `/files/1"}]}`))
+	}))
+	defer server.Close()
+
+	d := NewFigshareDownloader(WithVerbose(true), WithHTTPClient(&http.Client{Transport: &mockFigshareTransport{server: server}}))
+	outDir := t.TempDir()
+	req := func(opts *downloaders.DownloadOptions) *downloaders.DownloadRequest {
+		return &downloaders.DownloadRequest{ID: "1", OutputDir: outDir, Options: opts,
+			Metadata: &downloaders.Metadata{Source: "figshare", ID: "1"}}
+	}
+	if res, err := d.Download(context.Background(), req(&downloaders.DownloadOptions{NonInteractive: true})); err != nil || !res.Success {
+		t.Fatalf("first run: err=%v res=%+v", err, res)
+	}
+	res, err := d.Download(context.Background(), req(&downloaders.DownloadOptions{SkipExisting: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FilesSkipped != 1 || len(res.Files) != 1 || !res.Files[0].Skipped || res.BytesDownloaded != 0 {
+		t.Fatalf("skip run: %+v", res)
+	}
+}
