@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-07
+
+### Added
+
+- **CELLxGENE Discover:** `hapiq download cellxgene <uuid|url>` fetches a
+  collection (every dataset) or a dataset (latest version) through the
+  curation API. `--subset` takes dataset IDs, `--organism` filters datasets,
+  file sizes are checked against the API, and `hapiq.json` pins the version
+  ID so `refetch` gets the same files. `hapiq search cellxgene` matches
+  every word against title, collection name and description, tissue, disease
+  and cell type; `--type` filters on assay.
+
+### Changed
+
+- **`hapiq.json` paths are relative to its folder.** Some sources recorded
+  absolute paths or paths relative to the working directory, which broke
+  `refetch` and `manifest gen` after a `cd` or a moved folder. Older records
+  are rewritten the next time a download merges into them.
+- **`manifest get --timeout` is a stall limit**, as for `download`, not a
+  deadline for the whole run (300 s by default).
+
 ### Fixed
 
 - **`hapiq.json` lists files skipped as already present.** With
@@ -13,13 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   on disk was left out, so a resumed download recorded only what it fetched
   after the interruption. Skipped files keep the checksum an earlier run
   recorded, and the summary reports them as "already present".
-- **`hapiq.json` paths are relative to its folder.** Some sources recorded
-  absolute paths or paths relative to the working directory, which broke
-  `refetch` and `manifest gen` after a `cd` or a moved folder.
 - **`manifest gen` keeps the recorded filters**, so `manifest get` no longer
   re-downloads the whole record instead of the filtered files.
-- **`manifest get --timeout` is a stall limit**, as for `download`, not a
-  deadline for the whole run (300 s by default).
 - **Ensembl:** downloads of several files no longer drop about half of them
   from the result and `hapiq.json`.
 
@@ -172,7 +188,8 @@ First tagged release. Earlier builds were published only as
   when stdin closes at the prompt, it falls back to the `-y` behaviour instead
   of failing with EOF.
 
-[Unreleased]: https://github.com/btraven00/hapiq/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/btraven00/hapiq/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/btraven00/hapiq/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/btraven00/hapiq/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/btraven00/hapiq/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/btraven00/hapiq/compare/v0.1.0...v0.1.1
