@@ -899,3 +899,33 @@ func TestZenodoDownloader_VerifiesMD5(t *testing.T) {
 		t.Errorf("mismatched data.csv left on disk (stat err=%v)", err)
 	}
 }
+
+// Regression: a file already on disk under --skip-existing is listed in
+// result.Files, marked Skipped, and counted as skipped rather than downloaded.
+func TestZenodoDownloader_SkipExistingListsFile(t *testing.T) {
+	server := mockZenodoServer()
+	defer server.Close()
+
+	d := NewZenodoDownloader(WithVerbose(true))
+	d.apiURL = server.URL + "/api/records"
+	d.baseURL = server.URL
+	out := t.TempDir()
+	req := &downloaders.DownloadRequest{ID: "123456", OutputDir: out}
+	first, err := d.Download(context.Background(), req)
+	if err != nil || !first.Success {
+		t.Fatalf("first run: err=%v errors=%v", err, first.Errors)
+	}
+	req.Options = &downloaders.DownloadOptions{SkipExisting: true}
+	res, err := d.Download(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FilesSkipped != len(first.Files) || len(res.Files) != len(first.Files) || res.BytesDownloaded != 0 {
+		t.Fatalf("skip run: skipped=%d files=%d bytes=%d, want %d skipped", res.FilesSkipped, len(res.Files), res.BytesDownloaded, len(first.Files))
+	}
+	for _, f := range res.Files {
+		if !f.Skipped {
+			t.Errorf("%s not marked Skipped", f.OriginalName)
+		}
+	}
+}

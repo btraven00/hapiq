@@ -8,10 +8,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/btraven00/hapiq/pkg/cache"
+	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
 // TestSRADownloadWithMD5HonorsCache verifies that SRADownloader.downloadWithMD5
@@ -113,5 +115,49 @@ func TestSRADownloadWithMD5Truncated(t *testing.T) {
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
 		t.Fatalf("truncated file left at dest (stat err=%v)", err)
+	}
+}
+
+// rewriteTransport sends every request to srv, whatever host it names.
+type rewriteTransport struct{ srv *httptest.Server }
+
+func (t rewriteTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.URL.Scheme, r.URL.Host = "http", strings.TrimPrefix(t.srv.URL, "http://")
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// A file already on disk under SkipExisting comes back as Skipped and counted.
+func TestSRADownloadSkipExistingReportsFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ena/portal/api/filereport" {
+			t.Errorf("unexpected fetch %s", r.URL)
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("run_accession\tfastq_ftp\tfastq_md5\tfastq_bytes\n" +
+			"SRR1\tftp.sra.ebi.ac.uk/vol1/SRR1/SRR1_1.fastq.gz\tabc\t4\n"))
+	}))
+	t.Cleanup(srv.Close)
+
+	out := t.TempDir()
+	target := filepath.Join(out, "SRR1", "SRR1_1.fastq.gz")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("have"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := NewSRADownloader(WithVerbose(true))
+	d.client = &http.Client{Transport: rewriteTransport{srv}}
+	res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID: "SRR1", OutputDir: out, Options: &downloaders.DownloadOptions{SkipExisting: true, IncludeRaw: true},
+	})
+	if err != nil || !res.Success {
+		t.Fatalf("err=%v errors=%v", err, res.Errors)
+	}
+	if len(res.Files) != 1 || !res.Files[0].Skipped || res.Files[0].Path != target || res.FilesSkipped != 1 {
+		t.Fatalf("files=%+v skipped=%d, want one skipped %s", res.Files, res.FilesSkipped, target)
 	}
 }

@@ -210,3 +210,21 @@ func TestWriteWitnessFileSkippedKeepsPrevChecksum(t *testing.T) {
 		t.Errorf("files = %+v, want prev's checksums kept", got.Files)
 	}
 }
+
+// relativePaths leaves paths alone when they cannot be resolved: an empty
+// path, or any path once the working directory is gone (filepath.Abs fails).
+func TestRelativePathsUnresolvable(t *testing.T) {
+	gone := t.TempDir()
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	abs := t.TempDir()
+
+	files := []downloaders.FileWitness{{Path: ""}, {Path: "x"}}
+	relativePaths(abs, files)   // absolute folder, relative path: Abs(path) fails
+	relativePaths("rel", files) // relative folder: Abs(folder) fails
+	if files[0].Path != "" || files[1].Path != "x" {
+		t.Fatalf("paths changed: %+v", files)
+	}
+}

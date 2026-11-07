@@ -217,3 +217,33 @@ func TestSearch(t *testing.T) {
 		t.Error("--organism should be refused, not silently ignored")
 	}
 }
+
+// Files already on disk under SkipExisting come back Skipped, with repo paths.
+func TestDownloadSkipExistingReportsFiles(t *testing.T) {
+	d := newTestDownloader(fakeHub(t, false, false))
+	d.verbose = true
+	out := t.TempDir()
+	for p, body := range map[string]string{"data/train.h5ad": "anndata bytes", "README.md": "# cells\n"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(out, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(out, p), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID: testRepo, OutputDir: out, Metadata: &downloaders.Metadata{},
+		Options: &downloaders.DownloadOptions{SkipExisting: true},
+	})
+	if err != nil || !res.Success {
+		t.Fatalf("err=%v errors=%v", err, res.Errors)
+	}
+	if len(res.Files) != 2 || res.FilesSkipped != 2 {
+		t.Fatalf("files=%+v skipped=%d, want 2 skipped", res.Files, res.FilesSkipped)
+	}
+	for _, f := range res.Files {
+		if !f.Skipped || (f.Path != "data/train.h5ad" && f.Path != "README.md") {
+			t.Errorf("file %+v: want Skipped with repo-relative path", f)
+		}
+	}
+}

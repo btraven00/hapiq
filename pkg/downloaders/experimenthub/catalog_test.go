@@ -3,6 +3,7 @@ package experimenthub
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -89,5 +90,34 @@ func TestSearchReportsAHID(t *testing.T) {
 	}
 	if want := []string{"EH2517", "EH3796", "EH3760"}; !slices.Equal(ids, want) {
 		t.Errorf("accessions = %v, want %v", ids, want)
+	}
+}
+
+// Files already on disk under SkipExisting come back Skipped and counted,
+// without contacting the hub.
+func TestDownloadSkipExistingReportsFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeCatalog(t, dir)
+	t.Setenv(envMetadataDir, dir)
+
+	out := t.TempDir()
+	for _, n := range []string{"a.h5", "b.rds"} {
+		if err := os.WriteFile(filepath.Join(out, n), []byte("have"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := NewExperimentHubDownloader(WithVerbose(true))
+	res, err := d.Download(context.Background(), &downloaders.DownloadRequest{
+		ID: "EH2517", OutputDir: out, Metadata: &downloaders.Metadata{},
+		Options: &downloaders.DownloadOptions{SkipExisting: true},
+	})
+	if err != nil || !res.Success {
+		t.Fatalf("err=%v errors=%v", err, res.Errors)
+	}
+	if len(res.Files) != 2 || res.FilesSkipped != 2 || !res.Files[0].Skipped || !res.Files[1].Skipped {
+		t.Fatalf("files=%+v skipped=%d, want 2 skipped", res.Files, res.FilesSkipped)
+	}
+	if res.WitnessFile == "" {
+		t.Errorf("no witness written: %v", res.Warnings)
 	}
 }

@@ -356,3 +356,23 @@ func TestChildURL(t *testing.T) {
 		}
 	}
 }
+
+// Regression: re-running a directory download with --skip-existing lists the
+// files already present instead of dropping them from hapiq.json.
+func TestDownload_DirectorySkipExisting(t *testing.T) {
+	srv := dirServer(t)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(WithTimeout(5 * time.Second))
+	if _, err := d.Download(context.Background(), newRequest(dir, srv.URL+"/data/", nil)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := d.Download(context.Background(), newRequest(dir, srv.URL+"/data/", &downloaders.DownloadOptions{SkipExisting: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || result.FilesSkipped != len(fixtureFiles) || len(result.Files) != len(fixtureFiles) || result.BytesDownloaded != 0 || result.BytesTotal == 0 {
+		t.Fatalf("skip run: %+v", result)
+	}
+}

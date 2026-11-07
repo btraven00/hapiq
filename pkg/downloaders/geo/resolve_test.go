@@ -4,9 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/btraven00/hapiq/pkg/downloaders"
 )
 
 // mockNCBITransport redirects both eutils.ncbi.nlm.nih.gov and
@@ -266,4 +270,64 @@ func TestResolveGSEToSRARuns_Integration_GSE133344(t *testing.T) {
 		t.Fatal("first run has empty RunAccession")
 	}
 	t.Logf("First run: %s (experiment %s)", runs[0].RunAccession, runs[0].Experiment)
+}
+
+// enaTransport sends www.ebi.ac.uk requests to srv and everything else to base.
+type enaTransport struct {
+	srv  *httptest.Server
+	base http.RoundTripper
+}
+
+func (t enaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == "www.ebi.ac.uk" {
+		req = req.Clone(req.Context())
+		req.URL.Scheme, req.URL.Host = "http", strings.TrimPrefix(t.srv.URL, "http://")
+	}
+	return t.base.RoundTrip(req)
+}
+
+// downloadSRA carries the SRA downloader's FilesSkipped into the GEO result.
+func TestDownloadSRACountsSkippedFiles(t *testing.T) {
+	elink := `<eLinkResult><LinkSet><DbFrom>gds</DbFrom><LinkSetDb><DbTo>sra</DbTo>
+<LinkName>gds_sra</LinkName><Link><Id>9988776</Id></Link></LinkSetDb></LinkSet></eLinkResult>`
+	summary := `<eSummaryResult><DocSum><Id>9988776</Id>
+<Item Name="Runs" Type="String"><![CDATA[<Run acc="SRR9602561"/>]]></Item>
+<Item Name="ExpXml" Type="String"><![CDATA[<Experiment acc="SRX6367795"/>]]></Item>
+</DocSum></eSummaryResult>`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/ena/portal/api/filereport":
+			_, _ = w.Write([]byte("run_accession\tfastq_ftp\tfastq_md5\tfastq_bytes\n" +
+				"SRR9602561\tftp.sra.ebi.ac.uk/vol1/SRR9602561_1.fastq.gz\tabc\t4\n"))
+		case strings.Contains(r.URL.Path, "elink"):
+			_, _ = w.Write([]byte(elink))
+		default:
+			_, _ = w.Write([]byte(summary))
+		}
+	}))
+	defer server.Close()
+
+	// The SRA downloader is built inside downloadSRA on the default transport.
+	orig := http.DefaultTransport
+	http.DefaultTransport = enaTransport{srv: server, base: orig}
+	t.Cleanup(func() { http.DefaultTransport = orig })
+
+	out := t.TempDir()
+	target := filepath.Join(out, "SRR9602561", "SRR9602561_1.fastq.gz")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("have"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d := newTestDownloaderWithServer(server)
+	result := &downloaders.DownloadResult{}
+	opts := &downloaders.DownloadOptions{SkipExisting: true, IncludeRaw: true}
+	if err := d.downloadSRA(context.Background(), "GSE133344", out, "200133344", opts, result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Files) != 1 || !result.Files[0].Skipped || result.FilesSkipped != 1 {
+		t.Fatalf("files=%+v skipped=%d warnings=%v, want one skipped", result.Files, result.FilesSkipped, result.Warnings)
+	}
 }
