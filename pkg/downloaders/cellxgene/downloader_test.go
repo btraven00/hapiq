@@ -233,7 +233,7 @@ func TestDownloadPaths(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(out, dsVer+".h5ad"), []byte("old"), 0o600)
 	_ = os.Mkdir(filepath.Join(out, "hapiq.json"), 0o700)
 	res, _ = d.Download(ctx, req(out, &downloaders.DownloadOptions{SkipExisting: true, Subset: []string{dsVer}}))
-	if res.FilesSkipped != 1 || len(res.Files) != 0 {
+	if res.FilesSkipped != 1 || len(res.Files) != 1 || !res.Files[0].Skipped || res.BytesTotal != 3 || res.BytesDownloaded != 0 {
 		t.Fatalf("skip existing: %+v", res)
 	}
 	res, _ = d.Download(ctx, req(out, &downloaders.DownloadOptions{Subset: []string{dsID}}))

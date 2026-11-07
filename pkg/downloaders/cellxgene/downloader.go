@@ -200,7 +200,8 @@ func (d *Downloader) Download(ctx context.Context, req *downloaders.DownloadRequ
 	for _, f := range selected {
 		target := filepath.Join(req.OutputDir, f.name)
 		if opts.SkipExisting {
-			if _, err := os.Stat(target); err == nil {
+			if fi, ok := common.SkippedFile(target, f.name, f.a.URL); ok {
+				result.Files = append(result.Files, fi)
 				result.FilesSkipped++
 				continue
 			}
@@ -228,6 +229,11 @@ func (d *Downloader) Download(ctx context.Context, req *downloaders.DownloadRequ
 
 	result.Duration = time.Since(start)
 	result.BytesTotal = result.BytesDownloaded
+	for _, f := range result.Files {
+		if f.Skipped {
+			result.BytesTotal += f.Size
+		}
+	}
 	result.Success = len(result.Errors) == 0
 
 	if req.Metadata != nil && len(result.Files) > 0 {
@@ -245,7 +251,7 @@ func (d *Downloader) Download(ctx context.Context, req *downloaders.DownloadRequ
 				BytesTotal:      result.BytesTotal,
 				BytesDownloaded: result.BytesDownloaded,
 				FilesTotal:      len(selected),
-				FilesDownloaded: len(result.Files),
+				FilesDownloaded: len(result.Files) - result.FilesSkipped,
 				FilesSkipped:    result.FilesSkipped,
 				FilesFailed:     len(result.Errors),
 				AverageSpeed:    downloaders.Speed(result.BytesDownloaded, result.Duration),
