@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`hapiq.json` lists files skipped as already present.** With
+  `--skip-existing` (always on in `manifest get` and `refetch`) a file already
+  on disk was left out, so a resumed download recorded only what it fetched
+  after the interruption. Skipped files keep the checksum an earlier run
+  recorded, and the summary reports them as "already present".
+- **`hapiq.json` paths are relative to its folder.** Some sources recorded
+  absolute paths or paths relative to the working directory, which broke
+  `refetch` and `manifest gen` after a `cd` or a moved folder.
+- **`manifest gen` keeps the recorded filters**, so `manifest get` no longer
+  re-downloads the whole record instead of the filtered files.
+- **`manifest get --timeout` is a stall limit**, as for `download`, not a
+  deadline for the whole run (300 s by default).
+- **Ensembl:** downloads of several files no longer drop about half of them
+  from the result and `hapiq.json`.
+
 ## [0.1.3] - 2026-10-28
 
 ### Added
