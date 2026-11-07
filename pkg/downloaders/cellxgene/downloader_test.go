@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 )
@@ -114,5 +115,129 @@ func TestCellxgene(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "mv.h5ad")); err == nil {
 		t.Fatal("bad file left behind")
+	}
+}
+
+// stub serves routes: an int is a status code, a string a raw body, anything
+// else JSON. Unknown paths are 404.
+func stub(t *testing.T, routes map[string]any) *Downloader {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch v := routes[r.URL.Path].(type) {
+		case nil:
+			http.NotFound(w, r)
+		case int:
+			w.WriteHeader(v)
+		case string:
+			_, _ = w.Write([]byte(v))
+		default:
+			_ = json.NewEncoder(w).Encode(v)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return New(WithBaseURL(srv.URL), WithTimeout(time.Second), WithVerbose(true))
+}
+
+func TestResolveFallbacks(t *testing.T) {
+	ctx := context.Background()
+	doi := "10.1/x"
+	d := stub(t, map[string]any{
+		"/collection_versions/" + collVer: collection{CollectionID: collID, DOI: &doi},
+		"/dataset_versions/" + dsVer:      dataset{DatasetVersionID: dsVer, Title: "v"},
+		"/datasets/" + dsID + "/versions": []dataset{},
+	})
+	// Collection version without a version ID in the body: pin the UUID asked for.
+	r, err := d.resolve(ctx, collVer)
+	if err != nil || r.Kind != "collection" || r.PinnedID != collVer || r.DOI != doi {
+		t.Fatalf("collection version: %+v, %v", r, err)
+	}
+	if r, err = d.resolve(ctx, dsVer); err != nil || r.Kind != "dataset" || r.PinnedID != dsVer {
+		t.Fatalf("dataset version: %+v, %v", r, err)
+	}
+	// A dataset with no versions falls through to "not found".
+	if _, err = d.resolve(ctx, dsID); err == nil {
+		t.Fatal("dataset with no versions resolved")
+	}
+	if v, _ := d.Validate(ctx, dsVer); !v.Valid {
+		t.Fatalf("validate: %+v", v)
+	}
+	if _, err := d.GetMetadata(ctx, "nope"); err == nil {
+		t.Fatal("metadata for garbage ID")
+	}
+}
+
+func TestAPIErrors(t *testing.T) {
+	ctx := context.Background()
+	for name, routes := range map[string]map[string]any{
+		"429 on collections":     {"/collections/" + collID: http.StatusTooManyRequests},
+		"500 on versions":        {"/collection_versions/" + collID: http.StatusInternalServerError},
+		"bad JSON on dataset":    {"/datasets/" + collID + "/versions": "{"},
+		"500 on dataset version": {"/dataset_versions/" + collID: http.StatusBadGateway},
+	} {
+		if _, err := stub(t, routes).resolve(ctx, collID); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	if _, err := New(WithBaseURL("http://\x7f")).resolve(ctx, collID); err == nil {
+		t.Error("bad base URL: no error")
+	}
+	if _, err := New(WithBaseURL("http://127.0.0.1:1")).resolve(ctx, collID); err == nil {
+		t.Error("unreachable API: no error")
+	}
+	if _, err := stub(t, map[string]any{"/datasets": 500, "/collections": []collection{}}).Search(ctx, "", downloaders.SearchOptions{}); err == nil {
+		t.Error("search: /datasets error swallowed")
+	}
+	if _, err := stub(t, map[string]any{"/datasets": []dataset{}, "/collections": 500}).Search(ctx, "", downloaders.SearchOptions{}); err == nil {
+		t.Error("search: /collections error swallowed")
+	}
+}
+
+func TestSearchFilters(t *testing.T) {
+	ds := []dataset{
+		{DatasetID: "a", Assay: []label{{"10x 3' v3"}, {"Smart-seq2"}}, PublishedAt: "2024-01-02T00:00:00"},
+		{DatasetID: "b", Assay: []label{{"Smart-seq2"}}},
+		{DatasetID: "c", Assay: []label{{"10x 3' v2"}}},
+	}
+	d := stub(t, map[string]any{"/datasets": ds, "/collections": []collection{}})
+	hits, err := d.Search(context.Background(), "", downloaders.SearchOptions{EntryType: "10X", Limit: 1})
+	if err != nil || len(hits) != 1 || hits[0].Accession != "a" || hits[0].EntryType != "10x 3' v3 +1" || hits[0].Date != "2024-01-02" {
+		t.Fatalf("search: %+v, %v", hits, err)
+	}
+}
+
+func TestDownloadPaths(t *testing.T) {
+	ctx := context.Background()
+	d := New(WithBaseURL(fakeAPI(t).URL), WithVerbose(true))
+	req := func(out string, o *downloaders.DownloadOptions) *downloaders.DownloadRequest {
+		return &downloaders.DownloadRequest{ID: collID, OutputDir: out, Options: o, Metadata: &downloaders.Metadata{}}
+	}
+
+	if res, _ := d.Download(ctx, &downloaders.DownloadRequest{ID: "nope"}); res.Success || len(res.Errors) != 1 {
+		t.Fatalf("bad ID: %+v", res)
+	}
+	// Dry run with a file limit.
+	res, _ := d.Download(ctx, req("", &downloaders.DownloadOptions{DryRun: true, LimitFiles: 1}))
+	if !res.Success || len(res.Files) != 1 || res.Files[0].Size != 5 {
+		t.Fatalf("dry run: %+v", res)
+	}
+
+	// Output dir under a regular file cannot be created.
+	f := filepath.Join(t.TempDir(), "file")
+	_ = os.WriteFile(f, nil, 0o600)
+	if res, _ := d.Download(ctx, req(filepath.Join(f, "sub"), nil)); res.Success {
+		t.Fatal("unwritable output dir accepted")
+	}
+
+	// Existing file is skipped; hapiq.json as a directory makes the witness a warning.
+	out := t.TempDir()
+	_ = os.WriteFile(filepath.Join(out, dsVer+".h5ad"), []byte("old"), 0o600)
+	_ = os.Mkdir(filepath.Join(out, "hapiq.json"), 0o700)
+	res, _ = d.Download(ctx, req(out, &downloaders.DownloadOptions{SkipExisting: true, Subset: []string{dsVer}}))
+	if res.FilesSkipped != 1 || len(res.Files) != 0 {
+		t.Fatalf("skip existing: %+v", res)
+	}
+	res, _ = d.Download(ctx, req(out, &downloaders.DownloadOptions{Subset: []string{dsID}}))
+	if !res.Success || len(res.Warnings) != 1 || res.WitnessFile != "" {
+		t.Fatalf("witness failure: %+v", res)
 	}
 }
