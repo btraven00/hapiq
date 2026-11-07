@@ -50,6 +50,7 @@ var cachePatternByDownloader = map[string]string{
 	// `cache serve` cannot share them; open datasets are cached as usual.
 	"huggingface.New": "common.Fetch",
 	"tenx.New":        "common.Fetch",
+	"cellxgene.New":   "common.Fetch",
 }
 
 // TestRegistryCoverage scans cmd/download.go for every constructor call that

@@ -1,0 +1,20 @@
+# Expected values: sizes from the curation API
+# https://api.cellxgene.cziscience.com/curation/v1/collections/0d281971-11ea-4f85-9c0f-a3a4a7b4f888
+# and sha256sum of a curl download of each asset URL, 2026-11-07.
+# The asset files are named by dataset version ID, so they never change in place.
+
+- name: cellxgene-001-collection-url
+  why: a Discover URL resolves to the collection; both datasets, witness pinned to the collection version
+  steps:
+    - run: hapiq download cellxgene https://cellxgene.cziscience.com/collections/0d281971-11ea-4f85-9c0f-a3a4a7b4f888 --out $OUT -y
+      files:
+        - {path: 7ce226c8-98ba-47b5-af16-3f88fbbb695f.h5ad, size: 5191806, sha256: 097b20bf853eca5d9ce26369a83cd83f9653218ba764fe13aaa7120e4638bc2c}
+        - {path: f3437caa-158d-4d2e-936b-de5dd0a2acfb.h5ad, size: 15227502, sha256: ef491eeec0ea62952e7782858bfc7f095106673efc06f5a78190c90d77e2192f}
+      witness: {source: cellxgene, files.#: 2}
+
+- name: cellxgene-002-dataset-subset
+  why: --subset picks one dataset by dataset_id out of the collection
+  steps:
+    - run: hapiq download cellxgene 0d281971-11ea-4f85-9c0f-a3a4a7b4f888 --subset b9735320-2e2f-4f44-81ff-b6cac7381dc5 --out $OUT -y
+      only: ["7ce226c8-98ba-47b5-af16-3f88fbbb695f.h5ad", hapiq.json]
+      witness: {source: cellxgene, files.#: 1}
