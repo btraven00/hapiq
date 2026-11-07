@@ -24,7 +24,7 @@ hapiq download geo GSE133344 --out ./data --include-ext .h5ad,.csv.gz
 ```
 
 Sources: GEO, SRA/ENA, Zenodo, Figshare, Ensembl, CZI VCP, scPerturb,
-BioStudies, Human Cell Atlas, ExperimentHub, Hugging Face, 10x Genomics and
+BioStudies, Human Cell Atlas, CELLxGENE Discover, ExperimentHub, Hugging Face, 10x Genomics and
 plain URLs. Run `hapiq downloaders` for IDs and examples.
 
 Each download writes a `hapiq.json` with metadata and per-file SHA-256, so the

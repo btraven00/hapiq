@@ -70,6 +70,7 @@ for f in result.files:
 | `scperturb` | dataset name | ✓ |
 | `biostudies` | `S-BSST123` | |
 | `hca` | project UUID | |
+| `cellxgene` | collection or dataset UUID | ✓ |
 | `vcp` | dataset ID | ✓ |
 
 ## API reference

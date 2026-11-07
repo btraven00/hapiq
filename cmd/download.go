@@ -18,6 +18,7 @@ import (
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
 	"github.com/btraven00/hapiq/pkg/downloaders/biostudies"
+	"github.com/btraven00/hapiq/pkg/downloaders/cellxgene"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/ensembl"
 	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
@@ -78,6 +79,7 @@ Supported sources:
   experimenthub - Bioconductor ExperimentHub (EH<digits>)
   biostudies  - EBI BioStudies (S-<COLL><digits>, E-<TYPE>-<digits>)
   hca         - Human Cell Atlas Data Portal (project UUID)
+  cellxgene   - CZ CELLxGENE Discover (collection or dataset UUID, or Discover URL)
   scanpy      - Curated scanpy.datasets entries (e.g. pbmc3k, paul15, visium_sge/<sample_id>, ebi_expression_atlas/<accession>)
   url         - Direct HTTP/HTTPS download (URL is the ID)
 
@@ -91,6 +93,7 @@ Examples:
   hapiq download zenodo 10.5281/zenodo.123456 --out ./data --quiet
   hapiq download biostudies S-BSST1502 --out ./data
   hapiq download biostudies E-MTAB-8077 --out ./data --include-ext .mtx,.h5,.h5ad
+  hapiq download cellxgene 0d281971-11ea-4f85-9c0f-a3a4a7b4f888 --out ./data
   hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad
   hapiq download url https://example.com/data.h5ad --out ./data
   hapiq download scanpy pbmc3k --out ./data
@@ -565,6 +568,15 @@ func initializeDownloaders() error {
 	)
 	if err := downloaders.Register(hcaDownloader); err != nil {
 		return fmt.Errorf("failed to register HCA downloader: %w", err)
+	}
+
+	// Register CELLxGENE Discover downloader
+	cxgDownloader := cellxgene.New(
+		cellxgene.WithVerbose(!quiet),
+		cellxgene.WithTimeout(time.Duration(downloadTimeout)*time.Second),
+	)
+	if err := downloaders.Register(cxgDownloader); err != nil {
+		return fmt.Errorf("failed to register CELLxGENE downloader: %w", err)
 	}
 
 	// Register BioStudies downloader (EBI BioStudies)

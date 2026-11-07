@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/btraven00/hapiq/pkg/downloaders"
+	"github.com/btraven00/hapiq/pkg/downloaders/cellxgene"
 	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 	"github.com/btraven00/hapiq/pkg/downloaders/geo"
@@ -41,6 +42,8 @@ Supported sources:
   geo  - NCBI Gene Expression Omnibus (uses eutils esearch/esummary)
   vcp  - CZI Virtual Cell Platform (VCP); set VCP_TOKEN for private datasets
   scperturb - scPerturb harmonised perturbation datasets
+  cellxgene - CZ CELLxGENE Discover datasets (title, collection, tissue,
+         disease, cell type); --type filters on assay
   experimenthub - Bioconductor ExperimentHub (uses cached metadata sqlite)
   hf   - Hugging Face Hub datasets, most downloaded first; --type is a Hub tag
          (e.g. modality:tabular); set HF_TOKEN to include private datasets
@@ -51,6 +54,7 @@ Examples:
   hapiq search vcp "Perturb-Seq" --limit 10
   hapiq search vcp "Perturb-Seq" --assay "Perturb-Seq" --organism "Homo sapiens"
   hapiq search scperturb RPE1
+  hapiq search cellxgene "lung" --organism "Homo sapiens" --type "10x 3'"
   hapiq search vcp "Perturb-Seq" -q | xargs -I{} hapiq download vcp {} --out ./data`,
 	Args: cobra.ExactArgs(2),
 	RunE: runSearch,
@@ -91,6 +95,9 @@ func runSearch(_ *cobra.Command, args []string) error {
 		}
 		d = vcp.NewVCPDownloader(cziOpts...)
 
+	case "cellxgene":
+		d = cellxgene.New(cellxgene.WithTimeout(time.Duration(defaultCheckTimeoutSec) * time.Second))
+
 	case "scperturb":
 		d = scperturb.NewScPerturbDownloader(
 			scperturb.WithVerbose(false),
@@ -114,7 +121,7 @@ func runSearch(_ *cobra.Command, args []string) error {
 		)
 
 	default:
-		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb', 'experimenthub', 'hf'; got %q", sourceType)
+		return fmt.Errorf("search is supported for 'geo', 'vcp', 'scperturb', 'cellxgene', 'experimenthub', 'hf'; got %q", sourceType)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -187,7 +194,7 @@ func printSearchTable(results []downloaders.SearchResult, src string) error {
 			}
 			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\n", r.Accession, title, access, r.Downloads, r.Date)
 		}
-	} else if src == "vcp" || src == "scperturb" {
+	} else if src == "vcp" || src == "scperturb" || src == "cellxgene" {
 		_, _ = fmt.Fprintln(w, "ACCESSION\tTITLE\tORGANISM\tASSAY\tSIZE")
 		_, _ = fmt.Fprintln(w, "---------\t-----\t--------\t-----\t----")
 		for _, r := range results {

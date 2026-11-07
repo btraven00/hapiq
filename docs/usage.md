@@ -13,6 +13,7 @@
 | `scperturb` | `AuthorYear` or `AuthorYear_SubsetID` (e.g. `NormanWeissman2019`) | scPerturb compendium (Peidli et al., Nature Methods 2024); files via Zenodo |
 | `biostudies` | `S-<COLLECTION><digits>`, `E-<TYPE>-<digits>` (e.g. `S-BSST1502`, `E-MTAB-8077`) | EBI BioStudies; combine with `--include-ext` / `--filename-glob` to target count matrices |
 | `hca` | HCA project UUID (e.g. `cc95ff89-2e68-4a08-a234-480eca21ce79`) | Human Cell Atlas via Azul; serves DCP-processed and contributor matrices (loom, h5, h5ad) |
+| `cellxgene` | Collection or dataset UUID, a version UUID of either, or a Discover URL (e.g. `0d281971-11ea-4f85-9c0f-a3a4a7b4f888`) | CZ CELLxGENE Discover; a collection fetches every dataset, a dataset its latest version; the witness pins the version. `--subset` takes dataset IDs, `--organism` filters datasets |
 | `experimenthub` | `EH<digits>` (e.g. `EH1039`) | Bioconductor ExperimentHub; metadata catalog cached locally for a week |
 | `hf` | `<owner>/<name>` or `<owner>/<name>@<revision>` (e.g. `scikit-learn/iris`) | Hugging Face Hub datasets; the revision is pinned to a commit and every file is checked against the Hub's sha256 / git hash. Set `HF_TOKEN` for gated or private datasets; their files are never cached or shared with LAN peers |
 | `10x` | Dataset slug from the page URL (e.g. `10k-hgmm-5p-gemx`), `<slug>@<timestamp>`, or a saved page | 10x Genomics example datasets; every file checked against the md5 10x publishes |
@@ -30,7 +31,7 @@ Search for datasets using a repository's native query API.
 hapiq search <source> <query> [flags]
 ```
 
-Supported sources: `geo`, `vcp`, `scperturb`, `experimenthub`, `hf`
+Supported sources: `geo`, `vcp`, `scperturb`, `cellxgene`, `experimenthub`, `hf`
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -57,6 +58,7 @@ hapiq search vcp "norman" --limit 10
 hapiq search vcp "Perturb-Seq" --organism "Homo sapiens" --type "Perturb-Seq"
 
 hapiq search scperturb "CRISPR" --limit 10
+hapiq search cellxgene "lung" --organism "Homo sapiens" --type "10x 3'"
 hapiq search scperturb "pancreas" --organism "Homo sapiens" --type "Perturb-seq"
 
 hapiq search hf "single-cell" --limit 10          # most downloaded first
