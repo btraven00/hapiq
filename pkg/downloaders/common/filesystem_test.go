@@ -228,3 +228,14 @@ func TestRelativePathsUnresolvable(t *testing.T) {
 		t.Fatalf("paths changed: %+v", files)
 	}
 }
+
+// A directory or a missing path is not a skipped file.
+func TestSkippedFileNotAFile(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := SkippedFile(dir, "d", ""); ok {
+		t.Error("directory reported as a skipped file")
+	}
+	if _, ok := SkippedFile(filepath.Join(dir, "missing"), "m", ""); ok {
+		t.Error("missing path reported as a skipped file")
+	}
+}

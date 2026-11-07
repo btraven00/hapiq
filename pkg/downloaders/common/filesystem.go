@@ -278,7 +278,16 @@ func CalculateFileChecksum(filePath string) (string, error) {
 // there, so a file left in place under SkipExisting still reaches hapiq.json.
 func SkippedFile(path, originalName, sourceURL string) (downloaders.FileInfo, bool) {
 	st, err := os.Stat(path)
-	if err != nil || st.IsDir() {
+	if err != nil {
+		return downloaders.FileInfo{}, false
+	}
+	return SkippedFileFromStat(path, originalName, sourceURL, st)
+}
+
+// SkippedFileFromStat is SkippedFile for a caller that already has the file's
+// stat, e.g. from an os.Root that confines a remote-supplied name.
+func SkippedFileFromStat(path, originalName, sourceURL string, st os.FileInfo) (downloaders.FileInfo, bool) {
+	if st.IsDir() {
 		return downloaders.FileInfo{}, false
 	}
 	return downloaders.FileInfo{
