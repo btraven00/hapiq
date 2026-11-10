@@ -170,8 +170,22 @@ func checkPaths(ctx context.Context, r remote.Remote, loc remote.Location, files
 }
 
 // fetchLocked downloads a locked dataset from the first of its remotes whose
-// files all match the lock, and writes hapiq.json as a download would.
+// files all match the lock, and writes hapiq.json as a download would. Files
+// already staged under $HAPIQ_STAGED/<digest>/ (a job's mounted inputs) are
+// linked instead, with no remote call.
 func fetchLocked(ctx context.Context, e *remote.Entry, dir string, opts *downloaders.DownloadOptions) (remote.Location, error) {
+	if root := os.Getenv("HAPIQ_STAGED"); root != "" {
+		src := filepath.Join(root, e.Digest)
+		err := remote.Verify(src, e.Files)
+		if err == nil {
+			err = linkFiles(src, dir, e.Files)
+		}
+		if err == nil {
+			loc := remote.Location{Type: "staged", ID: src}
+			return loc, writeLockedWitness(e, dir, loc, opts)
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "⚠️  staged copy: %v\n", err)
+	}
 	var lastErr error
 	for _, loc := range e.Remotes {
 		r, err := remote.Open(loc.Type)
@@ -253,4 +267,23 @@ func lockedResult(e *remote.Entry, dir string) *downloaders.DownloadResult {
 		res.BytesDownloaded += f.Size
 	}
 	return res
+}
+
+// linkFiles symlinks each file of src into dir, at the same relative path.
+func linkFiles(src, dir string, files []remote.File) error {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		to := filepath.Join(dir, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(to), 0o750); err != nil {
+			return err
+		}
+		_ = os.Remove(to)
+		if err := os.Symlink(filepath.Join(abs, filepath.FromSlash(f.Path)), to); err != nil {
+			return err
+		}
+	}
+	return nil
 }
