@@ -61,12 +61,12 @@ func New(opts ...Option) *URLDownloader {
 // GetSourceType returns the source identifier.
 func (d *URLDownloader) GetSourceType() string { return "url" }
 
-// Validate checks that id is a valid http or https URL.
+// Validate checks that id is a valid http, https or ftp URL.
 func (d *URLDownloader) Validate(_ context.Context, id string) (*downloaders.ValidationResult, error) {
 	result := &downloaders.ValidationResult{ID: id, SourceType: d.GetSourceType()}
 	u, err := url.ParseRequestURI(id)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		result.Errors = []string{fmt.Sprintf("not a valid http/https URL: %q", id)}
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "ftp") || u.Host == "" {
+		result.Errors = []string{fmt.Sprintf("not a valid http, https or ftp URL: %q", id)}
 		return result, nil
 	}
 	result.Valid = true

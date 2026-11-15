@@ -84,7 +84,7 @@ hapiq download <url> --out <dir> [flags]
 With one argument, the source and ID are read from a repository URL, e.g.
 `https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-14004` becomes
 `biostudies E-MTAB-14004` (also GEO, SRA/ENA, Zenodo, Figshare, Hugging Face
-and CELLxGENE pages). Any other http(s) URL uses the `url` source.
+and CELLxGENE pages). Any other http(s) URL, and any `ftp://` file URL, uses the `url` source.
 
 ### Required
 
