@@ -63,10 +63,14 @@ var (
 
 // downloadCmd represents the download command.
 var downloadCmd = &cobra.Command{
-	Use:   "download <source> <id>",
+	Use:   "download (<source> <id> | <url>)",
 	Short: "Download datasets from scientific data repositories",
 	Long: `Download datasets from various scientific data repositories with comprehensive
 metadata tracking and provenance information.
+
+With a single argument, the source and ID are read from a repository URL
+(BioStudies/ArrayExpress, GEO, SRA/ENA, Zenodo, Figshare, Hugging Face,
+CELLxGENE); any other http(s) URL is fetched with the url source.
 
 Supported sources:
   geo         - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
@@ -97,14 +101,37 @@ Examples:
   hapiq download hca cc95ff89-2e68-4a08-a234-480eca21ce79 --out ./data --include-ext .h5,.h5ad
   hapiq download url https://example.com/data.h5ad --out ./data
   hapiq download scanpy pbmc3k --out ./data
-  hapiq download scanpy visium_sge/V1_Human_Heart --out ./data`,
-	Args: cobra.ExactArgs(requiredArgsCount),
+  hapiq download scanpy visium_sge/V1_Human_Heart --out ./data
+  hapiq download https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-14004 --out ./data`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: runDownload,
 }
 
+// resolveDownloadArgs turns "<source> <id>" or a single "<url>" into a source
+// and ID. A single URL is mapped by downloaders.FromURL.
+func resolveDownloadArgs(args []string) (sourceType, id string, err error) {
+	if len(args) == 2 {
+		return args[0], args[1], nil
+	}
+	if directoryMode { // --directory only applies to the url source
+		return "url", args[0], nil
+	}
+	sourceType, id, ok := downloaders.FromURL(args[0])
+	if !ok {
+		return "", "", fmt.Errorf("a single argument must be an http(s) URL, got %q; "+
+			"use the two-argument form: hapiq download <source> <id>", args[0])
+	}
+	return sourceType, id, nil
+}
+
 func runDownload(_ *cobra.Command, args []string) error {
-	sourceType := args[0]
-	id := args[1]
+	sourceType, id, err := resolveDownloadArgs(args)
+	if err != nil {
+		return err
+	}
+	if len(args) == 1 && !quiet {
+		_, _ = fmt.Fprintf(os.Stderr, "Detected source: %s (%s)\n", sourceType, id)
+	}
 
 	if err := validateAndPrepareDownload(); err != nil {
 		return err

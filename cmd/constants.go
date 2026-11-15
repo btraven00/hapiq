@@ -21,7 +21,6 @@ const (
 
 	// Processing constants.
 	minPartsRequired       = 2
-	requiredArgsCount      = 2
 	defaultMinConfidence   = 0.85
 	defaultMaxLinksPerPage = 50
 	defaultConcurrentDL    = 4 // conservative default; large files saturate bandwidth quickly
