@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,6 +73,10 @@ func TestGetWaitingForReady_BudgetExhausted(t *testing.T) {
 	if err == nil {
 		resp.Body.Close()
 		t.Fatal("expected an error when the server never stops returning 202")
+	}
+	// An endless empty 202 is also what Dataverse's bot challenge looks like.
+	if !strings.Contains(err.Error(), "bot challenge") {
+		t.Errorf("error should mention a possible bot challenge, got: %v", err)
 	}
 }
 
