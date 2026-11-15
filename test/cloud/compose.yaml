@@ -1,0 +1,47 @@
+# A small cloud of hapiq nodes on one private network. Driven by run.sh.
+#
+#   origin     the upstream repository (plain HTTP); stopped once the cache is warm
+#   cache      the "public cache": hapiq cache serve + a seeder + the tracker
+#              where nodes holding the same blob find each other (on the same
+#              host, since hapiq only follows trackers on the cache's host)
+#   peer (xN)  users: a hapiq config pointing at the cache, plus a seeder
+#
+# The network is internal: nothing here can reach, or announce to, the internet.
+name: hapiq-cloud
+
+x-node: &node
+  image: hapiq-cloud
+  build: .
+  init: true
+  cap_add: [NET_ADMIN]
+  networks: [swarm]
+  stop_grace_period: 2s
+
+x-env: &env
+  HAPIQ_MAGNET_TRACKERS: http://cache:6969/announce
+  RATE: ${RATE:-32mbit}
+  HAPIQ_MAGNET_DEBUG: ${HAPIQ_MAGNET_DEBUG:-}
+  # run.sh reads the helper's per-file "sources=" line from the download log.
+  HAPIQ_MAGNET_VERBOSE: "1"
+
+services:
+  origin:
+    <<: *node
+    command: [origin]
+    environment:
+      SIZE: ${SIZE:-64000000}
+
+  cache:
+    <<: *node
+    command: [cache]
+    environment: *env
+
+  peer:
+    <<: *node
+    command: [peer]
+    environment: *env
+    depends_on: [cache]
+
+networks:
+  swarm:
+    internal: true

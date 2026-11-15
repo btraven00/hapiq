@@ -1,7 +1,7 @@
 # Hapiq Makefile
 # Common development tasks for the hapiq CLI tool
 
-.PHONY: help build test clean install run fmt vet lint lint-fix install-lint deps tidy check coverage benchmark curated
+.PHONY: help build test clean install run fmt vet lint lint-fix install-lint deps tidy check coverage benchmark curated magnet-helper magnet-e2e magnet-cloud
 
 # Default target
 help: ## Show this help message
@@ -41,6 +41,18 @@ test: ## Run all tests
 # Run the curated end-to-end suite (network, ~400 MB; see test/curated/README.md)
 curated: ## Run the curated e2e suite (RUN=geo- for one provider)
 	go test -tags curated -timeout 0 -v ./test/curated $(if $(RUN),-run 'TestCurated/$(RUN)')
+
+# Build the BitTorrent helper (separate module; never linked into hapiq)
+magnet-helper: ## Build bin/hapiq-fetch-magnet
+	cd helpers/hapiq-fetch-magnet && go build -o ../../bin/hapiq-fetch-magnet .
+
+# End-to-end magnet transfers over loopback BitTorrent (builds the helper)
+magnet-e2e: ## Run the magnet e2e suite
+	go test -tags magnet -count=1 -v ./test/magnet
+
+# A docker compose cloud of rate-limited peers on a private network (needs docker)
+magnet-cloud: ## Run the magnet peer-cloud scenarios
+	test/cloud/run.sh
 
 # Run tests with coverage
 coverage: ## Run tests with coverage report

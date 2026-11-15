@@ -172,6 +172,14 @@ func fetchFromPeers(ctx context.Context, peers *cache.Peers, rawURL, destPath st
 		return FetchResult{}, false
 	}
 
+	// A magnet is tried first and is strictly optional: any failure falls
+	// through to the same peer's HTTP blob below.
+	if hit.Magnet != "" {
+		if res, ok := fetchViaMagnet(ctx, peers, hit, rawURL, destPath, c); ok {
+			return res, true
+		}
+	}
+
 	client := peers.Client()
 	headers := peers.Headers()
 
@@ -208,17 +216,7 @@ func fetchFromPeers(ctx context.Context, peers *cache.Peers, rawURL, destPath st
 		return FetchResult{}, false
 	}
 
-	if err := c.Put(ctx, rawURL, tmpPath, gotHash); err != nil {
-		_ = os.Remove(tmpPath)
-		return FetchResult{}, false
-	}
-	_ = c.RecordFilename(ctx, rawURL, hit.Filename)
-
-	if err := c.Materialize(gotHash, destPath); err != nil {
-		return FetchResult{}, false
-	}
-
-	return FetchResult{SHA256: gotHash, Filename: hit.Filename, N: n, Hit: true, PeerURL: hit.Base}, true
+	return keepPeerFile(ctx, c, hit, rawURL, tmpPath, destPath, n)
 }
 
 // warnPeer reports why a peer was skipped. A hash mismatch is worth shouting
