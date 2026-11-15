@@ -446,7 +446,6 @@ func (d *FigshareDownloader) resolveSharingURL(sharingURL string) (string, error
 	}
 
 	// Set headers to mimic a browser request
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; hapiq-figshare-downloader)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 	resp, err := d.client.Do(req)

@@ -421,7 +421,6 @@ func (d *Downloader) getJSON(ctx context.Context, p string, v any) (bool, error)
 		return false, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "hapiq/"+version.String())
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("CELLxGENE API: %w", err)

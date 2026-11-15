@@ -411,7 +411,6 @@ func (d *ZenodoDownloader) getArtifactMetadata(ctx context.Context, identifier *
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "hapiq/1.0")
 
 	resp, err := d.client.Do(req)
 	if err != nil {
@@ -616,8 +615,7 @@ func (d *ZenodoDownloader) downloadFile(ctx context.Context, file ZenodoFile, ou
 	}
 
 	result, err := common.Fetch(ctx, file.Links.Self, outputPath, common.FetchOptions{
-		Client:       d.client,
-		ExtraHeaders: map[string]string{"User-Agent": "hapiq/1.0"},
+		Client: d.client,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", file.Key, err)

@@ -201,7 +201,6 @@ func (d *TenxDownloader) get(ctx context.Context, rawURL string) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "hapiq/"+version.String()+" (+https://github.com/btraven00/hapiq)")
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, err

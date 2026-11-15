@@ -121,8 +121,12 @@ Applied per file before anything is written to disk.
 | `--resume` | false | Resume interrupted downloads |
 | `--skip-existing` | false | Skip files that already exist locally |
 | `--force` | false | Overwrite existing files without prompting |
+| `-H`, `--header "Name: value"` | — | Extra HTTP header for every request (repeatable, like `curl -H`); works on every command. It is sent to every host contacted, redirects included, so take care with tokens |
 | `-y, --yes` | false | Non-interactive mode (auto-confirm prompts) |
 | `-t, --timeout N` | 300 | Seconds without any data received before a request is abandoned |
+
+hapiq identifies itself to servers as `Mozilla/5.0 (compatible; hapiq/<version>)`.
+A `--header "User-Agent: ..."` replaces it.
 
 ### Output
 
