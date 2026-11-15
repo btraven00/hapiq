@@ -31,7 +31,7 @@ func TestFromURL(t *testing.T) {
 		// Not an http(s) URL.
 		{"GSE123", "", "", false},
 		{"", "", "", false},
-		{"ftp://ftp.example.org/x.gz", "", "", false},
+		{"ftp://ftp.example.org/x.gz", "url", "ftp://ftp.example.org/x.gz", true},
 	}
 	for _, tt := range tests {
 		source, id, ok := FromURL(tt.in)

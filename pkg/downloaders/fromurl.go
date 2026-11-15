@@ -7,12 +7,19 @@ import (
 
 // FromURL maps a repository web page URL to the downloader source and ID that
 // fetch it, e.g. https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-14004
-// gives ("biostudies", "E-MTAB-14004"). Any other http(s) URL maps to the
+// gives ("biostudies", "E-MTAB-14004"). Any other http(s) URL, and any ftp
+// URL, maps to the
 // generic "url" source with the URL unchanged; anything that is not an http(s)
 // URL gives ok=false. It only parses the string: no network, no Validate.
 func FromURL(raw string) (source, id string, ok bool) {
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || u.Host == "" {
+		return "", "", false
+	}
+	if u.Scheme == "ftp" { // a file on an FTP server, never a repository page
+		return "url", raw, true
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
 		return "", "", false
 	}
 	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")

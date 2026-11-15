@@ -70,7 +70,7 @@ metadata tracking and provenance information.
 
 With a single argument, the source and ID are read from a repository URL
 (BioStudies/ArrayExpress, GEO, SRA/ENA, Zenodo, Figshare, Hugging Face,
-CELLxGENE); any other http(s) URL is fetched with the url source.
+CELLxGENE); any other http(s) or ftp URL is fetched with the url source.
 
 Supported sources:
   geo         - NCBI Gene Expression Omnibus (GSE, GSM, GPL, GDS)
@@ -118,7 +118,7 @@ func resolveDownloadArgs(args []string) (sourceType, id string, err error) {
 	}
 	sourceType, id, ok := downloaders.FromURL(args[0])
 	if !ok {
-		return "", "", fmt.Errorf("a single argument must be an http(s) URL, got %q; "+
+		return "", "", fmt.Errorf("a single argument must be an http(s) or ftp URL, got %q; "+
 			"use the two-argument form: hapiq download <source> <id>", args[0])
 	}
 	return sourceType, id, nil
