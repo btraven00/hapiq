@@ -65,6 +65,27 @@ func TestVerifyExpectedHash_BareBasenameFallback(t *testing.T) {
 	}
 }
 
+func TestResolveDownloadArgs(t *testing.T) {
+	two := []string{"biostudies", "E-MTAB-14004"}
+	one := []string{"https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-14004"}
+
+	s2, id2, err := resolveDownloadArgs(two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s1, id1, err := resolveDownloadArgs(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s1 != s2 || id1 != id2 {
+		t.Errorf("one-arg form = (%q, %q), two-arg form = (%q, %q)", s1, id1, s2, id2)
+	}
+
+	if _, _, err := resolveDownloadArgs([]string{"GSE123"}); err == nil {
+		t.Error("expected an error for a single non-URL argument")
+	}
+}
+
 func TestVerifyExpectedHash_Mismatch(t *testing.T) {
 	t.Chdir(t.TempDir())
 
