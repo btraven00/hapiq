@@ -40,7 +40,7 @@ type Section struct {
 	Attributes  []Attribute       `json:"attributes"`
 	Files       []json.RawMessage `json:"files"`
 	Subsections []json.RawMessage `json:"subsections"`
-	Links       []Link            `json:"links"`
+	Links       Links             `json:"links"`
 }
 
 // Link is a typed pointer from a study to an external record (BioSample,
@@ -48,6 +48,35 @@ type Section struct {
 type Link struct {
 	URL        string      `json:"url"`
 	Attributes []Attribute `json:"attributes"`
+}
+
+// Links is a section's `links` list. Like `files`, each element is either a
+// link object or an array of them (a link table); both are flattened here.
+type Links []Link
+
+// UnmarshalJSON flattens one level of nested arrays.
+func (ls *Links) UnmarshalJSON(data []byte) error {
+	var raws []json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return err
+	}
+	*ls = nil
+	for _, raw := range raws {
+		if strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
+			var group []Link
+			if err := json.Unmarshal(raw, &group); err != nil {
+				return err
+			}
+			*ls = append(*ls, group...)
+			continue
+		}
+		var l Link
+		if err := json.Unmarshal(raw, &l); err != nil {
+			return err
+		}
+		*ls = append(*ls, l)
+	}
+	return nil
 }
 
 // LinkType returns the value of the link's "Type" attribute, or "" if absent.
