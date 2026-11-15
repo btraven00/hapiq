@@ -309,7 +309,12 @@ func getWaitingForReady(ctx context.Context, client *http.Client, rawURL string,
 		_ = resp.Body.Close()
 
 		if attempt >= acceptedMaxRetries {
-			return nil, fmt.Errorf("server still returns HTTP 202 (resource not ready) after %d attempts for %s", attempt+1, rawURL)
+			// ponytail: a bot challenge (Dataverse's firewall answers 202 with an
+			// empty body) looks the same as a file being prepared, so name both.
+			return nil, fmt.Errorf("server still returns HTTP 202 after %d attempts for %s: "+
+				"either the file is still being prepared, or the server is serving a bot "+
+				"challenge (Dataverse does this) and will not send the file to this network",
+				attempt+1, rawURL)
 		}
 
 		_, _ = fmt.Fprintf(os.Stderr, "waiting for server to prepare %s (HTTP 202), retrying in %s...\n", rawURL, backoff)
