@@ -106,7 +106,8 @@ func (c *Cache) Get(ctx context.Context, rawURL string) (sha256hex string, size 
 // Put promotes tmpPath into the CAS and records rawURL → sha256hex.
 // If a blob with the same hash already exists, tmpPath is removed and the URL
 // is re-indexed pointing at the existing blob.
-// Returns an error if the new blob would violate the configured quota.
+// Returns an error if the new blob would violate the configured quota. On any
+// error tmpPath is left in place for the caller, who may still use the bytes.
 func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) error {
 	canonical, err := canonicalizeURL(rawURL)
 	if err != nil {
@@ -118,7 +119,6 @@ func (c *Cache) Put(ctx context.Context, rawURL, tmpPath, sha256hex string) erro
 
 	blobSz := fileSizeOrZero(tmpPath)
 	if err := c.checkQuota(ctx, blobSz); err != nil {
-		_ = os.Remove(tmpPath)
 		return err
 	}
 
