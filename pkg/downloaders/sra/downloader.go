@@ -372,7 +372,7 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 			return retry, fmt.Errorf("HTTP %d for %s", code, url)
 		}
 
-		f, err := os.OpenFile(filepath.Clean(partPath), flags, 0o644) // #nosec G304 -- constructed download path
+		f, err := os.OpenFile(filepath.Clean(partPath), flags, 0o644) // #nosec G302 G304 -- constructed download path; a downloaded data file, readable like os.Create makes it
 		if err != nil {
 			return false, err
 		}
