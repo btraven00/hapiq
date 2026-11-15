@@ -201,3 +201,43 @@ func TestFetch_SendsAcceptAny(t *testing.T) {
 		t.Errorf("got %q, want the stored bytes %q", got, stored)
 	}
 }
+
+// flakyTransport fails the first n round trips, then delegates.
+type flakyTransport struct {
+	fails int
+	calls int
+}
+
+func (f *flakyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	f.calls++
+	if f.calls <= f.fails {
+		return nil, errors.New("net/http: TLS handshake timeout")
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestDoWithRetry(t *testing.T) {
+	old := retryBackoff
+	retryBackoff = time.Millisecond
+	defer func() { retryBackoff = old }()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	for _, tc := range []struct {
+		fails, wantCalls int
+		wantErr          bool
+	}{{2, 3, false}, {3, 3, true}} {
+		ft := &flakyTransport{fails: tc.fails}
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, http.NoBody)
+		resp, err := DoWithRetry(&http.Client{Transport: ft}, req)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		if (err != nil) != tc.wantErr || ft.calls != tc.wantCalls {
+			t.Errorf("fails=%d: err=%v calls=%d, want err=%v calls=%d", tc.fails, err, ft.calls, tc.wantErr, tc.wantCalls)
+		}
+	}
+}
