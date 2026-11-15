@@ -448,6 +448,8 @@ func attachCache(ctx context.Context, quiet bool) (context.Context, func()) {
 	// verified and streamed straight to the output directory.
 	if peers := cache.SetupPeers(ctx, cfg.Server); peers != nil {
 		ctx = cache.WithPeers(ctx, peers)
+		closeCache := cleanup
+		cleanup = func() { peers.Close(); closeCache() }
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Peers: %s\n", strings.Join(peers.URLs(), ", "))
 		}

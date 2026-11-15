@@ -124,6 +124,7 @@ func (s *Server) handleBlob(w http.ResponseWriter, r *http.Request) {
 type resolveResponse struct {
 	SHA256   string `json:"sha256"`
 	Filename string `json:"filename,omitempty"`
+	Magnet   string `json:"magnet,omitempty"`
 	Size     int64  `json:"size"`
 }
 
@@ -146,7 +147,13 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename, _ := s.cache.Filename(r.Context(), rawURL)
-	writeJSON(w, resolveResponse{SHA256: hash, Size: size, Filename: filename})
+	resp := resolveResponse{SHA256: hash, Size: size, Filename: filename}
+	// A magnet lets anyone fetch the blob over BitTorrent with no token, so a
+	// cache that asks for a token never hands one out.
+	if s.cfg.Token == "" {
+		resp.Magnet = s.cache.Magnet(hash)
+	}
+	writeJSON(w, resp)
 }
 
 // peersResponse is the body of GET /v1/peers.

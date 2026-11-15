@@ -46,6 +46,12 @@ type Peers struct {
 	// mu guards urls: downloads run concurrently (--parallel), and Resolve
 	// prunes unreachable peers as it goes.
 	mu sync.RWMutex
+	// helper is the magnet transfer helper, started on the first magnet hit.
+	helper     *magnetHelper
+	helperOnce sync.Once
+	// deadSwarms holds the peer bases a magnet fetch from timed out; their
+	// magnets are ignored for the rest of the run.
+	deadSwarms sync.Map
 }
 
 // PeerHit describes a successful resolve against one peer.
@@ -56,6 +62,9 @@ type PeerHit struct {
 	SHA256 string
 	// Filename is the peer's recorded Content-Disposition filename, if any.
 	Filename string
+	// Magnet is an optional magnet link for the same bytes. Like everything a
+	// peer says it is a hint: the content is still verified against SHA256.
+	Magnet string
 	// Size is the blob size in bytes.
 	Size int64
 }
@@ -225,12 +234,17 @@ func (p *Peers) Resolve(ctx context.Context, rawURL string) (PeerHit, bool) {
 			continue
 		}
 
-		return PeerHit{
+		hit := PeerHit{
 			Base:     base,
 			SHA256:   body.SHA256,
 			Filename: body.Filename,
+			Magnet:   pinMagnet(body.Magnet, base),
 			Size:     body.Size,
-		}, true
+		}
+		if hit.Magnet != "" && !p.magnetUsable(base) {
+			hit.Magnet = ""
+		}
+		return hit, true
 	}
 
 	return PeerHit{}, false
