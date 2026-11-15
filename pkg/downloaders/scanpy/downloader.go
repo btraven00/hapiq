@@ -65,13 +65,30 @@ func (d *Downloader) Validate(_ context.Context, id string) (*downloaders.Valida
 	return res, nil
 }
 
-// GetMetadata returns lightweight catalog metadata; sizes are not probed.
-func (d *Downloader) GetMetadata(_ context.Context, id string) (*downloaders.Metadata, error) {
+// GetMetadata returns catalog metadata; TotalSize sums whatever sizes the
+// servers report on HEAD (best effort, so it can undercount).
+func (d *Downloader) GetMetadata(ctx context.Context, id string) (*downloaders.Metadata, error) {
 	e, files, err := resolveID(id)
 	if err != nil {
 		return nil, err
 	}
+	var total int64
+	for _, f := range files {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodHead, f.URL, http.NoBody)
+		if reqErr != nil {
+			continue
+		}
+		resp, doErr := d.client.Do(req)
+		if doErr != nil {
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK && resp.ContentLength > 0 {
+			total += resp.ContentLength
+		}
+	}
 	return &downloaders.Metadata{
+		TotalSize:   total,
 		Source:      d.GetSourceType(),
 		ID:          id,
 		Title:       e.Label,
