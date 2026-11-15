@@ -295,7 +295,7 @@ func getWaitingForReady(ctx context.Context, client *http.Client, rawURL string,
 			req.Header.Set(k, v)
 		}
 
-		resp, err := client.Do(req)
+		resp, err := DoWithRetry(client, req)
 		if err != nil {
 			return nil, err
 		}
@@ -325,6 +325,33 @@ func getWaitingForReady(ctx context.Context, client *http.Client, rawURL string,
 		if backoff *= 2; backoff > acceptedMaxBackoff {
 			backoff = acceptedMaxBackoff
 		}
+	}
+}
+
+// retryBackoff is the wait before the first retry in DoWithRetry; it doubles
+// per attempt. A var so tests can shrink it.
+var retryBackoff = time.Second
+
+// DoWithRetry sends a body-less request, retrying up to twice when no response
+// arrives at all (TLS handshake timeout, connection reset, DNS hiccup). Any
+// HTTP response, whatever its status, is returned as is.
+// ponytail: transport errors only; a transfer that dies mid-body is not
+// retried here, that needs resume (Range) support.
+func DoWithRetry(client *http.Client, req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	backoff := retryBackoff
+	for attempt := 1; ; attempt++ {
+		resp, err := client.Do(req)
+		if err == nil || attempt == 3 || ctx.Err() != nil {
+			return resp, err
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "request failed (%v), retrying in %s...\n", err, backoff)
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(backoff):
+		}
+		backoff *= 2
 	}
 }
 
