@@ -8,6 +8,19 @@ go install github.com/btraven00/hapiq@latest
 
 Requires Go 1.24+. The binary is placed in `$GOPATH/bin` (usually `~/go/bin`).
 
+## Nix
+
+With flakes enabled:
+
+```bash
+nix run github:btraven00/hapiq -- download geo GSE133344 --out ./data --dry-run   # run without installing
+nix profile install github:btraven00/hapiq                                        # install into your profile
+```
+
+Append `/<commit>` to pin a commit (releases up to v0.1.4 have no flake). In another flake, use
+`inputs.hapiq.url = "github:btraven00/hapiq";` and `hapiq.packages.${system}.default`.
+The binary reports its version as `devel-<commit>`.
+
 ## Nightly binary
 
 Pre-built binaries are published nightly for Linux, macOS, and Windows:

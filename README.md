@@ -13,6 +13,12 @@ _"Hapiq" means "the one who fetches" in Quechua._
 go install github.com/btraven00/hapiq@latest
 ```
 
+With Nix (flakes):
+
+```bash
+nix profile install github:btraven00/hapiq   # or: nix run github:btraven00/hapiq -- --help
+```
+
 Nightly binaries and building from source: [docs/install.md](docs/install.md).
 
 ## Quick start
