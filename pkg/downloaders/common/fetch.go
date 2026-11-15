@@ -261,6 +261,9 @@ func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusForbidden {
+		return 0, "", "", "", fmt.Errorf("HTTP 403 for %s (the server refused this client; some publishers block scripted downloads, so fetch it in a browser)", rawURL)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return 0, "", "", "", fmt.Errorf("HTTP %d for %s", resp.StatusCode, rawURL)
 	}
