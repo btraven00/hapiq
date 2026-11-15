@@ -32,6 +32,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 )
 
 // IsShareURL reports whether rawURL looks like a SharePoint share link that
@@ -110,8 +112,9 @@ func followToListing(ctx context.Context, client *http.Client, shareURL string) 
 	if err != nil {
 		return nil, err
 	}
-	// SharePoint serves the redirect chain only to browser-like clients.
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; hapiq)")
+	// SharePoint serves the redirect chain only to browser-like clients; set
+	// explicitly because this client may not go through common.HeaderTransport.
+	req.Header.Set("User-Agent", common.UserAgent())
 
 	resp, err := client.Do(req)
 	if err != nil {

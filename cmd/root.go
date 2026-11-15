@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,11 +11,13 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/btraven00/hapiq/pkg/cache"
+	"github.com/btraven00/hapiq/pkg/downloaders/common"
 	"github.com/btraven00/hapiq/pkg/downloaders/experimenthub"
 )
 
 var (
 	cfgFile string
+	headers []string
 	quiet   bool
 	output  string
 )
@@ -42,7 +45,15 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
+	// Every HTTP client that uses the default transport now sends hapiq's
+	// User-Agent and the --header values.
+	http.DefaultTransport = common.HeaderTransport(http.DefaultTransport)
+
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hapiqrc)")
+	rootCmd.PersistentFlags().StringArrayVarP(&headers, "header", "H", nil,
+		"extra HTTP header as \"Name: value\", sent with every request (repeatable, like curl -H); "+
+			"it is sent to every host contacted, redirects included")
+	rootCmd.PersistentPreRunE = func(*cobra.Command, []string) error { return common.SetExtraHeaders(headers) }
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "quiet output (suppress verbose messages)")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "human", "output format (human, json)")
 

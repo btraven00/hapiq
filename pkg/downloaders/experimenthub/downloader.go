@@ -453,7 +453,7 @@ func newHTTPClient(timeout time.Duration) *http.Client {
 	}
 	_ = timeout // honored by per-request context, not as a flat client cap
 	return &http.Client{
-		Transport: tr,
+		Transport: common.HeaderTransport(tr),
 		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 			if len(via) > 10 {
 				return fmt.Errorf("too many redirects")
