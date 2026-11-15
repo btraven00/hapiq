@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -298,10 +299,11 @@ func (d *SRADownloader) dryRun(runs []RunInfo, opts *downloaders.DownloadOptions
 	return result
 }
 
-// downloadWithMD5 downloads a file and verifies the ENA-provided MD5. When a
-// cache is attached to ctx, sha256 is computed in parallel with md5 during
-// streaming so the blob can be cached (the cache is keyed by sha256). MD5 is
-// still verified inline against the ENA-supplied digest.
+// downloadWithMD5 downloads a file and verifies the ENA-provided MD5. The
+// transfer goes to targetPath+".part", which survives failures and is resumed
+// with a Range request (also by a later run). Transient failures are retried
+// with backoff. Once complete and verified, the .part is handed to the cache
+// (keyed by sha256) when one is attached to ctx, and ends up at targetPath.
 func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, expectedMD5 string) (*downloaders.FileInfo, error) {
 	c := cache.FromContext(ctx)
 
@@ -330,99 +332,182 @@ func (d *SRADownloader) downloadWithMD5(ctx context.Context, url, targetPath, ex
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
-	if err != nil {
-		return nil, err
+	// fetchOnce makes one request, appending to the .part when the server
+	// honours a Range from its current size and rewriting it otherwise. retry
+	// reports whether a failure is worth another attempt. A 416 for a
+	// non-empty .part counts as done: the md5 check decides whether it is good.
+	partPath := targetPath + ".part"
+	fetchOnce := func() (retry bool, err error) {
+		var have int64
+		if st, statErr := os.Stat(partPath); statErr == nil {
+			have = st.Size()
+		}
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+		if err != nil {
+			return false, err
+		}
+		if have > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", have))
+		}
+
+		resp, err := d.client.Do(req)
+		if err != nil {
+			return true, err
+		}
+		defer resp.Body.Close()
+
+		flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+		switch code := resp.StatusCode; {
+		case code == http.StatusOK:
+		case code == http.StatusPartialContent && have > 0 && rangeStart(resp.Header.Get("Content-Range")) == have:
+			flags = os.O_WRONLY | os.O_APPEND
+		case code == http.StatusRequestedRangeNotSatisfiable && have > 0:
+			return false, nil
+		case code == http.StatusPartialContent:
+			_ = os.Remove(partPath) // a range we did not ask for; start from zero
+			return true, fmt.Errorf("unexpected Content-Range %q for %s", resp.Header.Get("Content-Range"), url)
+		default:
+			retry = code == http.StatusForbidden || code == http.StatusRequestTimeout ||
+				code == http.StatusTooManyRequests || code >= 500
+			return retry, fmt.Errorf("HTTP %d for %s", code, url)
+		}
+
+		f, err := os.OpenFile(filepath.Clean(partPath), flags, 0o644) // #nosec G304 -- constructed download path
+		if err != nil {
+			return false, err
+		}
+		_, copyErr := io.Copy(f, resp.Body)
+		if closeErr := f.Close(); copyErr == nil {
+			copyErr = closeErr
+		}
+		if copyErr != nil {
+			return true, fmt.Errorf("transfer: %w", copyErr)
+		}
+		return false, nil
 	}
 
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
-	}
-
-	mdHash := md5.New() // #nosec G401 -- ENA-provided MD5 checksum verification
-	shaHash := sha256.New()
-
-	// Stream into a cache tmp file when a cache is available; otherwise stream
-	// directly to targetPath. md5 and sha256 are computed in parallel.
-	if c != nil {
-		tmpFile, tmpErr := c.NewTmpFile()
-		if tmpErr == nil {
-			written, copyErr := io.Copy(io.MultiWriter(tmpFile, mdHash, shaHash), resp.Body)
-			gotMD5 := hex.EncodeToString(mdHash.Sum(nil))
-			sha256hex := hex.EncodeToString(shaHash.Sum(nil))
-			_ = tmpFile.Close()
-
-			if copyErr != nil {
-				_ = os.Remove(tmpFile.Name())
-				return nil, fmt.Errorf("write %s: %w", targetPath, copyErr)
-			}
-			if expectedMD5 != "" && gotMD5 != expectedMD5 {
-				_ = os.Remove(tmpFile.Name())
-				return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
-			}
-
-			if putErr := c.Put(ctx, url, tmpFile.Name(), sha256hex); putErr == nil {
-				if matErr := c.Materialize(sha256hex, targetPath); matErr == nil {
-					return &downloaders.FileInfo{
-						Path:         targetPath,
-						OriginalName: filepath.Base(targetPath),
-						Size:         written,
-						Checksum:     sha256hex,
-						ChecksumType: "sha256",
-						SourceURL:    url,
-						DownloadTime: time.Now(),
-					}, nil
-				}
-			}
-			// Cache promotion failed; salvage the tmp file as targetPath.
-			_ = os.Rename(tmpFile.Name(), targetPath)
-			return &downloaders.FileInfo{
-				Path:         targetPath,
-				OriginalName: filepath.Base(targetPath),
-				Size:         written,
-				Checksum:     sha256hex,
-				ChecksumType: "sha256",
-				SourceURL:    url,
-				DownloadTime: time.Now(),
-			}, nil
+	var gotMD5, sha256hex string
+	var size int64
+	for restart := 0; ; restart++ {
+		if err := retryFetch(ctx, partPath, fetchOnce); err != nil {
+			return nil, err
+		}
+		var err error
+		if gotMD5, sha256hex, size, err = hashFile(partPath); err != nil {
+			return nil, err
+		}
+		if expectedMD5 == "" || gotMD5 == expectedMD5 {
+			break
+		}
+		// A resumed .part can be bad (stale or spliced); start over once.
+		_ = os.Remove(partPath)
+		if restart == 1 {
+			return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
 		}
 	}
 
-	// No cache (or tmp file creation failed): stream directly to targetPath.
-	f, err := os.Create(filepath.Clean(targetPath)) // #nosec G304 -- targetPath is a constructed download path
-	if err != nil {
+	if c != nil && cachePut(ctx, c, url, partPath, sha256hex) == nil && c.Materialize(sha256hex, targetPath) == nil {
+		_ = os.Remove(partPath)
+	} else if err := os.Rename(partPath, targetPath); err != nil {
 		return nil, err
-	}
-	defer f.Close()
-
-	written, err := io.Copy(io.MultiWriter(f, mdHash, shaHash), resp.Body)
-	if err != nil {
-		// Don't leave a truncated file at its final path.
-		_ = os.Remove(targetPath)
-		return nil, fmt.Errorf("write %s: %w", targetPath, err)
-	}
-	gotMD5 := hex.EncodeToString(mdHash.Sum(nil))
-	sha256hex := hex.EncodeToString(shaHash.Sum(nil))
-	if expectedMD5 != "" && gotMD5 != expectedMD5 {
-		_ = os.Remove(targetPath)
-		return nil, fmt.Errorf("MD5 mismatch for %s: got %s, want %s", filepath.Base(targetPath), gotMD5, expectedMD5)
 	}
 
 	return &downloaders.FileInfo{
 		Path:         targetPath,
 		OriginalName: filepath.Base(targetPath),
-		Size:         written,
+		Size:         size,
 		Checksum:     sha256hex,
 		ChecksumType: "sha256",
 		SourceURL:    url,
 		DownloadTime: time.Now(),
 	}, nil
+}
+
+// Retry schedule for retryFetch; vars so tests can shrink them.
+var (
+	retryAttempts   = 5
+	retryBackoff    = time.Second
+	retryMaxBackoff = 30 * time.Second
+)
+
+// retryFetch runs fetchOnce until it succeeds, fails for good, or runs out of
+// attempts, backing off between attempts. partPath is only read for the
+// progress line.
+func retryFetch(ctx context.Context, partPath string, fetchOnce func() (bool, error)) error {
+	wait := retryBackoff
+	for attempt := 1; ; attempt++ {
+		retry, err := fetchOnce()
+		if err == nil {
+			return nil
+		}
+		if !retry || ctx.Err() != nil || attempt >= retryAttempts {
+			return err
+		}
+		var have int64
+		if st, statErr := os.Stat(partPath); statErr == nil {
+			have = st.Size()
+		}
+		fmt.Fprintf(os.Stderr, "sra: %s attempt %d/%d failed (%s so far): %v; retrying in %s\n",
+			filepath.Base(strings.TrimSuffix(partPath, ".part")), attempt, retryAttempts, common.FormatBytes(have), err, wait)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, retryMaxBackoff)
+	}
+}
+
+// rangeStart returns the first byte of a "bytes a-b/n" Content-Range, or -1.
+func rangeStart(cr string) int64 {
+	spec, ok := strings.CutPrefix(cr, "bytes ")
+	if !ok {
+		return -1
+	}
+	a, _, _ := strings.Cut(spec, "-")
+	n, err := strconv.ParseInt(a, 10, 64)
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+// cachePut hands the cache a hard link to partPath, since Put moves or
+// deletes the file it is given; partPath itself survives any Put failure.
+// ponytail: the link fails when the cache is on another filesystem, and the
+// file is then just not cached; copy it in if that case matters.
+func cachePut(ctx context.Context, c *cache.Cache, url, partPath, sha256hex string) error {
+	tmp, err := c.NewTmpFile()
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	_ = tmp.Close()
+	_ = os.Remove(name)
+	if err := os.Link(partPath, name); err != nil {
+		return err
+	}
+	if err := c.Put(ctx, url, name, sha256hex); err != nil {
+		_ = os.Remove(name)
+		return err
+	}
+	return nil
+}
+
+// hashFile reads path once and returns its md5, sha256 and size.
+func hashFile(path string) (md5hex, sha256hex string, size int64, err error) {
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- constructed download path
+	if err != nil {
+		return "", "", 0, err
+	}
+	defer f.Close()
+	mdHash := md5.New() // #nosec G401 -- ENA-provided MD5 checksum verification
+	shaHash := sha256.New()
+	size, err = io.Copy(io.MultiWriter(mdHash, shaHash), f)
+	if err != nil {
+		return "", "", 0, err
+	}
+	return hex.EncodeToString(mdHash.Sum(nil)), hex.EncodeToString(shaHash.Sum(nil)), size, nil
 }
 
 func fileMD5(path string) (string, error) {

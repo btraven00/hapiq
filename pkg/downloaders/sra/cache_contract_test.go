@@ -55,6 +55,9 @@ func TestSRADownloadWithMD5HonorsCache(t *testing.T) {
 	if got, _ := os.ReadFile(dest1); string(got) != string(content) {
 		t.Fatal("run 1: content mismatch")
 	}
+	if _, err := os.Stat(dest1 + ".part"); !os.IsNotExist(err) {
+		t.Fatalf("run 1: .part left behind (stat err=%v)", err)
+	}
 	if h := atomic.LoadInt64(&hits); h != 1 {
 		t.Fatalf("run 1: expected 1 server hit, got %d", h)
 	}
@@ -101,8 +104,10 @@ func TestSRADownloadWithMD5NoCache(t *testing.T) {
 	}
 }
 
-// A transfer cut off mid-body is an error and leaves nothing at dest.
+// A transfer cut off mid-body on every attempt is an error, leaves nothing at
+// dest and keeps the .part for a later run.
 func TestSRADownloadWithMD5Truncated(t *testing.T) {
+	fastRetry(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", "100")
 		_, _ = w.Write([]byte("abc"))
@@ -115,6 +120,9 @@ func TestSRADownloadWithMD5Truncated(t *testing.T) {
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
 		t.Fatalf("truncated file left at dest (stat err=%v)", err)
+	}
+	if _, err := os.Stat(dest + ".part"); err != nil {
+		t.Fatalf(".part not kept: %v", err)
 	}
 }
 
