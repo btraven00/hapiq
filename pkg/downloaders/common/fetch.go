@@ -341,7 +341,7 @@ func DoWithRetry(client *http.Client, req *http.Request) (*http.Response, error)
 	ctx := req.Context()
 	backoff := retryBackoff
 	for attempt := 1; ; attempt++ {
-		resp, err := client.Do(req)
+		resp, err := client.Do(req) // #nosec G704 -- the caller chose the URL; this replaces a plain client.Do
 		if err == nil || attempt == 3 || ctx.Err() != nil {
 			return resp, err
 		}
