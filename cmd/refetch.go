@@ -31,11 +31,15 @@ hapiq.json is updated in place (merged, as for any download into the folder).
 }
 
 func runRefetch(_ *cobra.Command, args []string) error {
+	ctx, err := withConnections(context.Background())
+	if err != nil {
+		return err
+	}
 	if err := initializeDownloaders(); err != nil {
 		return err
 	}
 
-	ctx, closeCache := attachCache(context.Background(), quiet)
+	ctx, closeCache := attachCache(ctx, quiet)
 	defer closeCache()
 
 	var failed int
@@ -171,4 +175,5 @@ func init() {
 	rootCmd.AddCommand(refetchCmd)
 	refetchCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"stall limit in seconds: fail a request when no data arrives for this long")
+	addConnectionsFlag(refetchCmd)
 }

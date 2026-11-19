@@ -75,6 +75,12 @@ func runManifestGen(_ *cobra.Command, args []string) error {
 }
 
 func runManifestGet(_ *cobra.Command, args []string) error {
+	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
+	// deadline for the run: a multi-GB manifest may legitimately take hours.
+	ctx, err := withConnections(context.Background())
+	if err != nil {
+		return err
+	}
 	entries, err := manifest.Load(args[0])
 	if err != nil {
 		return err
@@ -90,10 +96,6 @@ func runManifestGet(_ *cobra.Command, args []string) error {
 	if err := initializeDownloaders(); err != nil {
 		return err
 	}
-
-	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
-	// deadline for the run: a multi-GB manifest may legitimately take hours.
-	ctx := context.Background()
 
 	if viper.GetString("cache.mode") == "on" {
 		cfg := cache.ConfigFromViper()
@@ -238,4 +240,5 @@ func init() {
 		"keep going after an entry fails instead of stopping")
 	manifestGetCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"seconds without any data received before a request is abandoned")
+	addConnectionsFlag(manifestGetCmd)
 }

@@ -115,6 +115,9 @@ Flags:
 - `--parent-dir <dir>` (required) — base directory; each entry gets its own
   subfolder named after `identifier`.
 - `--continue-on-error` — keep going past a failed entry instead of stopping.
-- `--timeout <seconds>` — overall run timeout.
+- `--timeout <seconds>` — stall limit: a request is abandoned when no data
+  arrives for this long (300 by default).
+- `--connections <n>` — parallel ranged requests per file (8 by default); see
+  [usage](usage.md#download-behaviour).
 
 Exit status is non-zero if any entry failed.

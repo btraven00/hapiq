@@ -123,6 +123,17 @@ Applied per file before anything is written to disk.
 | `--force` | false | Overwrite existing files without prompting |
 | `-y, --yes` | false | Non-interactive mode (auto-confirm prompts) |
 | `-t, --timeout N` | 300 | Seconds without any data received before a request is abandoned |
+| `--connections N` | 8 | Parallel ranged requests per file (see below) |
+
+Files are fetched in 64 MiB chunks over `--connections` requests at once when
+the server supports HTTP Range (S3, Zenodo, Ensembl, most static hosts), which
+helps most for single large files. A server without Range support gets one
+plain request, so small files and `ftp://` URLs are unaffected. Each chunk is
+retried up to 3 times on its own, and every chunk is pinned to the file's
+ETag: if the file changes on the server mid-download, the run fails instead
+of mixing versions. A file can open up to `--parallel` × `--connections`
+connections in total; lower `--connections` for a server that throttles or
+refuses many connections, and `--connections 1` fetches one chunk at a time.
 
 ### Output
 
@@ -205,6 +216,8 @@ into the folder, keeping files that are still on disk. Every file listed in
 `hapiq.json` is then checked against its recorded checksum: a file that changed
 upstream fails the run, is removed, and `hapiq.json` is left as recorded. On
 success the run is merged into `hapiq.json`.
+
+`--timeout` and `--connections` work as for `hapiq download`.
 
 GEO and figshare download into `<out>/<id>`, so their folders must keep that
 name. Ensembl is not supported yet (its `hapiq.json` does not record the

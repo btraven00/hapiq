@@ -46,6 +46,7 @@ var (
 	skipExisting         bool
 	nonInteractive       bool
 	downloadTimeout      int
+	downloadConnections  int
 	customFilters        map[string]string
 	includeExts          string
 	excludeExts          string
@@ -125,6 +126,12 @@ func resolveDownloadArgs(args []string) (sourceType, id string, err error) {
 }
 
 func runDownload(_ *cobra.Command, args []string) error {
+	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
+	// deadline for the run: a multi-GB download may legitimately take hours.
+	ctx, err := withConnections(context.Background())
+	if err != nil {
+		return err
+	}
 	sourceType, id, err := resolveDownloadArgs(args)
 	if err != nil {
 		return err
@@ -150,10 +157,6 @@ func runDownload(_ *cobra.Command, args []string) error {
 			id += "/"
 		}
 	}
-
-	// --timeout is a per-request stall limit (see common.SetIdleTimeout), not a
-	// deadline for the run: a multi-GB download may legitimately take hours.
-	ctx := context.Background()
 
 	ctx, closeCache := attachCache(ctx, quiet)
 	defer closeCache()
@@ -859,6 +862,7 @@ func init() {
 	// Network and timeout flags
 	downloadCmd.Flags().IntVarP(&downloadTimeout, "timeout", "t", defaultDownloadTimeoutSec,
 		"seconds without any data received before a request is abandoned")
+	addConnectionsFlag(downloadCmd)
 
 	// File-level filters (Phase 1)
 	downloadCmd.Flags().StringVar(&includeExts, "include-ext", "",
@@ -893,4 +897,18 @@ func init() {
 	downloadCmd.Flags().StringVar(&expectedHash, "hash", "",
 		"expected file hash in <algo>:<hex> form (e.g. sha256:abc123..., md5:def456...); "+
 			"fails if the downloaded file does not match; only valid for single-file downloads")
+}
+
+// addConnectionsFlag registers --connections on a command that downloads.
+func addConnectionsFlag(c *cobra.Command) {
+	c.Flags().IntVar(&downloadConnections, "connections", common.DefaultConnections,
+		"parallel ranged requests per file, where the server supports them (up to --parallel × this in total)")
+}
+
+// withConnections puts --connections on ctx, where common.Fetch reads it.
+func withConnections(ctx context.Context) (context.Context, error) {
+	if downloadConnections < 1 {
+		return ctx, fmt.Errorf("--connections must be at least 1, got %d", downloadConnections)
+	}
+	return common.WithConnections(ctx, downloadConnections), nil
 }
