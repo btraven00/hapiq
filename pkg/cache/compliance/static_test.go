@@ -53,7 +53,8 @@ var allowlist = map[string]string{
 	// cache flow itself, so the in-function cache reference check would not
 	// match (it uses cache.FromContext via its caller's ctx, but the local
 	// streamToFile helper does not). Allowlisted by design.
-	"common/fetch.go": "sanctioned cache-aware download primitive",
+	"common/fetch.go":  "sanctioned cache-aware download primitive",
+	"common/ranges.go": "parallel range path of common.Fetch; writes into the file Fetch hands it",
 
 	// Ensembl uses a custom MultiProtocolClient (HTTP + FTP) that pre-dates
 	// the cache and is tracked as a known exception. Integrating FTP into
