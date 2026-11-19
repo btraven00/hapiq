@@ -117,7 +117,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		}
 		tmpPath = tmpFile.Name()
 
-		n, sha256hex, contentType, filename, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, tmpFile)
+		n, sha256hex, contentType, filename, err = fetchToFile(ctx, client, rawURL, opts.ExtraHeaders, tmpFile)
 		if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
@@ -146,7 +146,7 @@ func Fetch(ctx context.Context, rawURL, destPath string, opts FetchOptions) (Fet
 		if err != nil {
 			return FetchResult{}, err
 		}
-		n, sha256hex, contentType, filename, err = streamToFile(ctx, client, rawURL, opts.ExtraHeaders, f)
+		n, sha256hex, contentType, filename, err = fetchToFile(ctx, client, rawURL, opts.ExtraHeaders, f)
 		_ = f.Close()
 		if err != nil {
 			_ = os.Remove(destPath)
@@ -238,7 +238,7 @@ func directFetch(ctx context.Context, client *http.Client, rawURL, destPath stri
 	if err != nil {
 		return FetchResult{}, err
 	}
-	n, sha256hex, ct, filename, err := streamToFile(ctx, client, rawURL, extra, f)
+	n, sha256hex, ct, filename, err := fetchToFile(ctx, client, rawURL, extra, f)
 	_ = f.Close()
 	if err != nil {
 		_ = os.Remove(destPath)
@@ -259,6 +259,12 @@ func streamToFile(ctx context.Context, client *http.Client, rawURL string, extra
 	if err != nil {
 		return 0, "", "", "", err
 	}
+	return copyBody(rawURL, resp, w)
+}
+
+// copyBody checks a full-content GET response and copies its body into w,
+// hashing as it goes. It closes the body.
+func copyBody(rawURL string, resp *http.Response, w io.Writer) (int64, string, string, string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden {
