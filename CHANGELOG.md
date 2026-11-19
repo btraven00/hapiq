@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Parallel range downloads.** A file on a server that supports HTTP Range
+  (S3, Zenodo, Ensembl, most static hosts) is fetched in 64 MiB chunks over 8
+  connections, each chunk retried on its own; an 882 MB Ensembl FASTA took 42 s
+  instead of 265 s. `--connections N` on `download`, `manifest get` and
+  `refetch` sets the number. Chunks are pinned to the file's ETag, so a file
+  that changes mid-download fails the run. Servers without Range support are
+  read in one request as before.
+
 ## [0.1.4] - 2026-11-07
 
 ### Added
