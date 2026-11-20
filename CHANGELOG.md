@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-20
+
 ### Added
 
 - **Parallel range downloads.** A file on a server that supports HTTP Range
@@ -15,6 +17,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `refetch` sets the number. Chunks are pinned to the file's ETag, so a file
   that changes mid-download fails the run. Servers without Range support are
   read in one request as before.
+- **Source from a URL.** `hapiq download <url>` maps a repository page URL
+  (BioStudies / ArrayExpress, GEO, Zenodo, Figshare, ENA / SRA, Hugging Face,
+  CELLxGENE) to its source and ID; any other http(s) URL goes to the url
+  source. The two-argument form is unchanged.
+- **ftp:// URLs.** The url source, `Fetch` and the cache take an ftp:// file
+  URL. Files only: no directory listing and no resume over ftp.
+- **`-H` / `--header "Name: value"`** (repeatable, every command) adds a header
+  to every request, replacing one of the same name.
+- **BitTorrent peer cache (prototype).** With the separate
+  `hapiq-fetch-magnet` helper on PATH, cache blobs are fetched from peers over
+  BitTorrent and verified by sha256, falling back to the peer's HTTP blob,
+  then the origin.
+- **Nix flake.** `nix run github:btraven00/hapiq` and `nix profile install`
+  work from the repo.
+
+### Changed
+
+- Every request sends the same User-Agent,
+  `Mozilla/5.0 (compatible; hapiq/<version>)`, replacing the per-source
+  strings in cellxgene, zenodo, tenx, figshare and sharepoint.
+- Built with Go 1.26.11 (GO-2026-6859 in net/http).
+
+### Fixed
+
+- SRA: a dropped transfer resumes from `<name>.part` with a Range request
+  (up to 5 attempts with backoff, or in a later run) instead of restarting
+  from zero.
+- A request that gets no response at all (e.g. a TLS handshake timeout) is
+  retried twice.
+- BioStudies: grouped links in a study section no longer fail validation
+  (E-MTAB-14004).
+- A 403 error says it may be a block on scripted clients; an endless HTTP 202
+  names a bot challenge as a possible cause.
+- scanpy: dry-run reports the total size instead of 0 B.
+- cache: a failed `Put` no longer deletes the download the geo, sra and
+  experimenthub sources then try to keep.
 
 ## [0.1.4] - 2026-11-07
 
