@@ -284,6 +284,35 @@ hapiq species plants --examples       # show example download IDs
 
 ---
 
+## Docker
+
+CI publishes images for linux/amd64 and linux/arm64 to the GitHub Container
+Registry:
+
+| Tag | Contents |
+|-----|----------|
+| `latest` | the tip of `main`, rebuilt on every push |
+| `git-<sha>` | one commit on `main` |
+| `0.1.6`, `0.1` | a release, and the newest release of that minor version |
+
+```bash
+docker pull ghcr.io/btraven00/hapiq:latest   # or a release, e.g. :0.1.6
+
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD/data:/data" -w /data --tmpfs /tmp \
+  -e NCBI_API_KEY \
+  ghcr.io/btraven00/hapiq:latest download geo GSE133344 --out .
+```
+
+- `-v … -w /data` mounts the output directory. Files written anywhere else
+  are lost when the container exits.
+- `--user` makes the downloaded files owned by you rather than root.
+- The image is built `FROM scratch`, so it has no shell and no `/tmp`.
+  `--tmpfs /tmp` provides `/tmp` for the downloaders that need scratch space.
+- Pass tokens with `-e NAME` (see [Environment variables](#environment-variables)).
+
+---
+
 ## Environment variables
 
 | Variable | Description |
