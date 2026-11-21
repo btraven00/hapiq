@@ -9,6 +9,10 @@ site_url = "https://btraven00.github.io/hapiq/"
 repo_url = "https://github.com/btraven00/hapiq"
 repo_name = "btraven00/hapiq"
 docs_dir = "docs"
+# In progress; kept in docs/ but not published yet.
+exclude_docs = """
+mirrors.md
+"""
 site_dir = "site"
 nav = [
   { "Home" = "index.md" },
@@ -22,7 +26,6 @@ nav = [
   ] },
   { "Development" = [
     { "Cache server design" = "cache-server.md" },
-    { "Mirrors (proposed)" = "mirrors.md" },
     { "Linting" = "LINTING.md" },
   ] },
 ]
