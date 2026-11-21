@@ -5,6 +5,7 @@
 _"Hapiq" means "the one who fetches" in Quechua._
 
 [![CI/CD](https://github.com/btraven00/hapiq/workflows/CI%2FCD/badge.svg)](https://github.com/btraven00/hapiq/actions)
+[![docs](https://img.shields.io/badge/docs-btraven00.github.io%2Fhapiq-blue)](https://btraven00.github.io/hapiq/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Conda](https://anaconda.org/bioconda/hapiq/badges/version.svg)](https://anaconda.org/bioconda/hapiq)
 
