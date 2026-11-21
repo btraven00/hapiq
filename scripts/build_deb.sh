@@ -29,6 +29,18 @@ OUT=$(pwd)/dist
 (cd "$SRC" && CGO_ENABLED=0 GOOS=linux GOARCH=$ARCH \
   go build -trimpath -ldflags="$LDFLAGS" -o "$ROOT/usr/bin/$PKG" .)
 cp "$SRC/README.md" "$ROOT/usr/share/doc/$PKG/"
+
+# Man pages: generated from the cobra commands for hapiq (built for the host,
+# since the target binary may not run here), handwritten for the helper.
+MAN=$ROOT/usr/share/man/man1
+mkdir -p "$MAN"
+if [ "$PKG" = hapiq ]; then
+  SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)} \
+    go run -ldflags="$LDFLAGS" . gen-man "$MAN" 2>/dev/null
+else
+  cp "$SRC/$PKG.1" "$MAN/"
+fi
+gzip -9n "$MAN"/*.1
 cat > "$ROOT/usr/share/doc/$PKG/copyright" <<EOC
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Source: https://github.com/btraven00/hapiq

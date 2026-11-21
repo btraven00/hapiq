@@ -1,0 +1,102 @@
+.TH HAPIQ-FETCH-MAGNET 1 "" "hapiq" "hapiq manual"
+.SH NAME
+hapiq-fetch-magnet \- BitTorrent transfer helper for hapiq
+.SH SYNOPSIS
+.B hapiq-fetch-magnet
+.br
+.B hapiq-fetch-magnet seed
+.B \-\-cache-dir
+.I DIR
+.RB [ \-\-listen
+.IR HOST:PORT ]
+.RB [ \-\-advertise
+.IR HOST:PORT ]
+.RB [ \-\-interval
+.IR DURATION ]
+.RB [ \-\-tracker
+.IR URLS ]
+.br
+.B hapiq-fetch-magnet tracker
+.RB [ \-\-listen
+.IR ADDR ]
+.RB [ \-\-interval
+.IR DURATION ]
+.RB [ \-\-trust-proxy ]
+.SH DESCRIPTION
+Fetches and seeds blobs of a hapiq cache over BitTorrent.
+.BR hapiq (1)
+finds it on
+.B PATH
+and starts it itself; without it, hapiq downloads from the peer cache or the
+origin URL as before.
+Every blob fetched this way is checked against its sha256 by hapiq.
+.PP
+With no arguments it reads fetch requests as JSON lines on standard input and
+answers on standard output.
+This mode is for hapiq, not for people.
+.SH COMMANDS
+.TP
+.B seed
+Serve every blob in a hapiq cache and write one magnet per blob to
+.IR DIR /magnets/<sha256>,
+which
+.B hapiq cache serve
+hands out to peers. The magnets are removed on exit.
+.RS
+.TP
+.BI \-\-cache-dir " DIR"
+hapiq cache directory (required).
+.TP
+.BI \-\-listen " HOST:PORT"
+BitTorrent listen address (default 0.0.0.0:42069).
+.TP
+.BI \-\-advertise " HOST:PORT"
+Address other nodes dial, written into every magnet (default:
+.BR \-\-listen ).
+Must not be 0.0.0.0 or [::].
+.TP
+.BI \-\-interval " DURATION"
+How often to rescan for new blobs (default 30s).
+.TP
+.BI \-\-tracker " URLS"
+Comma-separated tracker announce URLs (default:
+.BR $HAPIQ_MAGNET_TRACKERS ).
+.RE
+.TP
+.B tracker
+Run an in-memory HTTP tracker that seeders and fetchers find each other
+through. Run it on the cache's host.
+.RS
+.TP
+.BI \-\-listen " ADDR"
+HTTP listen address (default :6969).
+.TP
+.BI \-\-interval " DURATION"
+Re-announce interval handed to clients (default 2m).
+.TP
+.B \-\-trust-proxy
+Take the client address from the last X-Forwarded-For entry. Only behind a
+reverse proxy that sets it.
+.RE
+.SH ENVIRONMENT
+.TP
+.B HAPIQ_MAGNET_LISTEN
+Listen address when fetching (default 0.0.0.0:0).
+.TP
+.B HAPIQ_MAGNET_TIMEOUT
+Give up after this long without metadata or new bytes (default 30s).
+.TP
+.B HAPIQ_MAGNET_TRACKERS
+Default for
+.BR "seed \-\-tracker" .
+.TP
+.B HAPIQ_MAGNET_VERBOSE
+If set, report on standard error which peers each file came from.
+.TP
+.B HAPIQ_MAGNET_DEBUG
+If set, also dump the torrent client's state on standard error.
+.SH SEE ALSO
+.BR hapiq (1),
+.BR hapiq-cache-serve (1)
+.PP
+https://github.com/btraven00/hapiq/tree/main/helpers/hapiq-fetch-magnet

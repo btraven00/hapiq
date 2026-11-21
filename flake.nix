@@ -19,7 +19,7 @@
             src = self;
             # Update after changing go.mod / go.sum: set to pkgs.lib.fakeHash,
             # run `nix build`, and copy the hash it reports.
-            vendorHash = "sha256-wbxwWhDaTogy0ftKEw45HCnTKQ8rwhWe3y1IJAEMN2E=";
+            vendorHash = "sha256-Up6VDO7BTDatjV42G8aSmGsPAuBxcOp2InMTffHpFXc=";
             subPackages = [ "." ];
             ldflags = [ "-s" "-w" "-X github.com/btraven00/hapiq/internal/version.Version=${version}" ];
             meta = {
