@@ -49,6 +49,8 @@ data can be deleted and restored later with `hapiq refetch`.
 
 ## Docs
 
+Full documentation: <https://btraven00.github.io/hapiq/>
+
 - [Usage](docs/usage.md) — commands, flags, environment variables, provenance
 - [GEO how-to](docs/geo-howto.md)
 - [Manifests](docs/manifest.md)

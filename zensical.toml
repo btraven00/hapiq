@@ -1,0 +1,58 @@
+# Documentation site, built with Zensical (https://zensical.org).
+# Preview: uvx zensical serve    Build: uvx zensical build
+# The pages are the Markdown files in docs/, which also render on GitHub.
+
+[project]
+site_name = "hapiq"
+site_description = "Download datasets from scientific repositories with provenance tracking"
+site_url = "https://btraven00.github.io/hapiq/"
+repo_url = "https://github.com/btraven00/hapiq"
+repo_name = "btraven00/hapiq"
+docs_dir = "docs"
+site_dir = "site"
+nav = [
+  { "Home" = "index.md" },
+  { "Install" = "install.md" },
+  { "Usage" = "usage.md" },
+  { "Guides" = [
+    { "GEO how-to" = "geo-howto.md" },
+    { "Manifests" = "manifest.md" },
+    { "Local download cache" = "cache.md" },
+    { "Sharing a cache across a network" = "lan-sharing.md" },
+  ] },
+  { "Development" = [
+    { "Cache server design" = "cache-server.md" },
+    { "Mirrors (proposed)" = "mirrors.md" },
+    { "Linting" = "LINTING.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+toc.permalink = true
+pymdownx.highlight.anchor_linenums = true
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
