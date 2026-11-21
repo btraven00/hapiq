@@ -29,7 +29,8 @@ var rootCmd = &cobra.Command{
 	Long: `Hapiq downloads datasets from scientific data repositories with full
 provenance tracking. Point it at a source and ID; it handles the rest.
 
-Supported sources: geo, figshare, zenodo, ensembl
+Run "hapiq downloaders" for the supported sources (GEO, SRA/ENA, Zenodo,
+Figshare, Ensembl, CZI, HCA and more).
 
 "Hapiq" means "the one who fetches" in Quechua.`,
 	SilenceUsage:  true,
@@ -56,8 +57,6 @@ func init() {
 	rootCmd.PersistentPreRunE = func(*cobra.Command, []string) error { return common.SetExtraHeaders(headers) }
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "quiet output (suppress verbose messages)")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "human", "output format (human, json)")
-
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.

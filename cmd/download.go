@@ -86,6 +86,8 @@ Supported sources:
   hca         - Human Cell Atlas Data Portal (project UUID)
   cellxgene   - CZ CELLxGENE Discover (collection or dataset UUID, or Discover URL)
   scanpy      - Curated scanpy.datasets entries (e.g. pbmc3k, paul15, visium_sge/<sample_id>, ebi_expression_atlas/<accession>)
+  10x         - 10x Genomics example datasets (page slug, e.g. 10k-hgmm-5p-gemx)
+  hf          - Hugging Face Hub datasets (<owner>/<name>[@<revision>])
   url         - Direct HTTP/HTTPS download (URL is the ID)
 
 Examples:
