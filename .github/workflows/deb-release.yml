@@ -1,0 +1,63 @@
+name: Debian package
+
+# A vX.Y.Z tag builds hapiq and hapiq-fetch-magnet .debs (amd64, arm64) and
+# attaches them to the GitHub release for that tag, creating the release if it
+# does not exist.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release to attach the .debs to. They are built from the ref this runs on, not from the tag. Empty: keep them as a workflow artifact only"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # create the release and attach the .debs
+
+jobs:
+  deb:
+    name: Build and attach the .debs
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: |
+          VERSION=${TAG#v}
+          VERSION=${VERSION:-0.0.0~dev$(git rev-parse --short HEAD)}
+          for pkg in hapiq hapiq-fetch-magnet; do
+            for arch in amd64 arm64; do scripts/build_deb.sh "$pkg" "$VERSION" "$arch"; done
+          done
+
+      - name: Test install on Debian 12
+        # The oldest Debian it should install on; the runner itself proves nothing.
+        run: |
+          docker run --rm -v "$PWD/dist:/d:ro" debian:bookworm sh -euc '
+            apt-get update -qq
+            apt-get install -y -qq /d/*_amd64.deb >/dev/null
+            hapiq version
+            hapiq --help >/dev/null
+            command -v hapiq-fetch-magnet'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+      - name: Attach to the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --verify-tag --title "$TAG" \
+                 --notes "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)."
+          gh release upload "$TAG" dist/*.deb --clobber

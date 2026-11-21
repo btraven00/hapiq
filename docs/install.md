@@ -16,6 +16,16 @@ pixi workspace channel add conda-forge bioconda
 pixi add hapiq
 ```
 
+## Debian / Ubuntu
+
+Each release has `.deb` packages for amd64 and arm64 (Debian 12+, Ubuntu 22.04+).
+Download them from the [latest release](https://github.com/btraven00/hapiq/releases/latest), then:
+
+```bash
+sudo apt install ./hapiq_*_amd64.deb
+sudo apt install ./hapiq-fetch-magnet_*_amd64.deb   # optional BitTorrent helper
+```
+
 ## go install
 
 ```bash
