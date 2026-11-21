@@ -1,3 +1,7 @@
+---
+icon: lucide/database
+---
+
 # Local download cache
 
 Hapiq can cache downloaded files locally so that re-running a download — into a

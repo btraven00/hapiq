@@ -1,3 +1,7 @@
+---
+icon: lucide/wand-sparkles
+---
+
 # Guide to Fixing Linting Issues in Hapiq
 
 This document provides guidance on fixing the common linting issues found in the Hapiq codebase.

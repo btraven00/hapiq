@@ -1,3 +1,7 @@
+---
+icon: lucide/copy
+---
+
 # Mirrors: pushing fetched datasets to remote stores
 
 Status: **proposed** — design record, nothing here is implemented yet.

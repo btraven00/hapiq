@@ -1,3 +1,7 @@
+---
+icon: lucide/house
+---
+
 # hapiq
 
 **Hapiq** downloads datasets from scientific repositories with provenance

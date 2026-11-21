@@ -1,3 +1,7 @@
+---
+icon: lucide/network
+---
+
 # Sharing a cache across a network
 
 Thirty people at a workshop running the same `hapiq download` pull the same

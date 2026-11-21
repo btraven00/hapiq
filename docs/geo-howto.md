@@ -1,3 +1,7 @@
+---
+icon: lucide/dna
+---
+
 # GEO Download How-To
 
 This guide covers the full workflow from finding a dataset to downloading

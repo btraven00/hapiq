@@ -1,3 +1,7 @@
+---
+icon: lucide/server
+---
+
 # Minimal cache mode for hapiq
 
 ## Context

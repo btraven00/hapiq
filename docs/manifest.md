@@ -1,3 +1,7 @@
+---
+icon: lucide/file-text
+---
+
 # Manifests
 
 A manifest is a YAML file declaring datasets to download and (optionally) the
