@@ -1,6 +1,22 @@
 # Installation
 
-## go install (recommended)
+## Bioconda
+
+[hapiq on Bioconda](https://anaconda.org/bioconda/hapiq):
+
+```bash
+conda install -c conda-forge -c bioconda hapiq          # or mamba / micromamba
+pixi global install -c conda-forge -c bioconda hapiq    # standalone, on PATH
+```
+
+In a pixi project, add the channels once and then the package:
+
+```bash
+pixi workspace channel add conda-forge bioconda
+pixi add hapiq
+```
+
+## go install
 
 ```bash
 go install github.com/btraven00/hapiq@latest

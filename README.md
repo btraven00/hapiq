@@ -6,8 +6,19 @@ _"Hapiq" means "the one who fetches" in Quechua._
 
 [![CI/CD](https://github.com/btraven00/hapiq/workflows/CI%2FCD/badge.svg)](https://github.com/btraven00/hapiq/actions)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Conda](https://anaconda.org/bioconda/hapiq/badges/version.svg)](https://anaconda.org/bioconda/hapiq)
 
 ## Install
+
+From [Bioconda](https://anaconda.org/bioconda/hapiq):
+
+```bash
+conda install -c conda-forge -c bioconda hapiq
+pixi global install -c conda-forge -c bioconda hapiq
+pixi add hapiq   # in a pixi project with bioconda in its channels
+```
+
+With Go:
 
 ```bash
 go install github.com/btraven00/hapiq@latest
